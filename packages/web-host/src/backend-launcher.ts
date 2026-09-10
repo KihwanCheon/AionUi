@@ -616,6 +616,7 @@ export class BackendLifecycleManager {
     this._lastOptions = options;
     let stdoutTail = '';
     let stderrTail = '';
+    const forwardBackendLogs = process.env.AIONUI_FORWARD_BACKEND_LOGS !== '0';
     let startupSettled = false;
     const startupStartedAt = Date.now();
     let serverListeningObserved = false;
@@ -827,14 +828,14 @@ export class BackendLifecycleManager {
           serverListeningObservedAfterMs = Date.now() - startupStartedAt;
           serverListeningLine = trimmed;
         }
-        if (trimmed) console.log(`[aioncore] ${line}`);
+        if (trimmed && forwardBackendLogs) console.log(`[aioncore] ${line}`);
       }
     });
 
     this.childProcess.stderr?.on('data', (data: Buffer) => {
       stderrTail = appendOutputTail(stderrTail, data);
       for (const line of data.toString().split('\n')) {
-        if (line.trim()) console.error(`[aioncore] ${line}`);
+        if (line.trim() && forwardBackendLogs) console.error(`[aioncore] ${line}`);
       }
     });
 

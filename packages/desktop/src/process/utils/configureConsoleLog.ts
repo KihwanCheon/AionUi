@@ -22,12 +22,15 @@
 
 import { app } from 'electron';
 import log from 'electron-log/main';
-import fs from 'node:fs';
+import fs, { type Dirent } from 'node:fs';
 import path from 'node:path';
 
 const FILE_SIZE_LIMIT = 10 * 1024 * 1024; // 10 MB
 const FILE_LOG_LEVEL = 'info';
 const CONSOLE_LOG_LEVEL = 'silly';
+const LOG_RETENTION_DAYS = 14;
+const LOG_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+let nextLogCleanupAt = 0;
 
 type LogPathMessage = {
   date?: Date | number | string;
@@ -50,6 +53,87 @@ export function buildDatedLogFileName(date = new Date()): string {
   return `${year}/${month}/${day}/${dateStr}.log`;
 }
 
+function removeDirectoryIfEmpty(directory: string): void {
+  try {
+    if (fs.readdirSync(directory).length === 0) fs.rmdirSync(directory);
+  } catch {
+    // Best effort: logging must keep working even when cleanup cannot inspect a directory.
+  }
+}
+
+function parseLogPartitionDate(year: string, month: string, day: string): Date | null {
+  if (!/^\d{4}$/.test(year) || !/^\d{2}$/.test(month) || !/^\d{2}$/.test(day)) return null;
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+  if (
+    parsed.getFullYear() !== Number(year) ||
+    parsed.getMonth() !== Number(month) - 1 ||
+    parsed.getDate() !== Number(day)
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
+export function cleanupExpiredDatedLogDirectories(
+  logsRoot: string,
+  now = new Date(),
+  retentionDays = LOG_RETENTION_DAYS
+): void {
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - Math.max(1, retentionDays) + 1);
+
+  let years: Dirent[];
+  try {
+    years = fs.readdirSync(logsRoot, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const year of years) {
+    if (!year.isDirectory() || !/^\d{4}$/.test(year.name)) continue;
+    const yearPath = path.join(logsRoot, year.name);
+    let months: Dirent[];
+    try {
+      months = fs.readdirSync(yearPath, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const month of months) {
+      if (!month.isDirectory() || !/^\d{2}$/.test(month.name)) continue;
+      const monthPath = path.join(yearPath, month.name);
+      let days: Dirent[];
+      try {
+        days = fs.readdirSync(monthPath, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      for (const day of days) {
+        if (!day.isDirectory()) continue;
+        const partitionDate = parseLogPartitionDate(year.name, month.name, day.name);
+        if (partitionDate && partitionDate < cutoff) {
+          try {
+            fs.rmSync(path.join(monthPath, day.name), { recursive: true, force: true });
+          } catch {
+            // Best effort: a locked log must not interrupt application startup.
+          }
+        }
+      }
+
+      removeDirectoryIfEmpty(monthPath);
+    }
+
+    removeDirectoryIfEmpty(yearPath);
+  }
+}
+
+function maybeCleanupExpiredLogs(logsRoot: string, now: Date): void {
+  const nowMs = now.getTime();
+  if (nowMs < nextLogCleanupAt) return;
+  nextLogCleanupAt = nowMs + LOG_CLEANUP_INTERVAL_MS;
+  cleanupExpiredDatedLogDirectories(logsRoot, now);
+}
+
 function resolveMessageDate(message?: LogPathMessage): Date {
   const rawDate = message?.date;
   const date = rawDate instanceof Date ? rawDate : rawDate ? new Date(rawDate) : new Date();
@@ -59,7 +143,9 @@ function resolveMessageDate(message?: LogPathMessage): Date {
 // Daily log file: e.g. 2026/03/12/2026-03-12.log
 log.transports.file.fileName = buildDatedLogFileName();
 log.transports.file.resolvePathFn = (variables, message?: LogPathMessage) => {
-  const filePath = path.join(variables.libraryDefaultDir, buildDatedLogFileName(resolveMessageDate(message)));
+  const messageDate = resolveMessageDate(message);
+  maybeCleanupExpiredLogs(variables.libraryDefaultDir, messageDate);
+  const filePath = path.join(variables.libraryDefaultDir, buildDatedLogFileName(messageDate));
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   return filePath;
 };
