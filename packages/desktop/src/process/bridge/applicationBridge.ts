@@ -14,6 +14,7 @@ import { ProcessConfig } from '@process/utils/initStorage';
 import { getZoomFactor, setZoomFactor } from '@process/utils/zoom';
 import { getCdpStatus, updateCdpConfig } from '@process/utils/configureChromium';
 import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
+import { updateCdpTargetSelection } from '@process/resources/builtinMcp/cdpTargetSelection';
 import { getGpuStatus, setGpuUserOverride } from '@process/utils/gpuRecovery';
 import { initApplicationBridgeCore } from './applicationBridgeCore';
 import type { IStartOnBootStatus } from '@/common/adapter/ipcBridge';
@@ -261,7 +262,7 @@ export function initApplicationBridge(): void {
     }
   });
 
-  ipcBridge.application.reportBrowserWebContentsId.provider(async ({ webContentsId }) => {
+  ipcBridge.application.reportBrowserWebContentsId.provider(async ({ webContentsId, active }) => {
     /**
      * 把单目标 CDP 通道附加到侧边浏览器。
      *
@@ -278,7 +279,7 @@ export function initApplicationBridge(): void {
     try {
       const handle = getCdpBridgeHandle();
       if (!handle) return { success: false, msg: 'Agent browser control is not enabled.' };
-      const result = handle.attach(webContentsId);
+      const result = updateCdpTargetSelection(handle, webContentsId, active);
       if (result.ok === false) return { success: false, msg: result.reason };
       return { success: true };
     } catch (e) {

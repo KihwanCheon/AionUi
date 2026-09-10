@@ -268,7 +268,7 @@ test.describe('Agent browser control (single-target CDP bridge)', () => {
     const result = await invokeBridge<{ success: boolean; msg?: string }>(
       page,
       'app.report-browser-webcontents-id',
-      { webContentsId: mainWindowContentsId },
+      { webContentsId: mainWindowContentsId, active: true },
       10_000
     );
 
