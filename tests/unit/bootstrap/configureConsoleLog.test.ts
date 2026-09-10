@@ -37,6 +37,7 @@ const originalConsole = {
   error: console.error,
   debug: console.debug,
 };
+const originalStdioLogging = process.env.AIONUI_STDIO_LOGGING;
 
 const createLogMock = (): LogMock => ({
   transports: {
@@ -85,6 +86,8 @@ const loadConfigureConsoleLog = async (isPackaged: boolean): Promise<LogMock> =>
 describe('configureConsoleLog', () => {
   afterEach(() => {
     Object.assign(console, originalConsole);
+    if (originalStdioLogging === undefined) delete process.env.AIONUI_STDIO_LOGGING;
+    else process.env.AIONUI_STDIO_LOGGING = originalStdioLogging;
     vi.resetModules();
     vi.clearAllMocks();
   });
@@ -101,6 +104,14 @@ describe('configureConsoleLog', () => {
     const log = await loadConfigureConsoleLog(false);
 
     expect(log.transports.console.level).toBe('silly');
+  });
+
+  it('disables stdout console transport in development when requested', async () => {
+    process.env.AIONUI_STDIO_LOGGING = '0';
+    const log = await loadConfigureConsoleLog(false);
+
+    expect(log.transports.console.level).toBe(false);
+    expect(log.transports.file.level).toBe('info');
   });
 
   it('routes cross-day frontend log writes into the matching date directory', async () => {

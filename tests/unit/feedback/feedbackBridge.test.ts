@@ -200,7 +200,9 @@ describe('feedback logs', () => {
       mkdirSync(previousDir, { recursive: true });
       mkdirSync(oldDir, { recursive: true });
       writeFileSync(path.join(recentDir, '2026-07-02.log'), 'today frontend nested\n');
+      writeFileSync(path.join(recentDir, '2026-07-02.old.log'), 'today rolled frontend nested\n');
       writeFileSync(path.join(recentDir, '2026-07-02.aioncore.log'), 'today backend nested\n');
+      writeFileSync(path.join(recentDir, '2026-07-02.1.aioncore.log'), 'today rolled backend nested\n');
       writeFileSync(path.join(previousDir, '2026-07-01.aionrs.log'), 'yesterday rust nested\n');
       writeFileSync(path.join(oldDir, '2026-06-30.log'), 'third day frontend nested\n');
       writeFileSync(path.join(logsDir, '2026-06-29.log'), 'too old flat\n');
@@ -210,7 +212,9 @@ describe('feedback logs', () => {
       expect(attachment).not.toBeNull();
       const content = gunzipSync(attachment!.data).toString('utf8');
       expect(content).toContain('today frontend nested');
+      expect(content).toContain('today rolled frontend nested');
       expect(content).toContain('today backend nested');
+      expect(content).toContain('today rolled backend nested');
       expect(content).toContain('yesterday rust nested');
       expect(content).toContain('third day frontend nested');
       expect(content).not.toContain('too old flat');
