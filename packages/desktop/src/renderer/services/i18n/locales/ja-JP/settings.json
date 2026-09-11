@@ -1458,6 +1458,14 @@
       "reconnecting": "再接続中",
       "error": "エラー",
       "stopped": "停止"
+    },
+    "manualPairLabel": "Paste the pairing link",
+    "manualPairPlaceholder": "aionui://mindnprogress/runner-pair?api_url=...&pairing_code=...&machine_id=...",
+    "manualPairHint": "Use this when MindNProgress's ‘Connect AionUi’ cannot open this app. Pasting the link runs the same confirmation flow.",
+    "manualPairSubmit": "Connect with link",
+    "manualPairError": {
+      "scheme": "That is not a MindNProgress Runner pairing link. Paste a link starting with aionui://mindnprogress/runner-pair.",
+      "incomplete": "The pairing link is missing the server URL, pairing code, or machine ID. Issue a new link in MindNProgress."
     }
   }
 }
