@@ -18,6 +18,15 @@ import { forwardRunnerOutput } from './outputLog';
 type StoredCredentialEnvelope = {
   schemaVersion: 1;
   ciphertext: string;
+  /**
+   * Paired server address, stored in the clear beside the ciphertext.
+   *
+   * Only the token is secret; the address is not. Keeping it readable lets
+   * backend startup learn the callback host WITHOUT touching safeStorage —
+   * a decrypt there can raise a blocking OS keychain prompt on the critical
+   * path and stall the whole launch.
+   */
+  apiUrl?: string;
 };
 
 type PairingExchangeResponse = {
@@ -127,10 +136,27 @@ class MindNProgressRunnerManager {
     const envelope: StoredCredentialEnvelope = {
       schemaVersion: 1,
       ciphertext: safeStorage.encryptString(JSON.stringify(credential)).toString('base64'),
+      apiUrl: credential.apiUrl,
     };
     const temporaryPath = `${credentialPath}.tmp`;
     await writeFile(temporaryPath, `${JSON.stringify(envelope, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
     await rename(temporaryPath, credentialPath);
+  }
+
+  /**
+   * apiUrl of the stored pairing, read from the envelope's plaintext field.
+   *
+   * Deliberately does NOT decrypt: this runs before the backend spawns, and a
+   * safeStorage call there can block on an OS keychain prompt. Never throws —
+   * backend startup must not fail over a missing pairing.
+   */
+  async readPairedApiUrl(): Promise<string | null> {
+    try {
+      const envelope = JSON.parse(await readFile(this.credentialPath(), 'utf8')) as StoredCredentialEnvelope;
+      return typeof envelope.apiUrl === 'string' && envelope.apiUrl.trim() ? envelope.apiUrl : null;
+    } catch {
+      return null;
+    }
   }
 
   async initialize(localAionUiPort: number): Promise<void> {
@@ -150,6 +176,15 @@ class MindNProgressRunnerManager {
     if (!this.credential) {
       this.publish({ configured: false, state: 'not-configured', lastError: null });
       return;
+    }
+    // Pairings written before the plaintext apiUrl existed are upgraded here,
+    // off the startup critical path, so the next launch can read it without decrypting.
+    if ((await this.readPairedApiUrl()) !== this.credential.apiUrl) {
+      try {
+        await this.writeCredential(this.credential);
+      } catch {
+        // Non-fatal: the Runner still works, only the backend hint is missing.
+      }
     }
     this.publish({
       configured: true,
@@ -305,6 +340,11 @@ class MindNProgressRunnerManager {
     await this.stopChild();
     await this.writeCredential(credential);
     this.credential = credential;
+    // aioncore reads the allowed callback host from its environment at spawn,
+    // so a pairing made after startup only takes effect on the next launch.
+    console.info(
+      `[mnp-runner] paired with ${credential.apiUrl}; restart AionUi so the backend accepts its launch callbacks`
+    );
     this.publish({
       configured: true,
       secureStorageAvailable: true,
