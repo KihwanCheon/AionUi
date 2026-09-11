@@ -30,11 +30,12 @@ import { classifyBackendStartupFailure } from './process/startup/backendStartupF
 import { installQuitCleanup } from './process/startup/quitCleanup';
 import { shouldRegisterBackendStartup } from './process/startup/singleInstanceGating';
 import type { AionUiBootstrapContext, BootstrapProtocolEvent } from './process/startup/bootstrap/protocol';
-import { ProcessConfig } from './process/utils/initStorage';
+import { getSystemDir as getBackendSystemDir, ProcessConfig } from './process/utils/initStorage';
 import type { BackendStartupFailureInfo } from './common/types/platform/electron';
 import { registerWindowMaximizeListeners } from '@process/bridge';
 import { BackendLifecycleManager } from '@aionui/web-host';
 import { resolveBinaryPath } from '@process/backend';
+import { startLogRetention } from './process/utils/logRetention';
 import './process/bridge/feedbackBridge';
 import { wasLaunchedAtLogin } from '@process/bridge/applicationBridge';
 import { onLanguageChanged } from './process/bridge/systemSettingsBridge';
@@ -207,6 +208,15 @@ let backendStartupFailed = false;
 let backendStartupFailureInfo: BackendStartupFailureInfo | null = null;
 let rendererInitialLanguage: string | null = null;
 let backendMigrationsScheduled = false;
+/** electron-log's own root (`app.getPath('logs')`), with the same fallback feedback collection uses. */
+function resolveElectronLogsDir(): string {
+  try {
+    return app.getPath('logs');
+  } catch {
+    return path.join(app.getPath('userData'), 'logs');
+  }
+}
+
 let ensureAdminUserPromise: Promise<void> | null = null;
 
 ipcMain.on('get-backend-port', (event) => {
@@ -721,6 +731,11 @@ const handleAppReady = async (): Promise<void> => {
     app.exit(1);
     return;
   }
+
+  // Bound the rolling log tree (electron-log and aioncore both roll daily into
+  // it and neither expires anything). After initializeProcess() so getSystemDir()
+  // reports the configured — possibly user-overridden — backend log dir.
+  startLogRetention(() => [resolveElectronLogsDir(), getBackendSystemDir().logDir]);
 
   /**
    * 启动单目标 CDP 通道，并把端口/口令写进自己的 env。
