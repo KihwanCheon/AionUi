@@ -67,7 +67,22 @@ log.transports.file.resolvePathFn = (variables, message?: LogPathMessage) => {
 // --- Main-process logger (frontend) ---
 log.transports.file.level = FILE_LOG_LEVEL;
 log.transports.file.maxSize = FILE_SIZE_LIMIT;
-log.transports.console.level = app.isPackaged ? false : CONSOLE_LOG_LEVEL;
+/**
+ * Console (stdio) transport level.
+ *
+ * `AIONUI_CONSOLE_LOG` overrides the default in both directions:
+ *   - `0` / `false` / `off` — silence stdio completely, keep file logs only
+ *   - `1` / `true` / `on`   — force console output even in a packaged build
+ * Unset keeps the historical behaviour: console in dev, silent when packaged.
+ */
+export function resolveConsoleLogLevel(env: NodeJS.ProcessEnv = process.env): typeof CONSOLE_LOG_LEVEL | false {
+  const override = env.AIONUI_CONSOLE_LOG?.trim().toLowerCase();
+  if (override === '0' || override === 'false' || override === 'off') return false;
+  if (override === '1' || override === 'true' || override === 'on') return CONSOLE_LOG_LEVEL;
+  return app.isPackaged ? false : CONSOLE_LOG_LEVEL;
+}
+
+log.transports.console.level = resolveConsoleLogLevel();
 
 const BACKEND_PREFIX = '[aioncore]';
 
