@@ -1083,6 +1083,9 @@ const requestExternalWindowActivation = (): void => {
 };
 
 const handleBootstrapProtocolEvent = (event: BootstrapProtocolEvent): void => {
+  // Logged before the mode guard: "the OS delivered it but this build ignores
+  // it" and "the OS never delivered it" are otherwise indistinguishable.
+  console.info(`[DeepLink] protocol event kind=${event.kind} url=${event.deepLinkUrl ? 'yes' : 'none'}`);
   if (isWebUIMode || isResetPasswordMode) return;
   if (event.deepLinkUrl) handleDeepLinkUrl(event.deepLinkUrl);
   requestExternalWindowActivation();

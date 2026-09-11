@@ -8,6 +8,7 @@ import type { BrowserWindow } from 'electron';
 import { ipcBridge } from '@/common';
 import { AIONUI_PROTOCOL_SCHEME, createBufferedEventRelay, findDeepLinkUrl } from '../startup/bootstrap/protocol';
 import { registerRendererReadinessInvalidation } from '../startup/bootstrap/rendererReadiness';
+import { describeDeepLinkForLog } from './deepLinkLog';
 
 export const PROTOCOL_SCHEME = AIONUI_PROTOCOL_SCHEME;
 
@@ -85,6 +86,7 @@ export const registerDeepLinkReadyProvider = (): void => {
       return Promise.resolve();
     }
     if (!detachRendererConsumer) {
+      console.info('[DeepLink] renderer ready; flushing any buffered deep link');
       detachRendererConsumer = rendererRelay.attach((payload) => ipcBridge.deepLink.received.emit(payload));
     }
     return Promise.resolve();
@@ -96,8 +98,15 @@ export const registerDeepLinkReadyProvider = (): void => {
  * If the window isn't ready yet, queue it.
  */
 export const handleDeepLinkUrl = (url: string): void => {
+  const summary = describeDeepLinkForLog(url);
   const parsed = parseDeepLinkUrl(url);
-  if (!parsed) return;
+  if (!parsed) {
+    console.warn(`[DeepLink] dropped, not a recognizable aionui link: ${summary}`);
+    return;
+  }
+  // "buffered" means the payload waits for the renderer handshake; it is
+  // delivered once ipcBridge.deepLink.ready attaches the consumer.
+  console.info(`[DeepLink] received ${summary} (renderer ${detachRendererConsumer ? 'ready' : 'not ready, buffered'})`);
   rendererRelay.publish(parsed);
 };
 
