@@ -75,6 +75,7 @@ import {
 } from './process/utils/tray';
 import { readCloseToTraySetting } from './process/utils/closeToTraySetting';
 import { mindNProgressRunnerManager } from './process/startup/bootstrap/mindnprogressRunner';
+import { applyExternalLaunchCallbackHostEnv } from './process/startup/bootstrap/mindnprogressRunner/callbackHostEnv';
 // @ts-expect-error - electron-squirrel-startup doesn't have types
 import electronSquirrelStartup from 'electron-squirrel-startup';
 
@@ -823,6 +824,9 @@ const handleAppReady = async (): Promise<void> => {
         });
         const { getDataPath } = await import('./process/utils/utils');
         const { getSystemDir } = await import('./process/utils/initStorage');
+        // Must precede the spawn: buildSpawnEnv copies this process's env, and
+        // aioncore reads its callback allow list from there once at startup.
+        applyExternalLaunchCallbackHostEnv(await mindNProgressRunnerManager.readPairedApiUrl());
         const sysDir = getSystemDir();
         return backendManager.start(
           getDataPath(),
