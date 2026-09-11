@@ -13,6 +13,7 @@ import {
   normalizeRunnerCredential,
   type MindNProgressRunnerCredential,
 } from './credential';
+import { forwardRunnerOutput } from './outputLog';
 
 type StoredCredentialEnvelope = {
   schemaVersion: 1;
@@ -173,7 +174,9 @@ class MindNProgressRunnerManager {
       const credential = this.credential;
       const child = utilityProcess.fork(this.runnerEntryPath(), [], {
         serviceName: 'MindNProgress Runner',
-        stdio: 'ignore',
+        // Piped, not ignored: a runner that dies before it can report over IPC
+        // must still leave its reason in the log file. See ./outputLog.
+        stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
           MNP_RUNNER_API_URL: credential.apiUrl,
@@ -183,6 +186,7 @@ class MindNProgressRunnerManager {
         },
       });
       this.child = child;
+      forwardRunnerOutput(child);
       child.on('message', (message: unknown) => this.handleChildMessage(child, message));
       child.once('exit', (code) => this.handleChildExit(child, code));
     } catch (error) {
