@@ -14,6 +14,7 @@ import {
   type MindNProgressRunnerCredential,
 } from './credential';
 import { forwardRunnerOutput } from './outputLog';
+import { pairedCallbackHost } from './callbackHostEnv';
 
 type StoredCredentialEnvelope = {
   schemaVersion: 1;
@@ -159,6 +160,34 @@ class MindNProgressRunnerManager {
     }
   }
 
+  /**
+   * Push the current callback-host allow list to the running backend.
+   *
+   * aioncore seeds the list from its environment at startup, which cannot
+   * follow a pairing made later or a disconnect. This keeps it current without
+   * restarting the backend. Best effort: a failure only means the backend
+   * keeps the seeded value until the next launch, so it must not surface as a
+   * pairing error.
+   */
+  private async pushCallbackHosts(apiUrl: string | null): Promise<void> {
+    if (!this.localAionUiUrl) return;
+    const host = pairedCallbackHost(apiUrl);
+    try {
+      const response = await net.fetch(`${this.localAionUiUrl}/api/internal/external-launch/callback-hosts`, {
+        method: 'PUT',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hosts: host ? [host] : [] }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!response.ok) {
+        console.warn(`[mnp-runner] backend refused the callback host update (${response.status})`);
+      }
+    } catch (error) {
+      console.warn('[mnp-runner] could not update the backend callback hosts:', safeErrorMessage(error));
+    }
+  }
+
   async initialize(localAionUiPort: number): Promise<void> {
     this.localAionUiUrl = `http://127.0.0.1:${localAionUiPort}`;
     const secureStorageAvailable = this.secureStorageAvailable();
@@ -186,6 +215,7 @@ class MindNProgressRunnerManager {
         // Non-fatal: the Runner still works, only the backend hint is missing.
       }
     }
+    await this.pushCallbackHosts(this.credential.apiUrl);
     this.publish({
       configured: true,
       apiUrl: this.credential.apiUrl,
@@ -340,11 +370,7 @@ class MindNProgressRunnerManager {
     await this.stopChild();
     await this.writeCredential(credential);
     this.credential = credential;
-    // aioncore reads the allowed callback host from its environment at spawn,
-    // so a pairing made after startup only takes effect on the next launch.
-    console.info(
-      `[mnp-runner] paired with ${credential.apiUrl}; restart AionUi so the backend accepts its launch callbacks`
-    );
+    await this.pushCallbackHosts(credential.apiUrl);
     this.publish({
       configured: true,
       secureStorageAvailable: true,
@@ -371,6 +397,7 @@ class MindNProgressRunnerManager {
     await rm(this.credentialPath(), { force: true });
     this.credential = null;
     this.stopRequested = false;
+    await this.pushCallbackHosts(null);
     this.publish({
       configured: false,
       state: 'not-configured',
