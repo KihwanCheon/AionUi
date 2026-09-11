@@ -12,12 +12,13 @@ import {
   type MindNProgressRunnerPairingDetail,
 } from '@/renderer/hooks/system/useDeepLink';
 import { isElectronDesktop } from '@/renderer/utils/platform';
-import { Alert, Button, Message, Modal, Spin, Tag, Typography } from '@arco-design/web-react';
+import { Alert, Button, Input, Message, Modal, Spin, Tag, Typography } from '@arco-design/web-react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate } from 'react-router-dom';
 import SettingsPageHeader from '../components/SettingsPageHeader';
 import SettingsPageWrapper from '../components/SettingsPageWrapper';
+import { parseRunnerPairingLink } from './runnerPairingLink';
 
 const EMPTY_STATUS: IMindNProgressRunnerStatus = {
   configured: false,
@@ -30,12 +31,18 @@ const EMPTY_STATUS: IMindNProgressRunnerStatus = {
   lastError: null,
 };
 
+const MANUAL_PAIR_ERROR_KEYS = {
+  'invalid-scheme': 'settings.mindnprogressRunner.manualPairError.scheme',
+  incomplete: 'settings.mindnprogressRunner.manualPairError.incomplete',
+} as const;
+
 const MindNProgressRunnerSettingsContent: React.FC = () => {
   const { t } = useTranslation();
   const [modal, modalContextHolder] = Modal.useModal();
   const [status, setStatus] = useState<IMindNProgressRunnerStatus>(EMPTY_STATUS);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [manualLink, setManualLink] = useState('');
 
   const loadStatus = useCallback(async () => {
     const result = await ipcBridge.application.getMindNProgressRunnerStatus.invoke();
@@ -83,6 +90,21 @@ const MindNProgressRunnerSettingsContent: React.FC = () => {
     },
     [modal, t]
   );
+
+  /**
+   * Pairing normally arrives as an aionui:// deep link. On builds whose bundle
+   * does not own that scheme (a dev run, or another install claiming it) the
+   * link never reaches this app, so the same link is accepted as pasted text.
+   */
+  const submitManualLink = useCallback(() => {
+    const result = parseRunnerPairingLink(manualLink);
+    if (result.status !== 'ok') {
+      Message.error(t(MANUAL_PAIR_ERROR_KEYS[result.status]));
+      return;
+    }
+    setManualLink('');
+    confirmPairing(result.detail);
+  }, [confirmPairing, manualLink, t]);
 
   useEffect(() => {
     const unsubscribe = subscribeMindNProgressRunnerPairing(confirmPairing);
@@ -178,7 +200,33 @@ const MindNProgressRunnerSettingsContent: React.FC = () => {
                   </span>
                 </div>
               ) : (
-                <Typography.Text type='secondary'>{t('settings.mindnprogressRunner.notConfigured')}</Typography.Text>
+                <div className='space-y-12px'>
+                  <Typography.Text type='secondary'>{t('settings.mindnprogressRunner.notConfigured')}</Typography.Text>
+                  <div className='space-y-8px'>
+                    <Typography.Text className='text-13px text-t-primary'>
+                      {t('settings.mindnprogressRunner.manualPairLabel')}
+                    </Typography.Text>
+                    <Typography.Text type='secondary' className='block text-12px'>
+                      {t('settings.mindnprogressRunner.manualPairHint')}
+                    </Typography.Text>
+                    <Input.TextArea
+                      value={manualLink}
+                      onChange={setManualLink}
+                      placeholder={t('settings.mindnprogressRunner.manualPairPlaceholder')}
+                      autoSize={{ minRows: 2, maxRows: 4 }}
+                      disabled={!status.secureStorageAvailable}
+                    />
+                    <div className='flex justify-end'>
+                      <Button
+                        type='primary'
+                        disabled={!manualLink.trim() || !status.secureStorageAvailable}
+                        onClick={submitManualLink}
+                      >
+                        {t('settings.mindnprogressRunner.manualPairSubmit')}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {status.configured ? (
