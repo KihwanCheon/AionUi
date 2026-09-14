@@ -20,6 +20,7 @@ import SortableConversationRow from '../SortableConversationRow';
 import { useDragAndDrop } from '../hooks/useDragAndDrop';
 import type { ConversationRowProps } from '../types';
 import { groupBookmarkedConversations } from '../utils/bookmarkHelpers';
+import { resolveProjectGroupIndicatorStatus } from '../utils/completionUnread';
 import ProjectGroupHeader from './ProjectGroupHeader';
 
 type BookmarkedConversationListProps = {
@@ -32,6 +33,7 @@ type BookmarkedConversationListProps = {
   onToggleSection: (section: string) => void;
   projectGitBranches: Record<string, string | null>;
   hasCompletionUnread: (conversationId: string) => boolean;
+  isConversationGenerating: (conversationId: string) => boolean;
   getConversationRowProps: (conversation: TChatConversation) => ConversationRowProps;
 };
 
@@ -45,6 +47,7 @@ const BookmarkedConversationList: React.FC<BookmarkedConversationListProps> = ({
   onToggleSection,
   projectGitBranches,
   hasCompletionUnread,
+  isConversationGenerating,
   getConversationRowProps,
 }) => {
   const { t } = useTranslation();
@@ -103,9 +106,12 @@ const BookmarkedConversationList: React.FC<BookmarkedConversationListProps> = ({
               workspace={workspace}
               displayName={group.label}
               branch={projectGitBranches[workspace]}
-              showCompletionUnread={
-                !isProjectExpanded && group.conversations.some((conversation) => hasCompletionUnread(conversation.id))
-              }
+              indicatorStatus={resolveProjectGroupIndicatorStatus(
+                isProjectExpanded,
+                group.conversations,
+                isConversationGenerating,
+                hasCompletionUnread
+              )}
             />
           }
         >
