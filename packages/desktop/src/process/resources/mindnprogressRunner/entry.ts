@@ -17,6 +17,7 @@ import {
   type CompletionRelay,
   type RunnerResult,
 } from './runtime';
+import { forwardRunnerMcpRequest, startRunnerMcpRelay, type RunnerMcpRelay } from './mcpRelay';
 
 type ParentMessage = { type?: unknown };
 type RunnerEvent =
@@ -27,6 +28,7 @@ type RunnerEvent =
 const parentPort = process.parentPort;
 const postEvent = (event: RunnerEvent): void => parentPort?.postMessage(event);
 let activeCompletionRelay: CompletionRelay | null = null;
+let activeMcpRelay: RunnerMcpRelay | null = null;
 
 async function run(): Promise<void> {
   let config;
@@ -70,6 +72,10 @@ async function run(): Promise<void> {
     mnpRequest(`${config.apiBaseUrl}${pathname}`, body, 30_000)
   );
   activeCompletionRelay = completionRelay;
+  const mcpRelay = await startRunnerMcpRelay({
+    forward: (relayRequest) => forwardRunnerMcpRequest(config, relayRequest),
+  });
+  activeMcpRelay = mcpRelay;
 
   let longPollMs = 25_000;
   const heartbeat = async (): Promise<void> => {
@@ -147,6 +153,8 @@ async function run(): Promise<void> {
     });
     if (authenticationFailed) {
       process.exitCode = 2;
+      await mcpRelay.close();
+      activeMcpRelay = null;
       await completionRelay.close();
       activeCompletionRelay = null;
       return;
@@ -171,12 +179,22 @@ async function run(): Promise<void> {
 
   await loop.start();
   if (heartbeatTimer) clearInterval(heartbeatTimer);
+  await mcpRelay.close();
+  activeMcpRelay = null;
   await completionRelay.close();
   activeCompletionRelay = null;
   if (!authenticationFailed) postEvent({ type: 'stopped' });
 }
 
 void run().catch(async (error: unknown) => {
+  if (activeMcpRelay) {
+    try {
+      await activeMcpRelay.close();
+    } catch {
+      // Preserve the original Runner failure reported below.
+    }
+  }
+  activeMcpRelay = null;
   if (activeCompletionRelay) {
     try {
       await activeCompletionRelay.close();
