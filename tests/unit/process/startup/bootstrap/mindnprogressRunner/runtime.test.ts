@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   RunnerConfigError,
+  RunnerRequestError,
   callLocalAionUi,
   createRunnerLoop,
   normalizeRunnerEnvironment,
   normalizeRunnerOperation,
+  startCompletionRelay,
   type RunnerOperation,
 } from '@/process/resources/mindnprogressRunner/runtime';
 
@@ -102,5 +104,57 @@ describe('MindNProgress Runner runtime', () => {
 
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(result).toMatchObject({ ok: false, code: 'RUNNER_LOCAL_CALL_FAILED' });
+  });
+
+  it('relays a tokenized loopback external-launch completion callback to MindNProgress', async () => {
+    const forward = vi.fn(async () => undefined);
+    const relay = await startCompletionRelay(forward);
+    const pathname = `/api/integrations/aionui/launches/${'a'.repeat(43)}/conversation`;
+
+    try {
+      const delivered = await fetch(`${relay.baseUrl}${pathname}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: 'conversation_1' }),
+      });
+      expect(delivered.status).toBe(200);
+      expect(forward).toHaveBeenCalledWith(pathname, { conversationId: 'conversation_1' });
+    } finally {
+      await relay.close();
+    }
+  });
+
+  it('rejects unrelated loopback requests without forwarding them', async () => {
+    const forward = vi.fn(async () => undefined);
+    const relay = await startCompletionRelay(forward);
+
+    try {
+      const rejected = await fetch(`${relay.baseUrl}/api/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: 'conversation_1' }),
+      });
+      expect(rejected.status).toBe(404);
+      expect(forward).not.toHaveBeenCalled();
+    } finally {
+      await relay.close();
+    }
+  });
+
+  it('does not acknowledge a completion callback when MindNProgress rejects it', async () => {
+    const relay = await startCompletionRelay(async () => {
+      throw new RunnerRequestError('MindNProgress rejected the callback.', 404);
+    });
+
+    try {
+      const response = await fetch(`${relay.baseUrl}/api/integrations/aionui/launches/${'b'.repeat(43)}/conversation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: 'conversation_2' }),
+      });
+      expect(response.status).toBe(404);
+    } finally {
+      await relay.close();
+    }
   });
 });
