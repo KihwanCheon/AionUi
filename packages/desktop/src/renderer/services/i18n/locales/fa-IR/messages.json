@@ -7,6 +7,10 @@
   "confirm": "تأیید",
   "canceledExecution": "اجرا لغو شد",
   "openLinkFailed": "باز کردن لینک ناموفق بود",
+  "mindnprogress": {
+    "openLinkedCard": "باز کردن کارت پیوندخوردهٔ MindNProgress",
+    "selectionFailed": "کارت پیوندخوردهٔ MindNProgress انتخاب نشد."
+  },
   "imageGenerationModelDetected": "مدل تصویر شناسایی شد، ابزار تصویر به‌صورت خودکار فعال شد. مدل پیش‌فرض: {{platform}}:{{model}}",
   "auto_handling_permissions": "پردازش خودکار درخواست مجوز: {{request}}",
   "copy": "کپی",

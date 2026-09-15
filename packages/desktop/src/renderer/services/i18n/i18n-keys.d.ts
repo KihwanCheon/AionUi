@@ -1288,6 +1288,8 @@ export type I18nKey =
   | 'messages.fork.errorUnsupported'
   | 'messages.imageGenerationModelDetected'
   | 'messages.imageLoadFailed'
+  | 'messages.mindnprogress.openLinkedCard'
+  | 'messages.mindnprogress.selectionFailed'
   | 'messages.noOptionsAvailable'
   | 'messages.openLinkFailed'
   | 'messages.option'

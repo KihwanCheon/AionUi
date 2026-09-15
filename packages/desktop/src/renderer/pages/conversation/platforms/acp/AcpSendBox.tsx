@@ -12,6 +12,7 @@ import MobileActionSheet, {
   useAttachEntry,
 } from '@/renderer/components/chat/MobileActionSheet';
 import SendBox from '@/renderer/components/chat/SendBox';
+import MindNProgressConversationLink from '@/renderer/components/chat/SendBox/MindNProgressConversationLink';
 import ThoughtDisplay from '@/renderer/components/chat/ThoughtDisplay';
 import { audioExts, getFileExtension, imageExts } from '@/renderer/services/FileService';
 import FilePreview from '@/renderer/components/media/FilePreview';
@@ -921,6 +922,7 @@ Please check your local CLI tool authentication status`,
           // popover shows the raw count — never a percentage against a
           // guessed denominator. No usage report at all → nothing.
           <>
+            <MindNProgressConversationLink conversationId={conversation_id} />
             {teamRuntime?.onInterruptSend && content.trim() && (
               <Button
                 size='mini'

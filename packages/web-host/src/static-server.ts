@@ -14,6 +14,11 @@ import http, { type IncomingMessage, type Server, type ServerResponse } from 'no
 import { networkInterfaces } from 'node:os';
 import net, { type Socket } from 'node:net';
 import serveHandler from 'serve-handler';
+import {
+  createProxyHeaders,
+  type TcpConnectionObserver,
+  TrustedClientAddressRelay,
+} from './trusted-client-address/trustedClientAddress';
 
 export type StaticServerOptions = {
   staticDir: string;
@@ -37,6 +42,7 @@ const BLOCKED_INTERNAL_API_PREFIXES = [
   '/api/internal/external-conversation-launches',
   '/api/internal/external-conversation-dispatches',
 ];
+const MINDNPROGRESS_NAVIGATION_API_PREFIX = '/api/integrations/mindnprogress/conversations/';
 
 type HttpProxyTarget = {
   hostname: string;
@@ -101,13 +107,20 @@ function resolveFrontendTarget(frontendUrl?: string): HttpProxyTarget | null {
   };
 }
 
-function forwardHttpRequest(req: IncomingMessage, res: ServerResponse, target: HttpProxyTarget, path = req.url): void {
+function forwardHttpRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  target: HttpProxyTarget,
+  path = req.url,
+  clientAddress?: string | null
+): void {
+  const headers = createProxyHeaders(req.headers, `${target.hostname}:${target.port}`, clientAddress);
   const options: http.RequestOptions = {
     hostname: target.hostname,
     port: target.port,
     path,
     method: req.method,
-    headers: { ...req.headers, host: `${target.hostname}:${target.port}` },
+    headers,
   };
   const proxy = http.request(options, (proxyRes) => {
     res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
@@ -145,7 +158,12 @@ const PEEK_LIMIT_BYTES = 4096;
  * from `client` during peek are replayed to the upstream as the first write,
  * so the endpoint sees the full HTTP request as-sent.
  */
-function spliceToTcpEndpoint(client: Socket, target: HttpProxyTarget, initialBytes: Buffer): void {
+function spliceToTcpEndpoint(
+  client: Socket,
+  target: HttpProxyTarget,
+  initialBytes: Buffer,
+  connectionObserver?: TcpConnectionObserver
+): void {
   client.setNoDelay(true);
   client.setKeepAlive(true);
   client.setTimeout(0);
@@ -159,14 +177,21 @@ function spliceToTcpEndpoint(client: Socket, target: HttpProxyTarget, initialByt
   // forever waiting for the missing Content-Length (issue #4058).
   client.pause();
   const upstream = net.connect({ host: target.hostname, port: target.port });
+  let upstreamLocalPort: number | undefined;
   upstream.setNoDelay(true);
   upstream.setKeepAlive(true);
   upstream.once('connect', () => {
+    upstreamLocalPort = upstream.localPort;
+    if (upstreamLocalPort !== undefined) connectionObserver?.connected(upstreamLocalPort);
     if (initialBytes.length > 0) upstream.write(initialBytes);
     upstream.pipe(client);
     client.pipe(upstream);
   });
+  let closed = false;
   const tearDown = (): void => {
+    if (closed) return;
+    closed = true;
+    if (upstreamLocalPort !== undefined) connectionObserver?.closed(upstreamLocalPort);
     client.destroy();
     upstream.destroy();
   };
@@ -211,6 +236,7 @@ export async function startStaticServer(opts: StaticServerOptions): Promise<Stat
   const host = allowRemote ? '0.0.0.0' : '127.0.0.1';
   const backendTarget: HttpProxyTarget = { hostname: '127.0.0.1', port: opts.backendPort };
   const frontendTarget = resolveFrontendTarget(opts.frontendUrl);
+  const clientAddresses = new TrustedClientAddressRelay();
 
   // The HTTP server listens only on loopback — user traffic hits the outer
   // net.Server first. We route to this server for everything except WS
@@ -229,6 +255,7 @@ export async function startStaticServer(opts: StaticServerOptions): Promise<Stat
       }
 
       const pathname = new URL(req.url, 'http://webui.local').pathname;
+      const clientAddress = clientAddresses.resolve(req.socket.remotePort);
       if (BLOCKED_INTERNAL_API_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
         res.writeHead(404, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: 'NOT_FOUND' }));
@@ -239,7 +266,10 @@ export async function startStaticServer(opts: StaticServerOptions): Promise<Stat
       // /login and /logout are aionui-auth's top-level auth endpoints: proxy them too
       // so WebUI browser clients reach the backend without a path-rewrite.
       if (req.url.startsWith('/api/') || req.url.startsWith('/api?') || req.url === '/login' || req.url === '/logout') {
-        forwardHttpRequest(req, res, backendTarget);
+        const navigationClientAddress = pathname.startsWith(MINDNPROGRESS_NAVIGATION_API_PREFIX)
+          ? clientAddress
+          : undefined;
+        forwardHttpRequest(req, res, backendTarget, req.url, navigationClientAddress);
         return;
       }
 
@@ -281,6 +311,7 @@ export async function startStaticServer(opts: StaticServerOptions): Promise<Stat
   // server (everything else). Both routes use raw TCP splice — no reliance
   // on http.Server's upgrade event.
   const tcp_server = net.createServer((client: Socket) => {
+    const clientAddress = client.remoteAddress;
     let peeked = Buffer.alloc(0);
     let settled = false;
     const cleanup = (): void => {
@@ -301,7 +332,9 @@ export async function startStaticServer(opts: StaticServerOptions): Promise<Stat
           : decision === 'frontend' && frontendTarget
             ? frontendTarget
             : { hostname: '127.0.0.1', port: internalPort };
-      spliceToTcpEndpoint(client, target, peeked);
+      const throughInternalHttp = decision !== 'backend' && !(decision === 'frontend' && frontendTarget);
+      const connectionObserver = throughInternalHttp ? clientAddresses.observe(clientAddress) : undefined;
+      spliceToTcpEndpoint(client, target, peeked, connectionObserver);
     };
     const onEarlyError = (): void => {
       cleanup();

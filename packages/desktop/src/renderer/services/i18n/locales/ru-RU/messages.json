@@ -9,6 +9,10 @@
   "confirm": "Подтвердить",
   "canceledExecution": "Выполнение отменено",
   "openLinkFailed": "Не удалось открыть ссылку",
+  "mindnprogress": {
+    "openLinkedCard": "Открыть связанную карточку MindNProgress",
+    "selectionFailed": "Не удалось выбрать связанную карточку MindNProgress."
+  },
   "imageGenerationModelDetected": "Обнаружена модель для изображений, инструмент изображений автоматически включён. Модель по умолчанию: {{platform}}:{{model}}",
   "auto_handling_permissions": "Автоматическая обработка запроса разрешения: {{request}}",
   "copy": "Копировать",

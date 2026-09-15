@@ -14,6 +14,7 @@ import MobileActionSheet, {
   useAttachEntry,
 } from '@/renderer/components/chat/MobileActionSheet';
 import SendBox from '@/renderer/components/chat/SendBox';
+import MindNProgressConversationLink from '@/renderer/components/chat/SendBox/MindNProgressConversationLink';
 import ThoughtDisplay from '@/renderer/components/chat/ThoughtDisplay';
 import FilePreview from '@/renderer/components/media/FilePreview';
 import HorizontalFileList from '@/renderer/components/media/HorizontalFileList';
@@ -878,17 +879,20 @@ const AionrsSendBox: React.FC<{
         }
         allowSendWhileLoading
         sendButtonPrefix={
-          teamRuntime?.onInterruptSend && content.trim() ? (
-            <Button
-              size='mini'
-              type='secondary'
-              icon={<Lightning />}
-              loading={interrupting}
-              onClick={() => void handleInterruptSend()}
-            >
-              {t('team.interruptAndSend')}
-            </Button>
-          ) : undefined
+          <>
+            <MindNProgressConversationLink conversationId={conversation_id} />
+            {teamRuntime?.onInterruptSend && content.trim() ? (
+              <Button
+                size='mini'
+                type='secondary'
+                icon={<Lightning />}
+                loading={interrupting}
+                onClick={() => void handleInterruptSend()}
+              >
+                {t('team.interruptAndSend')}
+              </Button>
+            ) : undefined}
+          </>
         }
       />
       {isMobile && (
