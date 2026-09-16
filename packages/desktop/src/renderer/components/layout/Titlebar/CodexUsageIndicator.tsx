@@ -58,7 +58,8 @@ const CodexUsageIndicator: React.FC = () => {
     if (!isElectronDesktop()) return;
 
     const conversationId = location.pathname.match(/^\/conversation\/([^/]+)/)?.[1];
-    if (!conversationId) {
+    const isNewConversation = location.pathname === '/guid';
+    if (!conversationId && !isNewConversation) {
       setUsage(null);
       return;
     }
@@ -70,7 +71,7 @@ const CodexUsageIndicator: React.FC = () => {
       if (requestInFlight || document.visibilityState === 'hidden') return;
       requestInFlight = true;
       void subscriptionUsageBridge.getCodex
-        .invoke({ conversationId })
+        .invoke(conversationId ? { conversationId } : {})
         .then((snapshot) => {
           if (!cancelled && snapshot) setUsage(snapshot);
         })

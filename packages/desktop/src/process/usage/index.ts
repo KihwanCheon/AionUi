@@ -17,9 +17,11 @@ export const initUsageProviders = (): void => {
     return publisher.readClaudeUsage(conversation.extra.workspace ?? '');
   });
   subscriptionUsageBridge.getCodex.provider(async ({ conversationId }) => {
-    const conversation = await ipcBridge.conversation.get.invoke({ id: conversationId });
-    if (conversation?.type !== 'acp') return null;
-    publisher.noteActiveAcpConversation(conversation.id);
+    if (conversationId) {
+      const conversation = await ipcBridge.conversation.get.invoke({ id: conversationId });
+      if (conversation?.type !== 'acp') return null;
+      publisher.noteActiveAcpConversation(conversation.id);
+    }
     return publisher.readCodexUsage();
   });
   publisher.start();

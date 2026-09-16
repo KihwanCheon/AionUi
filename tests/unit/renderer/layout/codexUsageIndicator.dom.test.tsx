@@ -89,6 +89,39 @@ describe('CodexUsageIndicator', () => {
     expect(fixtures.invoke).toHaveBeenLastCalledWith({ conversationId: 'second' });
   });
 
+  it('loads account usage when the app opens directly on a new conversation', async () => {
+    fixtures.pathname = '/guid';
+    fixtures.invoke.mockResolvedValue(usage);
+
+    render(<CodexUsageIndicator />);
+
+    await waitFor(() => expect(screen.getByLabelText('Codex Usage')).toHaveTextContent('29%'));
+    expect(fixtures.invoke).toHaveBeenCalledWith({});
+  });
+
+  it('keeps account usage visible when switching from a conversation to a new conversation', async () => {
+    fixtures.invoke.mockResolvedValue(usage);
+    const view = render(<CodexUsageIndicator />);
+    await waitFor(() => expect(screen.getByLabelText('Codex Usage')).toHaveTextContent('29%'));
+
+    fixtures.pathname = '/guid';
+    view.rerender(<CodexUsageIndicator />);
+
+    expect(screen.getByLabelText('Codex Usage')).toHaveTextContent('29%');
+    expect(fixtures.invoke).toHaveBeenLastCalledWith({});
+  });
+
+  it('keeps usage hidden outside conversation and new-conversation routes', async () => {
+    fixtures.pathname = '/settings/agent';
+    fixtures.invoke.mockResolvedValue(usage);
+
+    render(<CodexUsageIndicator />);
+
+    await act(async () => Promise.resolve());
+    expect(screen.queryByLabelText('Codex Usage')).not.toBeInTheDocument();
+    expect(fixtures.invoke).not.toHaveBeenCalled();
+  });
+
   it('renders a publisher update without waiting for another request interval', async () => {
     fixtures.invoke.mockReturnValue(new Promise(() => {}));
     render(<CodexUsageIndicator />);
