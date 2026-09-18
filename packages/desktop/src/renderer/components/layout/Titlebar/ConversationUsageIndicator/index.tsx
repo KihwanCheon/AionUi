@@ -11,14 +11,14 @@ import { useTranslation } from 'react-i18next';
 import { httpGet } from '@/common/adapter/httpBridge';
 import type { SubscriptionUsageSnapshot, SubscriptionUsageWindow } from '@/common/types/platform/subscriptionUsage';
 import { isElectronDesktop } from '@/renderer/utils/platform';
-import ClaudeUsagePill from './ClaudeUsagePill';
-import CodexUsageIndicator from './CodexUsageIndicator';
-import styles from './SubscriptionUsageIndicator.module.css';
+import ClaudeUsagePill from '../ClaudeUsagePill';
+import CodexUsageIndicator from '../CodexUsageIndicator';
+import styles from '../SubscriptionUsageIndicator.module.css';
 import {
   getSubscriptionUsageTone,
   SUBSCRIPTION_USAGE_STALE_AFTER_MS,
   type SubscriptionUsageTone,
-} from './subscriptionUsageTone';
+} from '../subscriptionUsageTone';
 
 const WEB_USAGE_READY_POLL_MS = 10_000;
 const webUsageProvider = httpGet<SubscriptionUsageSnapshot | null>('/api/system/subscription-usage');
