@@ -12,8 +12,8 @@ import { useConversationContextSafe } from '@/renderer/hooks/context/Conversatio
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useLocalFilePreview } from '@/renderer/pages/conversation/Preview/hooks/useLocalFilePreview';
 import { iconColors } from '@/renderer/styles/colors';
-import { Alert, Message, Tooltip } from '@arco-design/web-react';
-import { Copy } from '@icon-park/react';
+import { Alert, Button, Dropdown, Menu, Message, Tooltip } from '@arco-design/web-react';
+import { Copy, MoreOne } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -57,6 +57,12 @@ import TeammateMessageAvatar from './TeammateMessageAvatar';
 import { useTeammateColor } from '@/renderer/pages/team/identity/TeamIdentityContext';
 
 const CODE_STYLE = { marginTop: 4, marginBlock: 4 };
+const TABLET_MIN_VIEWPORT_PX = 768;
+
+const hasTouchFirstPointer = (): boolean =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(hover: none), (pointer: coarse)').matches;
 
 type TeamContextResetNotice = {
   kind: 'context_reset';
@@ -168,6 +174,8 @@ const MessageText: React.FC<{
   const forkConversation = useForkConversation(conversationContext?.conversation_id);
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
+  const useTouchActions = isMobile || hasTouchFirstPointer();
+  const isTablet = useTouchActions && typeof window !== 'undefined' && window.innerWidth >= TABLET_MIN_VIEWPORT_PX;
   const handleLocalFileLink = useLocalFilePreview(conversationContext?.workspace);
   const resolvedFiles = useMemo(
     () => files.map((file_path) => resolveMessageFilePath(file_path, conversationContext?.workspace)),
@@ -214,11 +222,14 @@ const MessageText: React.FC<{
     isLastMessage,
     hasTurnAnchor: hasForkAnchor,
   });
+  const handleFork = (): void => {
+    void forkConversation(message.msg_id ?? message.id);
+  };
   const forkButton = showForkButton ? (
     <Tooltip content={t('messages.fork.action')}>
       <div
         className='p-4px rd-4px cursor-pointer hover:bg-3 transition-colors opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
-        onClick={() => void forkConversation(message.msg_id ?? message.id)}
+        onClick={handleFork}
         style={{ lineHeight: 0 }}
         data-testid='message-fork-button'
       >
@@ -226,6 +237,54 @@ const MessageText: React.FC<{
       </div>
     </Tooltip>
   ) : null;
+  const tabletCopyButton = (
+    <Tooltip content={t('common.copy', { defaultValue: 'Copy' })}>
+      <Button
+        type='text'
+        size='mini'
+        shape='circle'
+        className='!h-28px !w-28px !min-w-28px !p-0 text-t-secondary'
+        aria-label={t('common.copy', { defaultValue: 'Copy' })}
+        onClick={handleCopy}
+        data-testid='message-tablet-copy-button'
+      >
+        <Copy theme='outline' size='16' fill='currentColor' />
+      </Button>
+    </Tooltip>
+  );
+  const tabletForkButton = showForkButton ? (
+    <Tooltip content={t('messages.fork.action')}>
+      <Button
+        type='text'
+        size='mini'
+        shape='circle'
+        className='!h-28px !w-28px !min-w-28px !p-0 text-t-secondary'
+        aria-label={t('messages.fork.action')}
+        onClick={handleFork}
+        data-testid='message-fork-button'
+      >
+        <ForkBranchIcon size={16} fill='currentColor' />
+      </Button>
+    </Tooltip>
+  ) : null;
+  const phoneActionMenu = (
+    <Menu>
+      <Menu.Item key='copy' onClick={handleCopy} data-testid='message-copy-menu-item'>
+        <span className='flex items-center gap-8px'>
+          <Copy theme='outline' size='16' fill='currentColor' />
+          {t('common.copy', { defaultValue: 'Copy' })}
+        </span>
+      </Menu.Item>
+      {showForkButton ? (
+        <Menu.Item key='fork' onClick={handleFork} data-testid='message-fork-menu-item'>
+          <span className='flex items-center gap-8px'>
+            <ForkBranchIcon size={16} fill='currentColor' />
+            {t('messages.fork.action')}
+          </span>
+        </Menu.Item>
+      ) : null}
+    </Menu>
+  );
 
   const cronMeta = message.content.cronMeta;
   const displaySenderName = senderName === 'team_system' ? t('team.systemNotice.sender') : senderName;
@@ -350,11 +409,9 @@ const MessageText: React.FC<{
             {t('messages.delivery.pending', { defaultValue: 'Unread' })}
           </div>
         )}
-        {/* Hover-revealed copy + timestamp row. Mobile has no hover affordance,
-            so we drop the row entirely — system-level long-press still copies.
-            For AI replies split across several text messages, only the last text
+        {/* For AI replies split across several text messages, only the last text
             of the turn shows this row (showCopyRow); user messages always do. */}
-        {!isMobile && showCopyRow && (
+        {!useTouchActions && showCopyRow && (
           <div
             className={classNames('h-32px flex items-center mt-4px gap-8px', {
               'flex-row-reverse': isUserMessage,
@@ -367,6 +424,33 @@ const MessageText: React.FC<{
                 {formatMessageTime(message.created_at)}
               </span>
             )}
+          </div>
+        )}
+        {useTouchActions && isTablet && showCopyRow && (
+          <div
+            className={classNames('h-32px flex items-center mt-4px gap-4px', {
+              'flex-row-reverse': isUserMessage,
+            })}
+            data-testid='message-tablet-actions'
+          >
+            {tabletCopyButton}
+            {tabletForkButton}
+          </div>
+        )}
+        {useTouchActions && !isTablet && showCopyRow && (
+          <div className='h-32px flex items-center mt-4px' data-testid='message-phone-actions'>
+            <Dropdown trigger='click' droplist={phoneActionMenu} position={isUserMessage ? 'bl' : 'br'}>
+              <Button
+                type='text'
+                size='mini'
+                shape='circle'
+                className='!h-28px !w-28px !min-w-28px !p-0 text-t-secondary'
+                aria-label={t('common.more', { defaultValue: 'More' })}
+                data-testid='message-actions-menu'
+              >
+                <MoreOne theme='outline' size='16' fill='currentColor' />
+              </Button>
+            </Dropdown>
           </div>
         )}
       </div>
