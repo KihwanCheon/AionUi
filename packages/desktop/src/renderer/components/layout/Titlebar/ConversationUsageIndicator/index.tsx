@@ -14,6 +14,7 @@ import { isElectronDesktop } from '@/renderer/utils/platform';
 import ClaudeUsagePill from '../ClaudeUsagePill';
 import CodexUsageIndicator from '../CodexUsageIndicator';
 import styles from '../SubscriptionUsageIndicator.module.css';
+import PtyMonitorIndicator from './PtyMonitorIndicator';
 import {
   getSubscriptionUsageTone,
   SUBSCRIPTION_USAGE_STALE_AFTER_MS,
@@ -240,6 +241,7 @@ const ConversationUsageIndicator: React.FC = () => {
     <>
       <ClaudeUsagePill />
       <CodexUsageIndicator />
+      <PtyMonitorIndicator />
     </>
   );
 };

@@ -212,5 +212,17 @@
     "reached": "Límite de uso alcanzado",
     "ok": "Dentro del límite",
     "approaching": "Cerca del límite"
+  },
+  "ptyMonitor": {
+    "title": "Monitor de PTY",
+    "systemTotal": "Total del sistema",
+    "tracked": "Activos rastreados",
+    "untracked": "Sospechosos sin rastrear",
+    "owners": "Procesos con PTY",
+    "activeLaunches": "Ejecuciones rastreadas",
+    "none": "Ninguno",
+    "unsupported": "El monitoreo de PTY solo está disponible en macOS",
+    "unavailable": "Monitoreo no disponible",
+    "readOnly": "Monitoreo de solo lectura; no se finaliza ningún proceso."
   }
 }

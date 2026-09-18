@@ -13,6 +13,7 @@ import type {
   ClaudeSubscriptionUsage,
   CodexSubscriptionUsage,
   SubscriptionUsageSnapshot,
+  PtyLaunchContext,
 } from '@/common/types/platform/subscriptionUsage';
 import { getClaudeUsage } from './claude';
 import { getCodexUsage } from './codex';
@@ -41,7 +42,7 @@ export type SubscriptionUsageConversation = {
 
 type SubscriptionUsagePublisherOptions = {
   clearSnapshot?: (expectedContent: string | undefined) => void;
-  getClaudeUsage?: (cwd: string) => Promise<ClaudeUsageSnapshot | null>;
+  getClaudeUsage?: (cwd: string, context?: PtyLaunchContext) => Promise<ClaudeUsageSnapshot | null>;
   getCodexUsage?: () => Promise<CodexUsageSnapshot | null>;
   initialRefreshDelayMs?: number;
   isDirectory?: (path: string) => boolean;
@@ -88,7 +89,7 @@ const updatedAtValue = (value: string | null): number => {
 
 export class SubscriptionUsagePublisher {
   readonly #clearSnapshot: (expectedContent: string | undefined) => void;
-  readonly #getClaudeUsage: (cwd: string) => Promise<ClaudeUsageSnapshot | null>;
+  readonly #getClaudeUsage: (cwd: string, context?: PtyLaunchContext) => Promise<ClaudeUsageSnapshot | null>;
   readonly #getCodexUsage: () => Promise<CodexUsageSnapshot | null>;
   readonly #initialRefreshDelayMs: number;
   readonly #isDirectory: (path: string) => boolean;
@@ -151,10 +152,10 @@ export class SubscriptionUsagePublisher {
     this.#activeConversationId = conversationId;
   }
 
-  async readClaudeUsage(cwd: string): Promise<ClaudeUsageSnapshot | null> {
+  async readClaudeUsage(cwd: string, context?: PtyLaunchContext): Promise<ClaudeUsageSnapshot | null> {
     let usage: ClaudeUsageSnapshot | null;
     try {
-      usage = await this.#getClaudeUsage(cwd);
+      usage = context ? await this.#getClaudeUsage(cwd, context) : await this.#getClaudeUsage(cwd);
     } catch {
       this.#logWarn('[SubscriptionUsagePublisher] Claude usage refresh failed');
       usage = null;

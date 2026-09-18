@@ -9,6 +9,7 @@ import type { IPty } from 'node-pty';
 import { ClaudeUsageProbe, resolveExecutableFromPath, type SpawnPty } from '@process/usage/claude/usageProbe';
 
 class FakePty {
+  readonly pid = 4321;
   readonly kill = vi.fn();
   readonly write = vi.fn();
   #dataListener: ((data: string) => void) | undefined;
@@ -158,6 +159,35 @@ describe('ClaudeUsageProbe', () => {
       session: { utilization: 18 },
     });
     expect(terminal.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps each spawned PTY to its conversation and removes it when the process exits', async () => {
+    const terminal = new FakePty();
+    const trackPtyLaunch = vi.fn(() => 'launch-1');
+    const finishPtyLaunch = vi.fn();
+    const probe = new ClaudeUsageProbe({
+      command: process.execPath,
+      spawnPty: vi.fn(() => terminal as unknown as IPty) as unknown as SpawnPty,
+      trackPtyLaunch,
+      finishPtyLaunch,
+    });
+
+    const result = probe.getUsage(process.cwd(), {
+      conversationId: 'conv-1',
+      conversationName: 'PTY investigation',
+    });
+    terminal.emitExit();
+    await expect(result).resolves.toBeNull();
+
+    expect(trackPtyLaunch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        purpose: 'claude-usage-probe',
+        conversationId: 'conv-1',
+        conversationName: 'PTY investigation',
+        childPid: 4321,
+      })
+    );
+    expect(finishPtyLaunch).toHaveBeenCalledWith('launch-1', 'exit');
   });
 
   it('answers an interactive workspace trust prompt once', async () => {

@@ -212,5 +212,17 @@
     "reached": "使用上限に達しました",
     "ok": "余裕あり",
     "approaching": "上限に近づいています"
+  },
+  "ptyMonitor": {
+    "title": "PTY モニター",
+    "systemTotal": "システム合計",
+    "tracked": "追跡中",
+    "untracked": "未追跡の疑い",
+    "owners": "PTY 保有プロセス",
+    "activeLaunches": "追跡中の起動",
+    "none": "なし",
+    "unsupported": "PTY モニターは macOS でのみ利用できます",
+    "unavailable": "モニターを利用できません",
+    "readOnly": "読み取り専用です。プロセスは終了しません。"
   }
 }

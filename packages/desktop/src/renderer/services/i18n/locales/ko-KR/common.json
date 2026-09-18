@@ -212,5 +212,17 @@
     "reached": "사용 한도 도달",
     "ok": "여유 있음",
     "approaching": "한도 근접"
+  },
+  "ptyMonitor": {
+    "title": "PTY 모니터",
+    "systemTotal": "시스템 전체",
+    "tracked": "추적 중",
+    "untracked": "미추적 의심",
+    "owners": "PTY 보유 프로세스",
+    "activeLaunches": "추적 중인 실행",
+    "none": "없음",
+    "unsupported": "PTY 모니터는 macOS에서만 사용할 수 있습니다",
+    "unavailable": "모니터링을 사용할 수 없습니다",
+    "readOnly": "읽기 전용 모니터이며 프로세스를 종료하지 않습니다."
   }
 }

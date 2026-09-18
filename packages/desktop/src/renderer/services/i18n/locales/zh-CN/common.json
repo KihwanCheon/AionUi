@@ -212,5 +212,17 @@
     "reached": "已达使用上限",
     "ok": "额度充足",
     "approaching": "接近上限"
+  },
+  "ptyMonitor": {
+    "title": "PTY 监视器",
+    "systemTotal": "系统总数",
+    "tracked": "正在跟踪",
+    "untracked": "疑似未跟踪",
+    "owners": "PTY 持有进程",
+    "activeLaunches": "跟踪中的运行",
+    "none": "无",
+    "unsupported": "PTY 监视仅适用于 macOS",
+    "unavailable": "监视不可用",
+    "readOnly": "只读监视；不会终止任何进程。"
   }
 }

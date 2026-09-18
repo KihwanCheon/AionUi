@@ -6,6 +6,7 @@
 
 /** Claude subscription-usage probe entry point. */
 import type { ClaudeUsageSnapshot } from '@/common/types/platform/claudeUsage';
+import type { PtyLaunchContext } from '@/common/types/platform/subscriptionUsage';
 import { statSync } from 'node:fs';
 import { ClaudeUsageProbe } from './usageProbe';
 
@@ -24,8 +25,8 @@ const isDirectory = (path: string): boolean => {
   }
 };
 
-export const getClaudeUsage = (cwd: string): Promise<ClaudeUsageSnapshot | null> => {
+export const getClaudeUsage = (cwd: string, context?: PtyLaunchContext): Promise<ClaudeUsageSnapshot | null> => {
   const workspace = cwd.trim();
   if (!workspace || !isDirectory(workspace)) return Promise.resolve(null);
-  return getProbe().getUsage(workspace);
+  return getProbe().getUsage(workspace, context);
 };

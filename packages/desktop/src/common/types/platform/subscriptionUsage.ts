@@ -40,3 +40,40 @@ export type SubscriptionUsageSnapshot = {
   claude: ClaudeSubscriptionUsage;
   codex: CodexSubscriptionUsage;
 };
+
+export type PtyMonitorState = 'ready' | 'unsupported' | 'unavailable';
+
+export type PtyLaunchPurpose = 'claude-usage-probe';
+
+export type PtyLaunchCloseReason = 'completed' | 'exit' | 'timeout' | 'shutdown-timeout';
+
+export type PtyLaunchContext = {
+  conversationId?: string;
+  conversationName?: string;
+};
+
+export type PtyLaunchSnapshot = PtyLaunchContext & {
+  id: string;
+  purpose: PtyLaunchPurpose;
+  childPid: number;
+  startedAt: number;
+};
+
+export type PtyOwnerSnapshot = {
+  pid: number;
+  processName: string;
+  count: number;
+};
+
+export type PtyMonitorSnapshot = {
+  state: PtyMonitorState;
+  updatedAt: number;
+  limit: number | null;
+  totalCount: number | null;
+  aionUiPid: number;
+  aionUiCount: number | null;
+  trackedActiveCount: number;
+  suspectedUntrackedCount: number | null;
+  owners: PtyOwnerSnapshot[];
+  activeLaunches: PtyLaunchSnapshot[];
+};

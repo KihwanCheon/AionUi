@@ -212,5 +212,17 @@
     "reached": "Usage limit reached",
     "ok": "Within limit",
     "approaching": "Approaching limit"
+  },
+  "ptyMonitor": {
+    "title": "PTY Monitor",
+    "systemTotal": "System total",
+    "tracked": "Tracked active",
+    "untracked": "Untracked suspected",
+    "owners": "PTY owners",
+    "activeLaunches": "Tracked launches",
+    "none": "None",
+    "unsupported": "PTY monitoring is available on macOS only",
+    "unavailable": "Monitoring unavailable",
+    "readOnly": "Read-only monitoring; no processes are terminated."
   }
 }

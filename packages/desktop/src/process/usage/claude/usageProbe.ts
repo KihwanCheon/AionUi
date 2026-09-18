@@ -6,9 +6,15 @@
 
 /** Run and cache the interactive Claude subscription-usage probe. */
 import type { ClaudeUsageSnapshot } from '@/common/types/platform/claudeUsage';
+import type {
+  PtyLaunchCloseReason,
+  PtyLaunchContext,
+  PtyLaunchSnapshot,
+} from '@/common/types/platform/subscriptionUsage';
 import { existsSync } from 'node:fs';
-import { delimiter, extname, join } from 'node:path';
+import { delimiter, extname, join, win32 } from 'node:path';
 import { spawn, type IPty } from 'node-pty';
+import { getPtyMonitorService } from '../ptyMonitor';
 import { parseClaudeUsageOutput, stripClaudeUsageTerminalOutput } from './usageParser';
 
 const DEFAULT_SUCCESS_TTL_MS = 120_000;
@@ -35,6 +41,8 @@ export type ClaudeUsageProbeOptions = {
   spawnPty?: SpawnPty;
   successTtlMs?: number;
   timeoutMs?: number;
+  trackPtyLaunch?: (launch: Omit<PtyLaunchSnapshot, 'id' | 'startedAt'>) => string;
+  finishPtyLaunch?: (launchId: string, reason: PtyLaunchCloseReason) => void;
 };
 
 type CacheEntry = {
@@ -63,11 +71,15 @@ export const resolveExecutableFromPath = (
   }
 
   const extensions = extname(command) ? [''] : executableExtensions(env, platform);
-  const pathEntries = env.PATH?.split(delimiter).map((entry) => entry.replace(/^"|"$/g, '').trim()) ?? [];
+  const pathDelimiter = platform === 'win32' ? ';' : delimiter;
+  const pathEntries = env.PATH?.split(pathDelimiter).map((entry) => entry.replace(/^"|"$/g, '').trim()) ?? [];
   for (const pathEntry of pathEntries) {
     if (!pathEntry) continue;
     for (const extension of extensions) {
-      const candidate = join(pathEntry, `${command}${extension}`);
+      const candidate =
+        platform === 'win32'
+          ? win32.join(pathEntry, `${command}${extension}`)
+          : join(pathEntry, `${command}${extension}`);
       if (pathExists(candidate)) return candidate;
     }
   }
@@ -85,6 +97,8 @@ export class ClaudeUsageProbe {
   readonly #spawnPty: SpawnPty;
   readonly #successTtlMs: number;
   readonly #timeoutMs: number;
+  readonly #trackPtyLaunch: (launch: Omit<PtyLaunchSnapshot, 'id' | 'startedAt'>) => string;
+  readonly #finishPtyLaunch: (launchId: string, reason: PtyLaunchCloseReason) => void;
 
   #cache: CacheEntry | undefined;
   #inFlight: Promise<ClaudeUsageSnapshot | null> | undefined;
@@ -100,14 +114,17 @@ export class ClaudeUsageProbe {
     this.#spawnPty = options.spawnPty ?? spawn;
     this.#successTtlMs = options.successTtlMs ?? DEFAULT_SUCCESS_TTL_MS;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.#trackPtyLaunch = options.trackPtyLaunch ?? ((launch) => getPtyMonitorService().trackLaunch(launch));
+    this.#finishPtyLaunch =
+      options.finishPtyLaunch ?? ((launchId, reason) => getPtyMonitorService().finishLaunch(launchId, reason));
   }
 
-  async getUsage(cwd: string): Promise<ClaudeUsageSnapshot | null> {
+  async getUsage(cwd: string, context: PtyLaunchContext = {}): Promise<ClaudeUsageSnapshot | null> {
     const now = this.#now();
     if (this.#cache && this.#cache.expiresAt > now) return this.#cache.value;
     if (this.#inFlight) return this.#inFlight;
 
-    const request = this.#runProbe(cwd)
+    const request = this.#runProbe(cwd, context)
       .then((value) => {
         this.#cache = {
           value,
@@ -133,7 +150,7 @@ export class ClaudeUsageProbe {
     return request;
   }
 
-  #runProbe(cwd: string): Promise<ClaudeUsageSnapshot | null> {
+  #runProbe(cwd: string, context: PtyLaunchContext): Promise<ClaudeUsageSnapshot | null> {
     const executable = resolveExecutableFromPath(this.#command, this.#env);
     if (!executable) {
       return Promise.reject(new Error('Claude executable was not found on PATH'));
@@ -154,6 +171,18 @@ export class ClaudeUsageProbe {
         return;
       }
 
+      let launchId: string | undefined;
+      try {
+        launchId = this.#trackPtyLaunch({
+          purpose: 'claude-usage-probe',
+          conversationId: context.conversationId,
+          conversationName: context.conversationName,
+          childPid: terminal.pid,
+        });
+      } catch {
+        // Monitoring must never interfere with subscription usage collection.
+      }
+
       let captured = '';
       let completedSnapshot: ClaudeUsageSnapshot | undefined;
       let commandSent = false;
@@ -169,7 +198,11 @@ export class ClaudeUsageProbe {
       let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
       let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
 
-      const finish = (value: ClaudeUsageSnapshot | null, error?: Error): void => {
+      const finish = (
+        value: ClaudeUsageSnapshot | null,
+        error?: Error,
+        reason: PtyLaunchCloseReason = 'completed'
+      ): void => {
         if (settled) return;
         settled = true;
         if (commandTimer) clearTimeout(commandTimer);
@@ -186,6 +219,13 @@ export class ClaudeUsageProbe {
           terminal.kill();
         } catch {
           // The PTY may already have been fully released.
+        }
+        if (launchId) {
+          try {
+            this.#finishPtyLaunch(launchId, reason);
+          } catch {
+            // Monitoring must never interfere with subscription usage collection.
+          }
         }
         if (error) {
           reject(error);
@@ -233,7 +273,7 @@ export class ClaudeUsageProbe {
         // Letting Claude exit first can strand the Windows ConPTY host because
         // node-pty can no longer enumerate the finished console session.
         writeIfActive('\u001b');
-        shutdownTimer = setTimeout(() => finish(snapshot), DEFAULT_SHUTDOWN_TIMEOUT_MS);
+        shutdownTimer = setTimeout(() => finish(snapshot, undefined, 'shutdown-timeout'), DEFAULT_SHUTDOWN_TIMEOUT_MS);
       };
 
       dataSubscription = terminal.onData((chunk) => {
@@ -251,7 +291,7 @@ export class ClaudeUsageProbe {
             cleanupQueued = true;
             const snapshot = completedSnapshot;
             cleanupTimer = setTimeout(() => {
-              finish(snapshot);
+              finish(snapshot, undefined, 'completed');
             }, this.#exitCommandDelayMs);
           }
           return;
@@ -270,14 +310,14 @@ export class ClaudeUsageProbe {
 
       exitSubscription = terminal.onExit(() => {
         exited = true;
-        finish(completedSnapshot ?? parseClaudeUsageOutput(captured, new Date(this.#now())));
+        finish(completedSnapshot ?? parseClaudeUsageOutput(captured, new Date(this.#now())), undefined, 'exit');
       });
 
       scheduleFallbackCommand();
 
       timeoutTimer = setTimeout(() => {
         const partial = parseClaudeUsageOutput(captured, new Date(this.#now()));
-        finish(partial, partial ? undefined : new Error('Claude usage probe timed out'));
+        finish(partial, partial ? undefined : new Error('Claude usage probe timed out'), 'timeout');
       }, this.#timeoutMs);
     });
   }

@@ -212,5 +212,17 @@
     "reached": "Nutzungslimit erreicht",
     "ok": "Im Limit",
     "approaching": "Limit fast erreicht"
+  },
+  "ptyMonitor": {
+    "title": "PTY-Monitor",
+    "systemTotal": "System gesamt",
+    "tracked": "Aktiv erfasst",
+    "untracked": "Nicht zugeordnet (Verdacht)",
+    "owners": "PTY-Besitzer",
+    "activeLaunches": "Erfasste Starts",
+    "none": "Keine",
+    "unsupported": "PTY-Überwachung ist nur unter macOS verfügbar",
+    "unavailable": "Überwachung nicht verfügbar",
+    "readOnly": "Nur-Lese-Überwachung; keine Prozesse werden beendet."
   }
 }

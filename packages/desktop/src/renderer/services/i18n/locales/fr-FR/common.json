@@ -212,5 +212,17 @@
   },
   "selectedCount": "{{count}} sélectionné(s)",
   "selectedSkills": "Compétences sélectionnées",
-  "aiAssistant": "Assistant IA"
+  "aiAssistant": "Assistant IA",
+  "ptyMonitor": {
+    "title": "Moniteur PTY",
+    "systemTotal": "Total système",
+    "tracked": "Actifs suivis",
+    "untracked": "Non suivis suspects",
+    "owners": "Processus détenteurs de PTY",
+    "activeLaunches": "Lancements suivis",
+    "none": "Aucun",
+    "unsupported": "La surveillance PTY est disponible uniquement sur macOS",
+    "unavailable": "Surveillance indisponible",
+    "readOnly": "Surveillance en lecture seule ; aucun processus n’est arrêté."
+  }
 }
