@@ -15,6 +15,7 @@ import type {
   ClaudeSubscriptionUsage,
   CodexSubscriptionUsage,
   SubscriptionUsageSnapshot,
+  PtyLaunchContext,
 } from '@/common/types/platform/subscriptionUsage';
 import { getClaudeUsage } from './claude';
 import { getClaudeAccounts } from './claude/claudeAccounts';
@@ -46,7 +47,7 @@ export type SubscriptionUsageConversation = {
 
 type SubscriptionUsagePublisherOptions = {
   clearSnapshot?: (expectedContent: string | undefined) => void;
-  getClaudeUsage?: (cwd: string, accountId?: string) => Promise<ClaudeUsageSnapshot | null>;
+  getClaudeUsage?: (cwd: string, accountId?: string, context?: PtyLaunchContext) => Promise<ClaudeUsageSnapshot | null>;
   getClaudeAccounts?: () => Promise<ClaudeAccount[]>;
   getCodexUsage?: () => Promise<CodexUsageSnapshot | null>;
   initialRefreshDelayMs?: number;
@@ -97,7 +98,11 @@ const updatedAtValue = (value: string | null): number => {
 
 export class SubscriptionUsagePublisher {
   readonly #clearSnapshot: (expectedContent: string | undefined) => void;
-  readonly #getClaudeUsage: (cwd: string, accountId?: string) => Promise<ClaudeUsageSnapshot | null>;
+  readonly #getClaudeUsage: (
+    cwd: string,
+    accountId?: string,
+    context?: PtyLaunchContext
+  ) => Promise<ClaudeUsageSnapshot | null>;
   readonly #getClaudeAccounts: () => Promise<ClaudeAccount[]>;
   readonly #getCodexUsage: () => Promise<CodexUsageSnapshot | null>;
   readonly #initialRefreshDelayMs: number;
@@ -165,13 +170,17 @@ export class SubscriptionUsagePublisher {
     this.#activeConversationId = conversationId;
   }
 
-  async readClaudeUsage(cwd: string, accountId?: string): Promise<ClaudeUsageSnapshot | null> {
+  async readClaudeUsage(
+    cwd: string,
+    accountId?: string,
+    context?: PtyLaunchContext
+  ): Promise<ClaudeUsageSnapshot | null> {
     if (accountId && accountId !== DEFAULT_CLAUDE_ACCOUNT_ID) {
-      return this.#readClaudeAccountUsage(cwd, accountId);
+      return this.#readClaudeAccountUsage(cwd, accountId, context);
     }
     let usage: ClaudeUsageSnapshot | null;
     try {
-      usage = await this.#getClaudeUsage(cwd);
+      usage = context ? await this.#getClaudeUsage(cwd, undefined, context) : await this.#getClaudeUsage(cwd);
     } catch {
       this.#logWarn('[SubscriptionUsagePublisher] Claude usage refresh failed');
       usage = null;
@@ -185,10 +194,16 @@ export class SubscriptionUsagePublisher {
     return usage;
   }
 
-  async #readClaudeAccountUsage(cwd: string, accountId: string): Promise<ClaudeUsageSnapshot | null> {
+  async #readClaudeAccountUsage(
+    cwd: string,
+    accountId: string,
+    context?: PtyLaunchContext
+  ): Promise<ClaudeUsageSnapshot | null> {
     let usage: ClaudeUsageSnapshot | null;
     try {
-      usage = await this.#getClaudeUsage(cwd, accountId);
+      usage = context
+        ? await this.#getClaudeUsage(cwd, accountId, context)
+        : await this.#getClaudeUsage(cwd, accountId);
     } catch {
       this.#logWarn('[SubscriptionUsagePublisher] Claude account usage refresh failed');
       usage = null;

@@ -7,6 +7,7 @@
 /** Claude subscription-usage probe entry point. */
 import { DEFAULT_CLAUDE_ACCOUNT_ID } from '@/common/types/platform/claudeAccount';
 import type { ClaudeUsageSnapshot } from '@/common/types/platform/claudeUsage';
+import type { PtyLaunchContext } from '@/common/types/platform/subscriptionUsage';
 import { statSync } from 'node:fs';
 import { getClaudeAccounts } from './claudeAccounts';
 import { ClaudeUsageProbe } from './usageProbe';
@@ -48,17 +49,22 @@ const isDirectory = (path: string): boolean => {
 /**
  * Usage for the default account, or for the non-default account `accountId`
  * (probed with its own `CLAUDE_CONFIG_DIR`). An unknown account yields `null`
- * rather than the default account's usage.
+ * rather than the default account's usage. `context` only labels the probe's
+ * PTY launch for the PTY monitor.
  */
-export const getClaudeUsage = async (cwd: string, accountId?: string): Promise<ClaudeUsageSnapshot | null> => {
+export const getClaudeUsage = async (
+  cwd: string,
+  accountId?: string,
+  context?: PtyLaunchContext
+): Promise<ClaudeUsageSnapshot | null> => {
   const workspace = cwd.trim();
   if (!workspace || !isDirectory(workspace)) return null;
   if (!accountId || accountId === DEFAULT_CLAUDE_ACCOUNT_ID) {
-    return getProbe(DEFAULT_CLAUDE_ACCOUNT_ID).getUsage(workspace);
+    return getProbe(DEFAULT_CLAUDE_ACCOUNT_ID).getUsage(workspace, context);
   }
 
   const account = (await getClaudeAccounts()).find((candidate) => candidate.id === accountId);
   if (!account?.config_dir) return null;
-  const usage = await getProbe(accountId, accountProbeEnv(account.config_dir)).getUsage(workspace);
+  const usage = await getProbe(accountId, accountProbeEnv(account.config_dir)).getUsage(workspace, context);
   return usage ? { ...usage, accountId } : null;
 };

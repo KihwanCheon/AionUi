@@ -213,5 +213,17 @@
     "ok": "Sınır içinde",
     "approaching": "Sınıra yaklaşıyor",
     "noData": "Henüz kullanım verisi yok"
+  },
+  "ptyMonitor": {
+    "title": "PTY İzleyici",
+    "systemTotal": "Sistem toplamı",
+    "tracked": "İzlenen etkin",
+    "untracked": "İzlenmeyen şüpheli",
+    "owners": "PTY sahibi işlemler",
+    "activeLaunches": "İzlenen başlatmalar",
+    "none": "Yok",
+    "unsupported": "PTY izleme yalnızca macOS'ta kullanılabilir",
+    "unavailable": "İzleme kullanılamıyor",
+    "readOnly": "Salt okunur izleme; hiçbir işlem sonlandırılmaz."
   }
 }

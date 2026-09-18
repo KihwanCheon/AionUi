@@ -6,6 +6,7 @@
 
 import type { ClaudeUsageRequest, ClaudeUsageSnapshot } from '@/common/types/platform/claudeUsage';
 import type { CodexUsageRequest, CodexUsageSnapshot } from '@/common/types/platform/codexUsage';
+import type { PtyMonitorSnapshot } from '@/common/types/platform/subscriptionUsage';
 import { bridge } from './bridge';
 
 export const subscriptionUsageBridge = {
@@ -13,4 +14,6 @@ export const subscriptionUsageBridge = {
   getCodex: bridge.buildProvider<CodexUsageSnapshot | null, CodexUsageRequest>('system-settings:get-codex-usage'),
   claudeChanged: bridge.buildEmitter<ClaudeUsageSnapshot>('system-settings:claude-usage-changed'),
   codexChanged: bridge.buildEmitter<CodexUsageSnapshot>('system-settings:codex-usage-changed'),
+  getPtyMonitor: bridge.buildProvider<PtyMonitorSnapshot, void>('system-settings:get-pty-monitor'),
+  ptyMonitorChanged: bridge.buildEmitter<PtyMonitorSnapshot>('system-settings:pty-monitor-changed'),
 };

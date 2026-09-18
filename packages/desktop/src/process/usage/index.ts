@@ -7,15 +7,20 @@
 import { ipcBridge } from '@/common';
 import { subscriptionUsageBridge } from '@/common/platform/subscriptionUsageBridge';
 import { getSubscriptionUsagePublisher } from './subscriptionUsagePublisher';
+import { getPtyMonitorService } from './ptyMonitor';
 
 export const initUsageProviders = (): void => {
   const publisher = getSubscriptionUsagePublisher();
+  const ptyMonitor = getPtyMonitorService();
   subscriptionUsageBridge.getClaude.provider(async ({ conversationId }) => {
     const conversation = await ipcBridge.conversation.get.invoke({ id: conversationId });
     if (conversation?.type !== 'acp') return null;
     publisher.noteActiveAcpConversation(conversation.id);
     const { claude_account_id: accountId } = conversation.extra as { claude_account_id?: string };
-    return publisher.readClaudeUsage(conversation.extra.workspace ?? '', accountId);
+    return publisher.readClaudeUsage(conversation.extra.workspace ?? '', accountId, {
+      conversationId: conversation.id,
+      conversationName: conversation.name,
+    });
   });
   subscriptionUsageBridge.getCodex.provider(async ({ conversationId }) => {
     if (conversationId) {
@@ -25,5 +30,7 @@ export const initUsageProviders = (): void => {
     }
     return publisher.readCodexUsage();
   });
+  subscriptionUsageBridge.getPtyMonitor.provider(() => ptyMonitor.refresh());
   publisher.start();
+  ptyMonitor.start();
 };
