@@ -30,6 +30,27 @@ const USAGE_DIALOG_DISMISSED = /settings dialog dismissed/i;
 
 export type SpawnPty = typeof spawn;
 
+type DestroyablePty = IPty & {
+  destroy?: () => void;
+};
+
+/** Close the PTY transport as well as its child process on Unix-like hosts. */
+export const releasePty = (terminal: IPty, platform: NodeJS.Platform = process.platform): void => {
+  if (platform !== 'win32') {
+    const destroyable = terminal as DestroyablePty;
+    const destroy = destroyable.destroy;
+    if (typeof destroy === 'function') {
+      try {
+        destroy.call(terminal);
+        return;
+      } catch {
+        // Fall through so the child is still terminated by alternate implementations.
+      }
+    }
+  }
+  terminal.kill();
+};
+
 export type ClaudeUsageProbeOptions = {
   command?: string;
   commandDelayMs?: number;
@@ -213,10 +234,10 @@ export class ClaudeUsageProbe {
         dataSubscription?.dispose();
         exitSubscription?.dispose();
         try {
-          // node-pty's Windows exit event closes its streams but does not
-          // release the ConPTY agent. Always kill the terminal so conhost.exe
-          // cannot accumulate after otherwise clean Claude exits.
-          terminal.kill();
+          // Unix node-pty kill() only signals the child and leaves the PTY
+          // master open. releasePty() closes that transport while preserving
+          // the existing Windows ConPTY kill path.
+          releasePty(terminal);
         } catch {
           // The PTY may already have been fully released.
         }
