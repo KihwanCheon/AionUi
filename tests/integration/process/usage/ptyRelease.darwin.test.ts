@@ -37,6 +37,19 @@ const waitForPtyFd = async (fd: number, expectedPresent: boolean): Promise<void>
   expect(processPtyMasterFds().has(fd)).toBe(expectedPresent);
 };
 
+const waitForPtyMasterFds = async (expected: Set<number>): Promise<void> => {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const actual = processPtyMasterFds();
+    if (actual.size === expected.size && [...actual].every((fd) => expected.has(fd))) return;
+    // eslint-disable-next-line no-await-in-loop -- Polling must observe the complete descriptor set over time.
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  expect([...processPtyMasterFds()].toSorted((left, right) => left - right)).toEqual(
+    [...expected].toSorted((left, right) => left - right)
+  );
+};
+
 const waitForProcessExit = async (pid: number): Promise<void> => {
   const deadline = Date.now() + 2_000;
   while (Date.now() < deadline) {
@@ -62,17 +75,19 @@ const spawnSleepingPty = () =>
   });
 
 describe.runIf(process.platform === 'darwin')('releasePty macOS integration', () => {
-  it('closes the real /dev/ptmx master descriptor', async () => {
+  it('restores the complete /dev/ptmx descriptor set', async () => {
+    const baseline = processPtyMasterFds();
     const terminal = spawnSleepingPty();
     const fd = (terminal as typeof terminal & { fd: number }).fd;
 
     await waitForPtyFd(fd, true);
     releasePty(terminal, 'darwin');
-    await waitForPtyFd(fd, false);
+    await waitForPtyMasterFds(baseline);
     await waitForProcessExit(terminal.pid);
   });
 
   it('does not accumulate master descriptors across 200 releases', async () => {
+    const baseline = processPtyMasterFds();
     for (let index = 0; index < 200; index += 1) {
       const terminal = spawnSleepingPty();
       const fd = (terminal as typeof terminal & { fd: number }).fd;
@@ -80,7 +95,7 @@ describe.runIf(process.platform === 'darwin')('releasePty macOS integration', ()
       await waitForPtyFd(fd, true);
       releasePty(terminal, 'darwin');
       // eslint-disable-next-line no-await-in-loop -- Each cycle must prove release before starting the next one.
-      await waitForPtyFd(fd, false);
+      await waitForPtyMasterFds(baseline);
       // eslint-disable-next-line no-await-in-loop -- Each cycle must reap its child before continuing.
       await waitForProcessExit(terminal.pid);
     }
