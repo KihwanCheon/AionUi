@@ -32,7 +32,11 @@ vi.mock('electron-log/main', () => ({
   },
 }));
 
-import { buildDatedLogFileName, cleanupExpiredDatedLogDirectories, resolveConsoleLogLevel } from '@/process/utils/configureConsoleLog';
+import {
+  buildDatedLogFileName,
+  cleanupExpiredDatedLogDirectories,
+  resolveConsoleLogLevel,
+} from '@/process/utils/configureConsoleLog';
 
 describe('configureConsoleLog', () => {
   it('uses year/month/day directories for frontend log files', () => {
