@@ -48,11 +48,10 @@ const PtyMonitorIndicator: React.FC = () => {
     };
   }, []);
 
+  if (!snapshot || snapshot.state === 'unsupported') return null;
+
   const title = t('common.ptyMonitor.title', { defaultValue: 'PTY Monitor' });
-  const stateMessage =
-    snapshot?.state === 'unsupported'
-      ? t('common.ptyMonitor.unsupported', { defaultValue: 'PTY monitoring is available on macOS only' })
-      : t('common.ptyMonitor.unavailable', { defaultValue: 'Monitoring unavailable' });
+  const stateMessage = t('common.ptyMonitor.unavailable', { defaultValue: 'Monitoring unavailable' });
   const summary =
     snapshot?.state === 'ready' && snapshot.totalCount !== null
       ? `${snapshot.totalCount}/${snapshot.limit ?? '?'}`

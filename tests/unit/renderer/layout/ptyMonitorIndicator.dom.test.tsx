@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PtyMonitorSnapshot } from '@/common/types/platform/subscriptionUsage';
 
@@ -119,5 +119,24 @@ describe('PtyMonitorIndicator', () => {
 
     expect(await screen.findByText('Monitoring unavailable')).toBeInTheDocument();
     expect(screen.queryByText('11')).not.toBeInTheDocument();
+  });
+
+  it('does not render the monitor on unsupported platforms', async () => {
+    fixtures.invoke.mockResolvedValue({
+      ...readySnapshot,
+      state: 'unsupported',
+      limit: null,
+      totalCount: null,
+      aionUiCount: null,
+      trackedActiveCount: 0,
+      suspectedUntrackedCount: null,
+      owners: [],
+      activeLaunches: [],
+    } satisfies PtyMonitorSnapshot);
+
+    render(<PtyMonitorIndicator />);
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'PTY Monitor' })).not.toBeInTheDocument());
+    expect(screen.queryByText('PTY monitoring is available on macOS only')).not.toBeInTheDocument();
   });
 });
