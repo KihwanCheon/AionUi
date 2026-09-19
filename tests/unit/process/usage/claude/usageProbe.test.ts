@@ -6,10 +6,16 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { IPty } from 'node-pty';
-import { ClaudeUsageProbe, resolveExecutableFromPath, type SpawnPty } from '@process/usage/claude/usageProbe';
+import {
+  ClaudeUsageProbe,
+  releasePty,
+  resolveExecutableFromPath,
+  type SpawnPty,
+} from '@process/usage/claude/usageProbe';
 
 class FakePty {
   readonly pid = 4321;
+  readonly destroy = vi.fn();
   readonly kill = vi.fn();
   readonly write = vi.fn();
   #dataListener: ((data: string) => void) | undefined;
@@ -78,7 +84,8 @@ describe('ClaudeUsageProbe', () => {
       terminal.emitData('Settings dialog dismissed');
       await vi.advanceTimersByTimeAsync(50);
       expect(terminal.write).not.toHaveBeenCalledWith('/exit\r');
-      expect(terminal.kill).toHaveBeenCalledTimes(1);
+      expect(terminal.destroy).toHaveBeenCalledTimes(1);
+      expect(terminal.kill).not.toHaveBeenCalled();
 
       await expect(first).resolves.toMatchObject({
         session: { utilization: 25 },
@@ -92,7 +99,8 @@ describe('ClaudeUsageProbe', () => {
         session: { utilization: 25 },
       });
       expect(spawnPty).toHaveBeenCalledTimes(1);
-      expect(terminal.kill).toHaveBeenCalledTimes(1);
+      expect(terminal.destroy).toHaveBeenCalledTimes(1);
+      expect(terminal.kill).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -143,6 +151,26 @@ describe('ClaudeUsageProbe', () => {
     warn.mockRestore();
   });
 
+  it('returns null without attempting PTY cleanup when spawn fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const spawnPty = vi.fn(() => {
+      throw new Error('forkpty failed');
+    });
+    const probe = new ClaudeUsageProbe({
+      command: process.execPath,
+      spawnPty: spawnPty as unknown as SpawnPty,
+    });
+
+    await expect(probe.getUsage(process.cwd())).resolves.toBeNull();
+
+    expect(spawnPty).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      '[ClaudeUsageProbe] Unable to refresh Claude plan usage',
+      expect.objectContaining({ reason: 'forkpty failed' })
+    );
+    warn.mockRestore();
+  });
+
   it('returns partial usage when Claude exits after rendering one bucket', async () => {
     const terminal = new FakePty();
     const spawnPty = vi.fn(() => terminal as unknown as IPty) as unknown as SpawnPty;
@@ -158,7 +186,8 @@ describe('ClaudeUsageProbe', () => {
     await expect(result).resolves.toMatchObject({
       session: { utilization: 18 },
     });
-    expect(terminal.kill).toHaveBeenCalledTimes(1);
+    expect(terminal.destroy).toHaveBeenCalledTimes(1);
+    expect(terminal.kill).not.toHaveBeenCalled();
   });
 
   it('maps each spawned PTY to its conversation and removes it when the process exits', async () => {
@@ -206,7 +235,8 @@ describe('ClaudeUsageProbe', () => {
     await expect(result).resolves.toBeNull();
     expect(terminal.write).toHaveBeenCalledTimes(1);
     expect(terminal.write).toHaveBeenCalledWith('y\r');
-    expect(terminal.kill).toHaveBeenCalledTimes(1);
+    expect(terminal.destroy).toHaveBeenCalledTimes(1);
+    expect(terminal.kill).not.toHaveBeenCalled();
   });
 
   it('waits for Claude input to become interactive after rendering its screen', async () => {
@@ -234,7 +264,8 @@ describe('ClaudeUsageProbe', () => {
         session: { utilization: 25 },
         weekly: { utilization: 24 },
       });
-      expect(terminal.kill).toHaveBeenCalledTimes(1);
+      expect(terminal.destroy).toHaveBeenCalledTimes(1);
+      expect(terminal.kill).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -257,7 +288,8 @@ describe('ClaudeUsageProbe', () => {
       await vi.advanceTimersByTimeAsync(100);
 
       expect(terminal.write).not.toHaveBeenCalled();
-      expect(terminal.kill).toHaveBeenCalledTimes(1);
+      expect(terminal.destroy).toHaveBeenCalledTimes(1);
+      expect(terminal.kill).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -276,11 +308,13 @@ describe('ClaudeUsageProbe', () => {
 
       const result = probe.getUsage(process.cwd());
       await vi.advanceTimersByTimeAsync(119_999);
+      expect(terminal.destroy).not.toHaveBeenCalled();
       expect(terminal.kill).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1);
       await expect(result).resolves.toBeNull();
-      expect(terminal.kill).toHaveBeenCalledTimes(1);
+      expect(terminal.destroy).toHaveBeenCalledTimes(1);
+      expect(terminal.kill).not.toHaveBeenCalled();
     } finally {
       warn.mockRestore();
       vi.useRealTimers();
@@ -308,7 +342,8 @@ describe('ClaudeUsageProbe', () => {
       await vi.advanceTimersByTimeAsync(100);
       await expect(first).resolves.toBeNull();
       expect(spawnPty).toHaveBeenCalledTimes(1);
-      expect(firstTerminal.kill).toHaveBeenCalledTimes(1);
+      expect(firstTerminal.destroy).toHaveBeenCalledTimes(1);
+      expect(firstTerminal.kill).not.toHaveBeenCalled();
 
       now += 119_999;
       await expect(probe.getUsage(process.cwd())).resolves.toBeNull();
@@ -319,11 +354,52 @@ describe('ClaudeUsageProbe', () => {
       expect(spawnPty).toHaveBeenCalledTimes(2);
       await vi.advanceTimersByTimeAsync(100);
       await expect(retried).resolves.toBeNull();
-      expect(secondTerminal.kill).toHaveBeenCalledTimes(1);
+      expect(secondTerminal.destroy).toHaveBeenCalledTimes(1);
+      expect(secondTerminal.kill).not.toHaveBeenCalled();
     } finally {
       warn.mockRestore();
       vi.useRealTimers();
     }
+  });
+});
+
+describe('releasePty', () => {
+  it('destroys Unix PTYs so the master file descriptor is closed', () => {
+    const terminal = new FakePty();
+
+    releasePty(terminal as unknown as IPty, 'darwin');
+
+    expect(terminal.destroy).toHaveBeenCalledTimes(1);
+    expect(terminal.kill).not.toHaveBeenCalled();
+  });
+
+  it('preserves the existing Windows kill path', () => {
+    const terminal = new FakePty();
+
+    releasePty(terminal as unknown as IPty, 'win32');
+
+    expect(terminal.destroy).not.toHaveBeenCalled();
+    expect(terminal.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to kill when an alternate Unix PTY implementation has no destroy method', () => {
+    const terminal = { kill: vi.fn() } as unknown as IPty;
+
+    releasePty(terminal, 'linux');
+
+    expect(terminal.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to kill when destroying a Unix PTY throws', () => {
+    const terminal = new FakePty();
+    terminal.destroy.mockImplementationOnce(() => {
+      throw new Error('destroy failed');
+    });
+
+    releasePty(terminal as unknown as IPty, 'darwin');
+
+    expect(terminal.destroy).toHaveBeenCalledTimes(1);
+    expect(terminal.kill).toHaveBeenCalledTimes(1);
   });
 });
 
