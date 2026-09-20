@@ -462,6 +462,17 @@ describe('selected message Markdown copy shortcut', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it('copies a small blockquote selection immediately after mouseup', async () => {
+    clipboardMocks.copyText.mockImplementationOnce(() => new Promise<void>(() => undefined));
+    render(<SelectionReplyButton messages={[{ id: 'message-1', position: 'left' } as TMessage]} />);
+    selectMessageHtml('<blockquote><p>Short quote</p></blockquote>', 'blockquote');
+
+    const event = dispatchShortcut(window, { key: 'm', ctrlKey: true, altKey: true });
+
+    await waitFor(() => expect(clipboardMocks.copyText).toHaveBeenCalledWith('> Short quote'));
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it('leaves the former Ctrl+Shift+M shortcut untouched after remapping', async () => {
     render(<SelectionReplyButton messages={[{ id: 'message-1', position: 'left' } as TMessage]} />);
     selectMessageHtml('<p>Selected text</p>');

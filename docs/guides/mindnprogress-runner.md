@@ -28,6 +28,7 @@ To restore the Runner automatically after a reboot, enable **Settings → System
 - Credentials are encrypted with Electron `safeStorage`. Pairing is unavailable when the operating-system credential store is not secure.
 - The token is not placed in renderer state, application routes, logs, or process arguments.
 - The sidecar independently allows only the AionCore API routes and methods required by MindNProgress.
+- For sub-machine WebUI launches, the sidecar opens an ephemeral `127.0.0.1`-only callback relay. It accepts only the tokenized AionUi conversation-completion route and forwards it through the authenticated outbound MindNProgress connection; no LAN listener or firewall rule is added.
 - Unexpected non-authentication exits restart automatically. Authentication rejection remains visible as an error instead of causing a restart loop.
 - During AionUi shutdown, the sidecar stops claiming work and gets a short window to finish reporting claimed results before AionCore stops.
 - An unconfigured AionUi does not launch the Runner process. Browser-only WebUI sessions do not expose the Runner settings page.

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createServer } from 'node:http';
+
 export type RunnerEnvironment = {
   MNP_RUNNER_API_URL?: string;
   MNP_RUNNER_MACHINE_ID?: string;
@@ -64,6 +66,8 @@ const RUNNER_LOCAL_ORIGIN = 'http://mindnprogress-runner.local';
 const RUNNER_OPERATION_ID_PATTERN = /^[A-Za-z0-9_-]{12,100}$/;
 const RUNNER_RESULT_TOKEN_PATTERN = /^mnop_[A-Za-z0-9_-]{40,100}$/;
 const AIONUI_ENTITY_ID_PATTERN = '[A-Za-z0-9_-]{1,160}';
+const COMPLETION_CALLBACK_PATH_PATTERN = /^\/api\/integrations\/aionui\/launches\/[A-Za-z0-9_-]{32,128}\/conversation$/;
+const COMPLETION_CALLBACK_BODY_LIMIT = 16 * 1024;
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -100,6 +104,96 @@ function boundedNumber(value: unknown, fallback: number, min: number, max: numbe
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sendJson(response: import('node:http').ServerResponse, status: number, body: unknown): void {
+  const content = JSON.stringify(body);
+  response.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(content),
+    'Cache-Control': 'no-store',
+  });
+  response.end(content);
+}
+
+async function readCallbackBody(request: import('node:http').IncomingMessage): Promise<Record<string, unknown>> {
+  let size = 0;
+  const chunks: Buffer[] = [];
+  for await (const source of request) {
+    const chunk = Buffer.isBuffer(source) ? source : Buffer.from(source);
+    size += chunk.length;
+    if (size > COMPLETION_CALLBACK_BODY_LIMIT) throw new RunnerRequestError('Callback body is too large.', 413);
+    chunks.push(chunk);
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch {
+    throw new RunnerRequestError('Callback body is invalid.', 400);
+  }
+  if (!isRecord(body)) throw new RunnerRequestError('Callback body is invalid.', 400);
+  return body;
+}
+
+export type CompletionRelay = {
+  baseUrl: string;
+  close: () => Promise<void>;
+};
+
+// AionCore intentionally accepts external-launch completion callbacks only on loopback.
+// The sidecar receives that local callback and forwards it through its authenticated,
+// outbound-only connection to MindNProgress. No LAN-facing listener is opened.
+export async function startCompletionRelay(
+  forward: (pathname: string, body: Record<string, unknown>) => Promise<unknown>
+): Promise<CompletionRelay> {
+  const server = createServer((request, response) => {
+    void (async () => {
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      if (request.method !== 'POST' || url.search || !COMPLETION_CALLBACK_PATH_PATTERN.test(url.pathname)) {
+        sendJson(response, 404, { error: 'Unsupported completion callback.' });
+        return;
+      }
+      const body = await readCallbackBody(request);
+      await forward(url.pathname, body);
+      sendJson(response, 200, { delivered: true });
+    })().catch((error: unknown) => {
+      if (response.headersSent) {
+        response.end();
+        return;
+      }
+      const status =
+        error instanceof RunnerRequestError && error.status !== null && error.status < 500 ? error.status : 502;
+      sendJson(response, status, { error: 'Failed to forward completion callback.' });
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error): void => {
+      server.off('listening', onListening);
+      reject(error);
+    };
+    const onListening = (): void => {
+      server.off('error', onError);
+      resolve();
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(0, '127.0.0.1');
+  });
+
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    server.close();
+    throw new Error('Failed to resolve the completion relay address.');
+  }
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      }),
+  };
 }
 
 function isAllowedLocalRequest(method: string, url: URL): boolean {

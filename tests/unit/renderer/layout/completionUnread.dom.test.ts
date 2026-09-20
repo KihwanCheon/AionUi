@@ -2,6 +2,7 @@ import type { TChatConversation } from '@/common/config/storage';
 import {
   countVisibleCompletionUnread,
   isConversationWindowFocused,
+  resolveProjectGroupIndicatorStatus,
 } from '@/renderer/pages/conversation/GroupedHistory/utils/completionUnread';
 import ProjectGroupHeader from '@/renderer/pages/conversation/GroupedHistory/components/ProjectGroupHeader';
 import WorkspaceCollapse from '@/renderer/pages/conversation/components/WorkspaceCollapse';
@@ -39,7 +40,7 @@ describe('project completion unread state', () => {
         header: React.createElement(ProjectGroupHeader, {
           workspace: 'C:\\Git\\AionUi\\AionUi',
           displayName: 'AionUi',
-          showCompletionUnread: true,
+          indicatorStatus: 'completion-unread',
         }),
         children: null,
       })
@@ -60,5 +61,61 @@ describe('project completion unread state', () => {
     );
 
     expect(screen.queryByTestId('project-completion-unread')).not.toBeInTheDocument();
+  });
+
+  it('shows the conversation spinner in the project status slot while a collapsed child is generating', () => {
+    render(
+      React.createElement(WorkspaceCollapse, {
+        expanded: false,
+        onToggle: vi.fn(),
+        header: React.createElement(ProjectGroupHeader, {
+          workspace: 'C:\\Git\\AionUi\\AionUi',
+          displayName: 'AionUi',
+          indicatorStatus: 'generating',
+        }),
+        children: null,
+      })
+    );
+
+    const marker = screen.getByTestId('project-generating');
+    expect(marker).toHaveClass('absolute', 'right-8px', 'group-hover:hidden');
+    expect(screen.queryByTestId('project-completion-unread')).not.toBeInTheDocument();
+  });
+});
+
+describe('project aggregate indicator priority', () => {
+  const groupedConversations = [conversation('generating'), conversation('unread')];
+
+  it('prioritizes a generating child over an unread completion in a collapsed project', () => {
+    const status = resolveProjectGroupIndicatorStatus(
+      false,
+      groupedConversations,
+      (id) => id === 'generating',
+      (id) => id === 'unread'
+    );
+
+    expect(status).toBe('generating');
+  });
+
+  it('shows the unread completion after no child is generating', () => {
+    const status = resolveProjectGroupIndicatorStatus(
+      false,
+      groupedConversations,
+      () => false,
+      (id) => id === 'unread'
+    );
+
+    expect(status).toBe('completion-unread');
+  });
+
+  it('does not aggregate child state while the project is expanded', () => {
+    const status = resolveProjectGroupIndicatorStatus(
+      true,
+      groupedConversations,
+      () => true,
+      () => true
+    );
+
+    expect(status).toBe('none');
   });
 });

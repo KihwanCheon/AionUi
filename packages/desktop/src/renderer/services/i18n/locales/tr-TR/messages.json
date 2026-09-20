@@ -7,6 +7,10 @@
   "confirm": "Onayla",
   "canceledExecution": "Yürütme iptal edildi",
   "openLinkFailed": "Bağlantı açılamadı",
+  "mindnprogress": {
+    "openLinkedCard": "Bağlı MindNProgress kartını aç",
+    "selectionFailed": "Bağlı MindNProgress kartı seçilemedi."
+  },
   "imageGenerationModelDetected": "Görüntü modeli algılandı, görüntü aracı otomatik olarak etkinleştirildi. Varsayılan model: {{platform}}:{{model}}",
   "auto_handling_permissions": "Otomatik izin isteği işleme: {{request}}",
   "copy": "Kopyala",

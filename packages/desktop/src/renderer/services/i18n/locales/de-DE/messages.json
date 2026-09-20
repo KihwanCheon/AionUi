@@ -7,6 +7,10 @@
   "confirm": "Bestätigen",
   "canceledExecution": "Ausführung abgebrochen",
   "openLinkFailed": "Link konnte nicht geöffnet werden",
+  "mindnprogress": {
+    "openLinkedCard": "Verknüpfte MindNProgress-Karte öffnen",
+    "selectionFailed": "Die verknüpfte MindNProgress-Karte konnte nicht ausgewählt werden."
+  },
   "imageGenerationModelDetected": "Bildmodell erkannt, Bildtool wurde automatisch aktiviert. Standardmodell: {{platform}}:{{model}}",
   "auto_handling_permissions": "Berechtigungsanfrage wird automatisch bearbeitet: {{request}}",
   "copy": "Kopieren",

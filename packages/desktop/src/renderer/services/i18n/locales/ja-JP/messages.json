@@ -7,6 +7,10 @@
   "confirm": "確認",
   "canceledExecution": "実行がキャンセルされました",
   "openLinkFailed": "リンクを開けませんでした",
+  "mindnprogress": {
+    "openLinkedCard": "リンクされたMindNProgressカードを開く",
+    "selectionFailed": "リンクされたMindNProgressカードを選択できませんでした。"
+  },
   "imageGenerationModelDetected": "画像モデルが検出されました。画像ツールが自動的に有効になりました。デフォルトモデル：{{platform}}:{{model}}",
   "auto_handling_permissions": "自動ハンドリング許可要求：{{request}}",
   "copy": "コピー",

@@ -5,20 +5,23 @@
  */
 
 import { getParentAndCurrentDir } from '@/renderer/utils/workspace/projectPathLabel';
+import { Spin } from '@arco-design/web-react';
 import React from 'react';
+
+import type { ProjectGroupIndicatorStatus } from '../utils/completionUnread';
 
 type ProjectGroupHeaderProps = {
   workspace: string;
   displayName: string;
   branch?: string | null;
-  showCompletionUnread?: boolean;
+  indicatorStatus?: ProjectGroupIndicatorStatus;
 };
 
 const ProjectGroupHeader: React.FC<ProjectGroupHeaderProps> = ({
   workspace,
   displayName,
   branch,
-  showCompletionUnread = false,
+  indicatorStatus = 'none',
 }) => (
   <span className='flex items-center flex-1 min-w-0 gap-8px'>
     <span className='flex flex-col flex-1 min-w-0 leading-tight'>
@@ -27,7 +30,16 @@ const ProjectGroupHeader: React.FC<ProjectGroupHeaderProps> = ({
       </span>
       {branch && <span className='text-11px font-[400] truncate text-t-secondary'>({branch})</span>}
     </span>
-    {showCompletionUnread && (
+    {indicatorStatus === 'generating' && (
+      <span
+        data-testid='project-generating'
+        aria-hidden='true'
+        className='absolute right-8px size-16px flex items-center justify-center shrink-0 group-hover:hidden'
+      >
+        <Spin size={16} />
+      </span>
+    )}
+    {indicatorStatus === 'completion-unread' && (
       <span
         data-testid='project-completion-unread'
         aria-hidden='true'

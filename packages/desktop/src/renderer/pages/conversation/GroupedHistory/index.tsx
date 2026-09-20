@@ -27,6 +27,7 @@ import { useConversationActions } from './hooks/useConversationActions';
 import { useConversations } from './hooks/useConversations';
 import { useProjectGitBranches } from './hooks/useProjectGitBranches';
 import type { ConversationRowProps, WorkspaceGroupedHistoryProps } from './types';
+import { resolveProjectGroupIndicatorStatus } from './utils/completionUnread';
 import { buildGroupedHistory } from './utils/groupingHelpers';
 
 const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
@@ -436,6 +437,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
             onToggleSection={toggleSection}
             projectGitBranches={projectGitBranches}
             hasCompletionUnread={hasCompletionUnread}
+            isConversationGenerating={isConversationGenerating}
             getConversationRowProps={getConversationRowProps}
           />
         )}
@@ -479,10 +481,12 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                           workspace={group.workspace}
                           displayName={group.displayName}
                           branch={projectGitBranches[group.workspace]}
-                          showCompletionUnread={
-                            !isProjectExpanded &&
-                            group.conversations.some((conversation) => hasCompletionUnread(conversation.id))
-                          }
+                          indicatorStatus={resolveProjectGroupIndicatorStatus(
+                            isProjectExpanded,
+                            group.conversations,
+                            isConversationGenerating,
+                            hasCompletionUnread
+                          )}
                         />
                       }
                       trailing={

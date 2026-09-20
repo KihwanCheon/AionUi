@@ -7,6 +7,10 @@
   "confirm": "Confirmar",
   "canceledExecution": "Ejecución cancelada",
   "openLinkFailed": "Error al abrir el enlace",
+  "mindnprogress": {
+    "openLinkedCard": "Abrir tarjeta vinculada de MindNProgress",
+    "selectionFailed": "No se pudo seleccionar la tarjeta vinculada de MindNProgress."
+  },
   "imageGenerationModelDetected": "Modelo de imagen detectado, la herramienta de imagen se activó automáticamente. Modelo predeterminado: {{platform}}:{{model}}",
   "auto_handling_permissions": "Gestionando automáticamente solicitud de permiso: {{request}}",
   "copy": "Copiar",

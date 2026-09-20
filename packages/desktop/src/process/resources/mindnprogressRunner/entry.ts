@@ -13,8 +13,11 @@ import {
   normalizeRunnerEnvironment,
   requestJson,
   runnerUrl,
+  startCompletionRelay,
+  type CompletionRelay,
   type RunnerResult,
 } from './runtime';
+import { forwardRunnerMcpRequest, startRunnerMcpRelay, type RunnerMcpRelay } from './mcpRelay';
 
 type ParentMessage = { type?: unknown };
 type RunnerEvent =
@@ -24,6 +27,8 @@ type RunnerEvent =
 
 const parentPort = process.parentPort;
 const postEvent = (event: RunnerEvent): void => parentPort?.postMessage(event);
+let activeCompletionRelay: CompletionRelay | null = null;
+let activeMcpRelay: RunnerMcpRelay | null = null;
 
 async function run(): Promise<void> {
   let config;
@@ -63,11 +68,20 @@ async function run(): Promise<void> {
       timeoutMs
     );
 
+  const completionRelay = await startCompletionRelay((pathname, body) =>
+    mnpRequest(`${config.apiBaseUrl}${pathname}`, body, 30_000)
+  );
+  activeCompletionRelay = completionRelay;
+  const mcpRelay = await startRunnerMcpRelay({
+    forward: (relayRequest) => forwardRunnerMcpRequest(config, relayRequest),
+  });
+  activeMcpRelay = mcpRelay;
+
   let longPollMs = 25_000;
   const heartbeat = async (): Promise<void> => {
     const info = await mnpRequest<{ label?: unknown; longPollMs?: unknown }>(
       runnerUrl(config, 'heartbeat'),
-      {},
+      { callbackBaseUrl: completionRelay.baseUrl },
       10_000
     );
     if (Number.isInteger(info.longPollMs) && Number(info.longPollMs) > 0) longPollMs = Number(info.longPollMs);
@@ -85,7 +99,7 @@ async function run(): Promise<void> {
     claimOperations: async () => {
       const body = await mnpRequest<{ operations?: unknown }>(
         runnerUrl(config, 'operations/claim'),
-        { limit: config.concurrency, waitMs: longPollMs },
+        { limit: config.concurrency, waitMs: longPollMs, callbackBaseUrl: completionRelay.baseUrl },
         longPollMs + 10_000,
         {},
         claimController.signal
@@ -139,6 +153,10 @@ async function run(): Promise<void> {
     });
     if (authenticationFailed) {
       process.exitCode = 2;
+      await mcpRelay.close();
+      activeMcpRelay = null;
+      await completionRelay.close();
+      activeCompletionRelay = null;
       return;
     }
   }
@@ -161,10 +179,30 @@ async function run(): Promise<void> {
 
   await loop.start();
   if (heartbeatTimer) clearInterval(heartbeatTimer);
+  await mcpRelay.close();
+  activeMcpRelay = null;
+  await completionRelay.close();
+  activeCompletionRelay = null;
   if (!authenticationFailed) postEvent({ type: 'stopped' });
 }
 
-void run().catch((error: unknown) => {
+void run().catch(async (error: unknown) => {
+  if (activeMcpRelay) {
+    try {
+      await activeMcpRelay.close();
+    } catch {
+      // Preserve the original Runner failure reported below.
+    }
+  }
+  activeMcpRelay = null;
+  if (activeCompletionRelay) {
+    try {
+      await activeCompletionRelay.close();
+    } catch {
+      // Preserve the original Runner failure reported below.
+    }
+  }
+  activeCompletionRelay = null;
   postEvent({
     type: 'connection-error',
     message: error instanceof Error ? error.message : String(error),

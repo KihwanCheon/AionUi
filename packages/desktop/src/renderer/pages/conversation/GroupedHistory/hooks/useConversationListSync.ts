@@ -9,6 +9,7 @@ import type { TChatConversation } from '@/common/config/storage';
 import { addEventListener } from '@/renderer/utils/emitter';
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { countVisibleCompletionUnread, isConversationWindowFocused } from '../utils/completionUnread';
+import { createDoorayCompletionReadPolicy } from '../utils/doorayCompletionRead';
 
 /**
  * Whitelist of message types that indicate content generation is in progress.
@@ -339,6 +340,7 @@ const refreshConversations = () => {
     .then((result) => {
       const items = result?.items;
       if (items && Array.isArray(items)) {
+        completionReadPolicy.reconcile(items);
         const filteredData = items.filter((conv) => {
           // Legacy rows from the pre-provider-probe health check flow are hidden
           // from normal history. New health checks must not create conversations.
@@ -501,7 +503,7 @@ export const reconcileWaitingConfirmationFromRuntime = (
   }
 };
 
-const markCompletionUnread = (conversation_id: string) => {
+const commitCompletionUnread = (conversation_id: string) => {
   if (completionUnreadConversationIdsState.has(conversation_id)) {
     return;
   }
@@ -510,7 +512,7 @@ const markCompletionUnread = (conversation_id: string) => {
   emitStoreChange();
 };
 
-const clearCompletionUnreadState = (conversation_id: string) => {
+const commitCompletionRead = (conversation_id: string) => {
   if (!completionUnreadConversationIdsState.has(conversation_id)) {
     return;
   }
@@ -520,6 +522,13 @@ const clearCompletionUnreadState = (conversation_id: string) => {
   completionUnreadConversationIdsState = next;
   emitStoreChange();
 };
+
+const completionReadPolicy = createDoorayCompletionReadPolicy({
+  loadConversation: (id) => ipcBridge.conversation.get.invoke({ id }),
+  markUnread: commitCompletionUnread,
+  clearUnread: commitCompletionRead,
+});
+const { markCompletion: markCompletionUnread, clearCompletion: clearCompletionUnreadState } = completionReadPolicy;
 
 const markManualUnreadState = (conversation_id: string) => {
   if (manualUnreadConversationIdsState.has(conversation_id)) {
@@ -605,6 +614,7 @@ const initializeConversationListSyncStore = () => {
       clearGenerating(event.conversation_id, 'deleted');
       clearAllWaitingConfirmation(event.conversation_id);
       clearCompletionUnreadState(event.conversation_id);
+      completionReadPolicy.forget(event.conversation_id);
       clearManualUnreadState(event.conversation_id);
       clearCompleted(event.conversation_id);
     }

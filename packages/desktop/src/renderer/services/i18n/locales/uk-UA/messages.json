@@ -9,6 +9,10 @@
   "confirm": "Підтвердити",
   "canceledExecution": "Виконання скасовано",
   "openLinkFailed": "Не вдалося відкрити посилання",
+  "mindnprogress": {
+    "openLinkedCard": "Відкрити пов’язану картку MindNProgress",
+    "selectionFailed": "Не вдалося вибрати пов’язану картку MindNProgress."
+  },
   "imageGenerationModelDetected": "Виявлено модель зображень, інструмент зображень було автоматично ввімкнено. Модель за замовчуванням: {{platform}}:{{model}}",
   "auto_handling_permissions": "Автоматична обробка запиту на дозвіл: {{request}}",
   "copy": "Копіювати",

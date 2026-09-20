@@ -21,6 +21,6 @@ export type CodexUsageSnapshot = {
 };
 
 export type CodexUsageRequest = {
-  /** Conversation used to authorize the account-wide Codex usage lookup. */
-  conversationId: string;
+  /** Existing conversation used to validate and prioritize the account-wide lookup. */
+  conversationId?: string;
 };

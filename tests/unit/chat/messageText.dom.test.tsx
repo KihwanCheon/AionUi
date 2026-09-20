@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageText } from '@/common/chat/chatLib';
 import { ipcBridge } from '@/common';
 import { ConversationProvider } from '@/renderer/hooks/context/ConversationContext';
+import { LayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import MessageText, {
   parseTeamContextResetNotice,
 } from '@/renderer/pages/conversation/Messages/components/MessageText';
@@ -139,16 +140,51 @@ vi.mock('@/renderer/utils/ui/clipboard', () => ({
   copyText: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@arco-design/web-react', () => ({
-  Alert: () => null,
-  Message: {
-    error: vi.fn(),
-  },
-  Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-}));
+vi.mock('@arco-design/web-react', () => {
+  const Menu = Object.assign(({ children }: { children?: React.ReactNode }) => <div>{children}</div>, {
+    Item: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+      <button type='button' {...props}>
+        {children}
+      </button>
+    ),
+  });
+  return {
+    Alert: () => null,
+    Button: ({
+      children,
+      shape: _shape,
+      size: _size,
+      type: _type,
+      ...props
+    }: React.ComponentProps<'button'> & {
+      shape?: string;
+      size?: string;
+      type?: string;
+    }) => (
+      <button type='button' {...props}>
+        {children}
+      </button>
+    ),
+    Dropdown: ({ children, droplist }: { children?: React.ReactNode; droplist?: React.ReactNode }) => {
+      const [open, setOpen] = React.useState(false);
+      return (
+        <div>
+          <div onClick={() => setOpen(true)}>{children}</div>
+          {open ? droplist : null}
+        </div>
+      );
+    },
+    Menu,
+    Message: {
+      error: vi.fn(),
+    },
+    Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  };
+});
 
 vi.mock('@icon-park/react', () => ({
   Copy: () => <span data-testid='copy-icon' />,
+  MoreOne: () => <span data-testid='more-icon' />,
 }));
 
 vi.mock('react-i18next', () => ({
@@ -767,13 +803,26 @@ describe('MessageText fork entry point', () => {
 
   const renderWithCapability = (
     capability: { at_turn: boolean } | undefined,
-    props: { isLastMessage?: boolean; hasForkAnchor?: boolean } = {}
+    props: { isLastMessage?: boolean; hasForkAnchor?: boolean } = {},
+    mobileWidth?: number
   ) => {
+    if (mobileWidth !== undefined) {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: mobileWidth });
+    }
+    const message = (
+      <MessageText message={forkMessage()} isLastMessage={props.isLastMessage} hasForkAnchor={props.hasForkAnchor} />
+    );
     render(
       <ConversationProvider
         value={{ conversation_id: 'conv-fork', workspace: '/workspace/demo', type: 'acp', forkCapability: capability }}
       >
-        <MessageText message={forkMessage()} isLastMessage={props.isLastMessage} hasForkAnchor={props.hasForkAnchor} />
+        {mobileWidth === undefined ? (
+          message
+        ) : (
+          <LayoutContext.Provider value={{ isMobile: true, siderCollapsed: false, setSiderCollapsed: vi.fn() }}>
+            {message}
+          </LayoutContext.Provider>
+        )}
       </ConversationProvider>
     );
   };
@@ -782,6 +831,7 @@ describe('MessageText fork entry point', () => {
     forkMocks.fork.mockReset().mockResolvedValue({ id: 'conv-forked' });
     forkMocks.ensureRuntime.mockReset().mockResolvedValue(undefined);
     forkMocks.navigate.mockReset();
+    vi.mocked(copyText).mockClear();
   });
 
   it('hides the fork button when the agent declares no capability', () => {
@@ -807,6 +857,36 @@ describe('MessageText fork entry point', () => {
   it('shows the fork button on the last message for head-only backends', () => {
     renderWithCapability({ at_turn: false }, { isLastMessage: true });
     expect(screen.getByTestId('message-fork-button')).toBeInTheDocument();
+  });
+
+  it('keeps copy and fork actions visible on a touch tablet', () => {
+    renderWithCapability({ at_turn: true }, { isLastMessage: false, hasForkAnchor: true }, 820);
+
+    expect(screen.getByTestId('message-tablet-copy-button')).toBeInTheDocument();
+    expect(screen.getByTestId('message-fork-button')).toBeInTheDocument();
+    expect(screen.queryByTestId('message-actions-menu')).toBeNull();
+  });
+
+  it('offers fork from the phone action menu', async () => {
+    renderWithCapability({ at_turn: true }, { isLastMessage: false, hasForkAnchor: true }, 390);
+
+    expect(screen.queryByTestId('message-fork-button')).toBeNull();
+    fireEvent.click(screen.getByTestId('message-actions-menu'));
+    fireEvent.click(await screen.findByTestId('message-fork-menu-item'));
+
+    await waitFor(() => {
+      expect(forkMocks.fork).toHaveBeenCalledWith({ conversation_id: 'conv-fork', message_id: 'msg-fork-1' });
+    });
+  });
+
+  it('does not offer fork in the phone menu when the agent has no capability', async () => {
+    renderWithCapability(undefined, { isLastMessage: true }, 390);
+
+    fireEvent.click(screen.getByTestId('message-actions-menu'));
+
+    fireEvent.click(await screen.findByTestId('message-copy-menu-item'));
+    await waitFor(() => expect(copyText).toHaveBeenCalledWith('assistant reply'));
+    expect(screen.queryByTestId('message-fork-menu-item')).toBeNull();
   });
 
   it('clicking fork calls the API, refreshes, navigates, and pre-warms the runtime', async () => {

@@ -22,7 +22,6 @@ type ReplyPos = {
   top: number;
   left: number;
   text: string;
-  markdown: string;
   msgId: string;
   msgPos: string;
   url: string | null;
@@ -109,6 +108,7 @@ const SelectionReplyButton: React.FC<{ messages: TMessage[] }> = ({ messages }) 
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const buttonRef = useRef<HTMLDivElement>(null);
+  const selectionTargetRef = useRef<EventTarget | null>(null);
 
   useEffect(() => {
     // Disable on mobile — conflicts with native text selection menu
@@ -120,6 +120,7 @@ const SelectionReplyButton: React.FC<{ messages: TMessage[] }> = ({ messages }) 
     const onMouseUp = (e: MouseEvent) => {
       // Skip if mouseup is on the reply button itself
       if (buttonRef.current?.contains(e.target as Node)) return;
+      selectionTargetRef.current = e.target;
 
       window.setTimeout(() => {
         if (!mounted) return;
@@ -145,7 +146,6 @@ const SelectionReplyButton: React.FC<{ messages: TMessage[] }> = ({ messages }) 
           top,
           left: Math.max(60, Math.min(rect.left + rect.width / 2, window.innerWidth - 60)),
           text,
-          markdown: selectionToMarkdown(sel),
           msgId,
           msgPos: msg?.position ?? 'left',
           // Resolve here while the live Selection (with its anchor/focus nodes) exists.
@@ -156,6 +156,7 @@ const SelectionReplyButton: React.FC<{ messages: TMessage[] }> = ({ messages }) 
 
     const onMouseDown = (e: MouseEvent) => {
       if (buttonRef.current?.contains(e.target as Node)) return;
+      selectionTargetRef.current = null;
       setPos(null);
     };
 
@@ -179,22 +180,31 @@ const SelectionReplyButton: React.FC<{ messages: TMessage[] }> = ({ messages }) 
   }, [isMobile]);
 
   useEffect(() => {
-    if (isMobile || !pos?.markdown) return;
+    if (isMobile) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (!isMarkdownCopyShortcut(event)) {
         return;
       }
 
+      const selection = getEffectiveSelection(selectionTargetRef.current);
+      if (!selection || selection.isCollapsed || !findMessageElement(selection)) {
+        return;
+      }
+      const markdown = selectionToMarkdown(selection);
+      if (!markdown) {
+        return;
+      }
+
       event.preventDefault();
-      void copyText(pos.markdown)
+      void copyText(markdown)
         .then(() => Message.success(t('messages.copySuccess')))
         .catch(() => Message.error(t('messages.copyFailed')));
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isMobile, pos?.markdown, t]);
+  }, [isMobile, t]);
 
   if (!pos) return null;
 
