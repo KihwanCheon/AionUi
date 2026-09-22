@@ -10,6 +10,7 @@
     "selectedCount": "{{count}} selected",
     "up": "Up",
     "go": "Go",
-    "empty": "Nothing here"
+    "empty": "Nothing here",
+    "symlink": "Symlink / junction"
   }
 }

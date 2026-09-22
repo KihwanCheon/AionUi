@@ -10,6 +10,7 @@
     "selectedCount": "{{count}} seleccionado(s)",
     "up": "Arriba",
     "go": "Ir",
-    "empty": "No hay nada aquí"
+    "empty": "No hay nada aquí",
+    "symlink": "Enlace simbólico / junction"
   }
 }
