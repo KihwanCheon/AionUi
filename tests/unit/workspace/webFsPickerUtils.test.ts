@@ -40,9 +40,12 @@ describe('normalizeEntry', () => {
   });
 
   it('accepts a browsable symlink/junction (is_dir true, is_symlink true)', () => {
-    expect(normalizeEntry({ name: 'link_dir', full_path: '/data/link_dir', is_dir: true, is_symlink: true })).toEqual(
-      { name: 'link_dir', fullPath: '/data/link_dir', isDir: true, isSymlink: true }
-    );
+    expect(normalizeEntry({ name: 'link_dir', full_path: '/data/link_dir', is_dir: true, is_symlink: true })).toEqual({
+      name: 'link_dir',
+      fullPath: '/data/link_dir',
+      isDir: true,
+      isSymlink: true,
+    });
   });
 
   it('accepts the camelCase isSymlink spelling', () => {
