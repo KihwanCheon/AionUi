@@ -75,6 +75,8 @@ export function fromBackendFsEntry(item: RawFsEntry, workspace: string, parentRe
     relativePath,
     isDir,
     isFile: !isDir,
+    // This backend shape (`{name, type}`) carries no symlink identity.
+    isSymlink: false,
   };
 }
 
@@ -92,6 +94,7 @@ export function fromBackendWorkspaceList(raw: RawFsEntry[], workspace: string, r
         relativePath: '',
         isDir: true,
         isFile: false,
+        isSymlink: false,
         children,
       },
     ];
@@ -105,6 +108,7 @@ export function fromBackendWorkspaceList(raw: RawFsEntry[], workspace: string, r
       relativePath: relPath,
       isDir: true,
       isFile: false,
+      isSymlink: false,
       children,
     },
   ];

@@ -228,7 +228,18 @@ export const WebFsPicker: React.FC<PickerProps> = ({ options, onDone }) => {
                   background: isSelected ? 'var(--color-fill-2)' : 'transparent',
                 }}
               >
-                <span style={{ flexShrink: 0 }}>{entry.isDir ? '📁' : '📄'}</span>
+                <span style={{ flexShrink: 0, position: 'relative' }}>
+                  {entry.isDir ? '📁' : '📄'}
+                  {entry.isSymlink && (
+                    <span
+                      data-testid='web-fs-picker-symlink-badge'
+                      title={t('fileSelection.webFsPicker.symlink', { defaultValue: 'Symlink / junction' })}
+                      style={{ position: 'absolute', right: -4, bottom: -4, fontSize: 9, lineHeight: 1 }}
+                    >
+                      🔗
+                    </span>
+                  )}
+                </span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.name}</span>
               </div>
             );

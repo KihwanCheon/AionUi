@@ -1968,6 +1968,10 @@ export interface IDirOrFile {
   relativePath: string;
   isDir: boolean;
   isFile: boolean;
+  /** Identity flag, independent of `isDir`: a symlink or Windows junction
+   * (`isDir` may still be true for one whose target is a directory — that is
+   * what makes it browsable). Drives a distinct icon/badge in the UI. */
+  isSymlink: boolean;
   children?: Array<IDirOrFile>;
 }
 

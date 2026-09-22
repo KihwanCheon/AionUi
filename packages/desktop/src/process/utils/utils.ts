@@ -186,6 +186,10 @@ export async function readDirectoryRecursive(
     relativePath: path.relative(root, dirPath),
     isDir: true,
     isFile: false,
+    // `fs.stat` above already follows symlinks (unlike `fs.lstat`), so a
+    // symlinked directory lands here as `isDir: true` with no bug to fix —
+    // this walker just has no identity check to say *how* it got there.
+    isSymlink: false,
     children: [],
   };
   let searchResult = matchSearch(result.name);
@@ -246,6 +250,7 @@ export async function readDirectoryRecursive(
         fullPath: itemPath,
         isDir: false,
         isFile: true,
+        isSymlink: false,
       };
       if (!searchText) {
         result.children.push(children);

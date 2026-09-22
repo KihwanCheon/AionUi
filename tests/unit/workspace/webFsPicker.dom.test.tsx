@@ -21,6 +21,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+import { ipcBridge } from '@/common';
 import { WebFsPicker } from '@/renderer/components/workspace/webFsPicker';
 
 afterEach(() => cleanup());
@@ -34,5 +35,21 @@ describe('WebFsPicker responsive dialog', () => {
 
     expect(modal?.style.width).toBe('calc(100vw - 32px)');
     expect(modal?.style.maxWidth).toBe('640px');
+  });
+});
+
+describe('WebFsPicker symlink/junction badge', () => {
+  it('renders a badge for a browsable symlink/junction directory, not for a real directory', async () => {
+    vi.mocked(ipcBridge.fs.getFilesByDir.invoke).mockResolvedValueOnce([
+      { name: 'real_dir', full_path: '/real_dir', is_dir: true, is_symlink: false },
+      { name: 'link_dir', full_path: '/link_dir', is_dir: true, is_symlink: true },
+    ]);
+
+    render(<WebFsPicker options={{ properties: ['openDirectory'] }} onDone={vi.fn()} />);
+
+    await screen.findByText('link_dir');
+    const badges = screen.getAllByTestId('web-fs-picker-symlink-badge');
+    expect(badges).toHaveLength(1);
+    expect(screen.getByText('real_dir').parentElement?.querySelector('[data-testid]')).toBeNull();
   });
 });
