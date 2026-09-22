@@ -15,6 +15,10 @@ export type PickerEntry = {
   name: string;
   fullPath: string;
   isDir: boolean;
+  /** Identity flag, independent of `isDir`: a symlink or Windows junction
+   * (whose `isDir` may still be true when it resolves to a directory). Drives
+   * a distinct badge so it reads differently from a real folder/file. */
+  isSymlink: boolean;
 };
 
 /**
@@ -29,7 +33,8 @@ export const normalizeEntry = (raw: unknown): PickerEntry | null => {
   const name = item.name as string | undefined;
   if (!fullPath || !name) return null;
   const isDir = Boolean(item.isDir ?? item.is_dir);
-  return { name, fullPath, isDir };
+  const isSymlink = Boolean(item.isSymlink ?? item.is_symlink);
+  return { name, fullPath, isDir, isSymlink };
 };
 
 /** Directories first, then case-insensitive by name — mirrors native pickers. */

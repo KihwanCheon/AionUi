@@ -16,6 +16,7 @@ describe('normalizeEntry', () => {
       name: 'app',
       fullPath: '/data/app',
       isDir: true,
+      isSymlink: false,
     });
   });
 
@@ -24,17 +25,33 @@ describe('normalizeEntry', () => {
       name: 'notes.md',
       fullPath: '/data/notes.md',
       isDir: false,
+      isSymlink: false,
     });
   });
 
   it('prefers camelCase when both spellings are present', () => {
     expect(
       normalizeEntry({ name: 'app', fullPath: '/camel', full_path: '/snake', isDir: true, is_dir: false })
-    ).toEqual({ name: 'app', fullPath: '/camel', isDir: true });
+    ).toEqual({ name: 'app', fullPath: '/camel', isDir: true, isSymlink: false });
   });
 
   it('treats a missing directory flag as a file', () => {
     expect(normalizeEntry({ name: 'x', full_path: '/x' })?.isDir).toBe(false);
+  });
+
+  it('accepts a browsable symlink/junction (is_dir true, is_symlink true)', () => {
+    expect(normalizeEntry({ name: 'link_dir', full_path: '/data/link_dir', is_dir: true, is_symlink: true })).toEqual(
+      { name: 'link_dir', fullPath: '/data/link_dir', isDir: true, isSymlink: true }
+    );
+  });
+
+  it('accepts the camelCase isSymlink spelling', () => {
+    expect(normalizeEntry({ name: 'link_dir', fullPath: '/data/link_dir', isDir: true, isSymlink: true })).toEqual({
+      name: 'link_dir',
+      fullPath: '/data/link_dir',
+      isDir: true,
+      isSymlink: true,
+    });
   });
 
   it.each([
@@ -51,10 +68,10 @@ describe('normalizeEntry', () => {
 describe('sortEntries', () => {
   it('lists directories before files and sorts each group by name', () => {
     const sorted = sortEntries([
-      { name: 'readme.md', fullPath: '/readme.md', isDir: false },
-      { name: 'src', fullPath: '/src', isDir: true },
-      { name: 'app', fullPath: '/app', isDir: true },
-      { name: 'LICENSE', fullPath: '/LICENSE', isDir: false },
+      { name: 'readme.md', fullPath: '/readme.md', isDir: false, isSymlink: false },
+      { name: 'src', fullPath: '/src', isDir: true, isSymlink: false },
+      { name: 'app', fullPath: '/app', isDir: true, isSymlink: false },
+      { name: 'LICENSE', fullPath: '/LICENSE', isDir: false, isSymlink: false },
     ]);
 
     expect(sorted.map((e) => e.name)).toEqual(['app', 'src', 'LICENSE', 'readme.md']);
@@ -62,11 +79,20 @@ describe('sortEntries', () => {
 
   it('does not mutate its input', () => {
     const input = [
-      { name: 'b', fullPath: '/b', isDir: false },
-      { name: 'a', fullPath: '/a', isDir: true },
+      { name: 'b', fullPath: '/b', isDir: false, isSymlink: false },
+      { name: 'a', fullPath: '/a', isDir: true, isSymlink: false },
     ];
     sortEntries(input);
     expect(input.map((e) => e.name)).toEqual(['b', 'a']);
+  });
+
+  it('a browsable symlink/junction directory sorts with real directories', () => {
+    const sorted = sortEntries([
+      { name: 'readme.md', fullPath: '/readme.md', isDir: false, isSymlink: false },
+      { name: 'link_dir', fullPath: '/link_dir', isDir: true, isSymlink: true },
+      { name: 'app', fullPath: '/app', isDir: true, isSymlink: false },
+    ]);
+    expect(sorted.map((e) => e.name)).toEqual(['app', 'link_dir', 'readme.md']);
   });
 });
 

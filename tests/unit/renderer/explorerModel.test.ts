@@ -14,6 +14,7 @@ import {
   canRemoveRoot,
   deriveWant,
   explorerContextMenuSections,
+  isBrowsableDir,
   isCopyModifierPressed,
   isDescendantOrSelf,
   isTransferAllowed,
@@ -249,6 +250,30 @@ describe('migrateKey (renamed migration)', () => {
   });
 });
 
+// ── mac symlink / windows junction "treat as directory" ─────────────────────
+
+describe('isBrowsableDir', () => {
+  it('is true for a real directory', () => {
+    expect(isBrowsableDir({ kind: 'dir' })).toBe(true);
+  });
+
+  it('is false for a file', () => {
+    expect(isBrowsableDir({ kind: 'file' })).toBe(false);
+  });
+
+  it('is false for a symlink with no known target (default: not browsable)', () => {
+    expect(isBrowsableDir({ kind: 'symlink' })).toBe(false);
+  });
+
+  it('is true for a symlink/junction whose target resolves to a directory', () => {
+    expect(isBrowsableDir({ kind: 'symlink', symlink_target_is_dir: true })).toBe(true);
+  });
+
+  it('is false for a symlink whose target is explicitly not a directory', () => {
+    expect(isBrowsableDir({ kind: 'symlink', symlink_target_is_dir: false })).toBe(false);
+  });
+});
+
 // ── projection ───────────────────────────────────────────────────────────────
 
 describe('buildTreeData', () => {
@@ -330,6 +355,19 @@ describe('buildTreeData', () => {
     expect(lastDirIdx).toBeLessThan(firstNonDirIdx);
   });
 
+  it('a symlink/junction resolved to a directory sorts with real directories, not files', () => {
+    const scrambled: Entry[] = [
+      file('README.md'),
+      { name: 'link_dir', kind: 'symlink', symlink_target_is_dir: true },
+      dir('src'),
+    ];
+    const cache: FactCache = new Map([[peKey('pe1', ''), scrambled]]);
+    const tree = buildTreeData(cache, set(peKey('pe1', '')), roots);
+    const titles = (tree[0].children ?? []).map((n) => n.title);
+    // Both browsable dirs (real + symlink) precede the file, sorted together.
+    expect(titles).toEqual(['link_dir', 'src', 'README.md']);
+  });
+
   it('does not reorder pe roots (kept in backend order_index)', () => {
     const tree = buildTreeData(new Map(), new Set(), [
       { pe_id: 'peZ', title: 'zzz' },
@@ -369,6 +407,33 @@ describe('edge coverage', () => {
     const cache: FactCache = new Map([[peKey('pe1', ''), [{ name: 'link', kind: 'symlink' }]]]);
     const tree = buildTreeData(cache, set(peKey('pe1', '')), roots);
     expect(tree[0].children?.[0]).toMatchObject({ key: peKey('pe1', 'link'), title: 'link', isLeaf: true });
+  });
+
+  it('buildTreeData marks a symlink/junction resolved to a directory as expandable, not a leaf', () => {
+    const cache: FactCache = new Map([
+      [peKey('pe1', ''), [{ name: 'link_dir', kind: 'symlink', symlink_target_is_dir: true }]],
+      [peKey('pe1', 'link_dir'), [file('inner.txt')]],
+    ]);
+    // Same shape as the real-directory expand test above: present but no
+    // children until also expanded, then descends to its listing.
+    const collapsed = buildTreeData(cache, set(peKey('pe1', '')), roots);
+    expect(collapsed[0].children?.[0]).toMatchObject({ key: peKey('pe1', 'link_dir'), isLeaf: false, isSymlink: true });
+    expect(collapsed[0].children?.[0].children).toBeUndefined();
+
+    const expanded = buildTreeData(cache, set(peKey('pe1', ''), peKey('pe1', 'link_dir')), roots);
+    expect(expanded[0].children?.[0].children).toEqual([
+      { key: peKey('pe1', 'link_dir/inner.txt'), title: 'inner.txt', isLeaf: true },
+    ]);
+  });
+
+  it('applyDelta added carries symlink_target_is_dir so a live-created symlink dir is immediately expandable', () => {
+    const key = peKey('pe1', '');
+    const cache: FactCache = new Map([[key, []]]);
+    const next = applyDelta(cache, key, [
+      { op: 'added', name: 'link_dir', kind: 'symlink', symlink_target_is_dir: true },
+    ]);
+    const entry = next.get(key)?.find((e) => e.name === 'link_dir');
+    expect(isBrowsableDir(entry!)).toBe(true);
   });
 
   it('buildTreeData descends an expanded excluded directory (manual expand is not blocked)', () => {
