@@ -1111,6 +1111,7 @@ export type I18nKey =
   | 'fileSelection.webFsPicker.go'
   | 'fileSelection.webFsPicker.loadFailed'
   | 'fileSelection.webFsPicker.selectedCount'
+  | 'fileSelection.webFsPicker.symlink'
   | 'fileSelection.webFsPicker.titleDirectory'
   | 'fileSelection.webFsPicker.titleFile'
   | 'fileSelection.webFsPicker.up'

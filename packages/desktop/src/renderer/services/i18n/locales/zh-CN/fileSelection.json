@@ -10,6 +10,7 @@
     "selectedCount": "已选择 {{count}} 项",
     "up": "上级",
     "go": "前往",
-    "empty": "这里空空如也"
+    "empty": "这里空空如也",
+    "symlink": "符号链接 / 联接点"
   }
 }
