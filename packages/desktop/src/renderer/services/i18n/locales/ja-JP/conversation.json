@@ -1,4 +1,11 @@
 {
+  "userChoiceNotifications": {
+    "title": "ユーザーの選択が必要",
+    "label": "選択が必要な会話：{{count}}",
+    "empty": "選択が必要な通知はありません。",
+    "dismiss": "通知を解除",
+    "questionPending": "質問を受信中…"
+  },
   "welcome": {
     "title": "Hi、今日の予定は何ですか？",
     "placeholder": "メッセージの送信、ファイルの追加、フォルダーの追加、スケジュールタスクの作成、または / でコマンド呼び出し...",

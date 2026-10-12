@@ -1,4 +1,11 @@
 {
+  "userChoiceNotifications": {
+    "title": "需要用户选择",
+    "label": "需要您选择的对话：{{count}}",
+    "empty": "没有需要您选择的通知。",
+    "dismiss": "清除通知",
+    "questionPending": "正在接收问题…"
+  },
   "welcome": {
     "title": "Hi，今天有什么安排？",
     "placeholder": "发消息、上传文件、打开文件夹、创建定时任务，或输入 / 唤起命令...",

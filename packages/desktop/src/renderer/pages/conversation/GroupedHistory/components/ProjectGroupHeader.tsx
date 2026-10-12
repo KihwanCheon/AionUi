@@ -11,6 +11,7 @@ import { Attention } from '@icon-park/react';
 import { useTranslation } from 'react-i18next';
 
 import type { ProjectGroupIndicatorStatus } from '../utils/completionUnread';
+import { ProjectChoiceBadge } from '@renderer/hooks/context/UserChoiceNotifications';
 
 const ProjectFailureMarker: React.FC = () => {
   const { t } = useTranslation();
@@ -30,6 +31,7 @@ type ProjectGroupHeaderProps = {
   displayName: string;
   branch?: string | null;
   indicatorStatus?: ProjectGroupIndicatorStatus;
+  choiceConversationIds?: readonly string[];
 };
 
 const ProjectGroupHeader: React.FC<ProjectGroupHeaderProps> = ({
@@ -37,6 +39,7 @@ const ProjectGroupHeader: React.FC<ProjectGroupHeaderProps> = ({
   displayName,
   branch,
   indicatorStatus = 'none',
+  choiceConversationIds = [],
 }) => (
   <span className='flex items-center flex-1 min-w-0 gap-8px'>
     <span className='flex flex-col flex-1 min-w-0 leading-tight'>
@@ -45,6 +48,7 @@ const ProjectGroupHeader: React.FC<ProjectGroupHeaderProps> = ({
       </span>
       {branch && <span className='text-11px font-[400] truncate text-t-secondary'>({branch})</span>}
     </span>
+    <ProjectChoiceBadge conversationIds={choiceConversationIds} />
     {indicatorStatus === 'generating' && (
       <span
         data-testid='project-generating'

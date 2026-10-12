@@ -1,0 +1,68 @@
+.trigger:global(.arco-btn-text) {
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--text-secondary);
+}
+
+.pending:global(.arco-btn-text) {
+  color: var(--warning);
+}
+
+.panel {
+  width: min(360px, calc(100vw - 40px));
+  max-height: 60vh;
+  overflow-y: auto;
+  line-height: normal;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--border-base);
+  padding-bottom: 8px;
+}
+
+.open:global(.arco-btn-text) {
+  width: 100%;
+  height: auto;
+  min-height: 48px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: start;
+  white-space: normal;
+  color: var(--text-primary);
+}
+
+.name {
+  color: var(--text-primary);
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.preview {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.empty {
+  margin: 8px;
+  color: var(--text-secondary);
+}

@@ -1,4 +1,11 @@
 {
+  "userChoiceNotifications": {
+    "title": "Se requiere una elección",
+    "label": "Conversaciones que requieren tu elección: {{count}}",
+    "empty": "No hay notificaciones que requieran tu elección.",
+    "dismiss": "Descartar notificación",
+    "questionPending": "Recibiendo la pregunta…"
+  },
   "welcome": {
     "title": "Hola, ¿qué tienes planeado hoy?",
     "placeholder": "Envía un mensaje, sube archivos, abre una carpeta, crea una tarea programada o escribe / para ver los comandos...",

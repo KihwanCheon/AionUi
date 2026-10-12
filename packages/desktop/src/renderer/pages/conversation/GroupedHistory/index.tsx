@@ -503,6 +503,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                           workspace={group.workspace}
                           displayName={group.displayName}
                           branch={projectGitBranches[group.workspace]}
+                          choiceConversationIds={isProjectExpanded ? [] : group.conversations.map((item) => item.id)}
                           indicatorStatus={resolveProjectGroupIndicatorStatus(
                             isProjectExpanded,
                             group.conversations,

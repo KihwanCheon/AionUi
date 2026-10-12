@@ -108,6 +108,7 @@ const BookmarkedConversationList: React.FC<BookmarkedConversationListProps> = ({
               workspace={workspace}
               displayName={group.label}
               branch={projectGitBranches[workspace]}
+              choiceConversationIds={isProjectExpanded ? [] : group.conversations.map((item) => item.id)}
               indicatorStatus={resolveProjectGroupIndicatorStatus(
                 isProjectExpanded,
                 group.conversations,

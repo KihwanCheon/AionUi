@@ -1,4 +1,11 @@
 {
+  "userChoiceNotifications": {
+    "title": "Escolha do usuário necessária",
+    "label": "Conversas aguardando sua escolha: {{count}}",
+    "empty": "Nenhuma notificação precisa da sua escolha.",
+    "dismiss": "Dispensar notificação",
+    "questionPending": "Recebendo a pergunta…"
+  },
   "welcome": {
     "title": "Olá, qual é o seu plano para hoje?",
     "placeholder": "Envie uma mensagem, faça upload de arquivos, abra uma pasta, crie uma tarefa agendada ou digite / para comandos...",

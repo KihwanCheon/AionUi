@@ -1,4 +1,11 @@
 {
+  "userChoiceNotifications": {
+    "title": "사용자 선택 필요",
+    "label": "선택이 필요한 대화 {{count}}개",
+    "empty": "선택이 필요한 알림이 없습니다.",
+    "dismiss": "알림 해제",
+    "questionPending": "질문을 수신 중입니다."
+  },
   "welcome": {
     "title": "안녕하세요, 오늘의 계획은 무엇인가요?",
     "placeholder": "메시지 전송, 파일 업로드, 폴더 열기, 예약 작업 만들기 또는 / 로 명령 호출...",

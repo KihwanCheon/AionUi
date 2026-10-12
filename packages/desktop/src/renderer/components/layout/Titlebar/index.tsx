@@ -19,6 +19,7 @@ import { resolveFeedbackModule } from '@/renderer/services/feedback/resolveFeedb
 import { isElectronDesktop, isMacOS } from '@/renderer/utils/platform';
 import { IS_DISCONTINUED_BUILD } from '@/renderer/utils/discontinuedBuild';
 import MigrationInviteCapsule from './MigrationInviteCapsule';
+import { UserChoiceNotificationButton } from '@renderer/hooks/context/UserChoiceNotifications';
 import './titlebar.css';
 
 interface TitlebarProps {
@@ -412,6 +413,7 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
         {layout?.isMobile && <div id='app-titlebar-actions-slot' className='app-titlebar__actions-slot' />}
         {IS_DISCONTINUED_BUILD && <MigrationInviteCapsule />}
         {(!layout?.isMobile || !isElectronDesktop()) && <ClaudeUsageIndicator />}
+        <UserChoiceNotificationButton />
         <button
           type='button'
           className={classNames('app-titlebar__button', layout?.isMobile && 'app-titlebar__button--mobile')}

@@ -1,4 +1,11 @@
 {
+  "userChoiceNotifications": {
+    "title": "Benutzerauswahl erforderlich",
+    "label": "Gespräche, die Ihre Auswahl benötigen: {{count}}",
+    "empty": "Keine Benachrichtigungen benötigen Ihre Auswahl.",
+    "dismiss": "Benachrichtigung verwerfen",
+    "questionPending": "Frage wird empfangen…"
+  },
   "welcome": {
     "title": "Hallo, was hast du heute vor?",
     "placeholder": "Nachricht senden, Dateien hochladen, Ordner öffnen, eine geplante Aufgabe erstellen oder / für Befehle eingeben...",

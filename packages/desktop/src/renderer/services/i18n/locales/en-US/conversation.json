@@ -1,4 +1,11 @@
 {
+  "userChoiceNotifications": {
+    "title": "User choice needed",
+    "label": "Conversations needing your choice: {{count}}",
+    "empty": "No notifications need your choice.",
+    "dismiss": "Dismiss notification",
+    "questionPending": "Receiving the question…"
+  },
   "welcome": {
     "title": "Hi, what's your plan for today?",
     "placeholder": "Send a message, upload files, open a folder, create a scheduled task, or type / for commands...",

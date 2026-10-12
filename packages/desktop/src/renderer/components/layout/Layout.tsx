@@ -29,12 +29,12 @@ import { useProjectPanelCollapse } from '@renderer/hooks/ui/useProjectPanelColla
 import { dispatchWorkspaceToggleEvent } from '@renderer/utils/workspace/workspaceEvents';
 import { MIN_PREVIEW_PANEL_PX } from '@renderer/pages/conversation/utils/layoutCalc';
 import { PreviewPanel } from '@renderer/pages/conversation/Preview';
-import { LayoutContext } from '@renderer/hooks/context/LayoutContext';
 import { NavigationHistoryProvider } from '@renderer/hooks/context/NavigationHistoryContext';
 import { useDeepLink } from '@renderer/hooks/system/useDeepLink';
 import { useNotificationClick } from '@renderer/hooks/system/notification/useNotificationClick';
 import { useBrowserNotification } from '@renderer/hooks/system/notification/useBrowserNotification';
 import { useDesktopTurnNotification } from '@renderer/hooks/system/notification/useDesktopTurnNotification';
+import { ChoiceNotificationLayoutProvider } from '@renderer/hooks/context/UserChoiceNotifications';
 import { cleanupSiderTooltips } from '@renderer/utils/ui/siderTooltip';
 import { useConversationShortcuts } from '@renderer/hooks/ui/useConversationShortcuts';
 import { isElectronDesktop } from '@renderer/utils/platform';
@@ -377,7 +377,7 @@ const Layout: React.FC<{
       };
 
   return (
-    <LayoutContext.Provider value={{ isMobile, siderCollapsed: collapsed, setSiderCollapsed: setCollapsed }}>
+    <ChoiceNotificationLayoutProvider value={{ isMobile, siderCollapsed: collapsed, setSiderCollapsed: setCollapsed }}>
       <NavigationHistoryProvider>
         <TaskbarBadgeSync />
         <div className='app-shell flex flex-col size-full min-h-0'>
@@ -604,7 +604,7 @@ const Layout: React.FC<{
           </ArcoLayout>
         </div>
       </NavigationHistoryProvider>
-    </LayoutContext.Provider>
+    </ChoiceNotificationLayoutProvider>
   );
 };
 
