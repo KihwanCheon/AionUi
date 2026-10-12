@@ -16,6 +16,8 @@ type ConversationBookmarkButtonProps = {
   isPinned: boolean;
   isMobile: boolean;
   onTogglePin: (conversation: TChatConversation) => void;
+  /** Keep the star about 2px before status without changing the button's flow slot. */
+  statusLayout?: 'gutter' | 'compact';
 };
 
 const ConversationBookmarkButton: React.FC<ConversationBookmarkButtonProps> = ({
@@ -23,6 +25,7 @@ const ConversationBookmarkButton: React.FC<ConversationBookmarkButtonProps> = ({
   isPinned,
   isMobile,
   onTogglePin,
+  statusLayout,
 }) => {
   const { t } = useTranslation();
   const label = isPinned ? t('conversation.history.removeBookmark') : t('conversation.history.addBookmark');
@@ -36,6 +39,11 @@ const ConversationBookmarkButton: React.FC<ConversationBookmarkButtonProps> = ({
         data-testid={`conversation-bookmark-${conversation.id}`}
         className={classNames(
           '!h-20px !w-20px !p-0 !inline-flex !items-center !justify-center !leading-none text-t-secondary hover:text-warning-6',
+          statusLayout === 'gutter'
+            ? '-translate-x-15px rtl:translate-x-15px'
+            : statusLayout === 'compact'
+              ? '-translate-x-1px rtl:translate-x-1px'
+              : undefined,
           {
             'text-warning-6': isPinned,
             'opacity-0 group-hover:opacity-100 focus:opacity-100': !isMobile && !isPinned,

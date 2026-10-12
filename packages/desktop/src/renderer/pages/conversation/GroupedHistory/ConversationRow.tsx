@@ -12,8 +12,8 @@ import { CronJobIndicator } from '@/renderer/pages/cron';
 import { resolveConversationLeadingMark } from '@/renderer/pages/conversation/utils/conversationAssistantIdentity';
 import { cleanupSiderTooltips, getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
-import { Checkbox, Spin, Tooltip } from '@arco-design/web-react';
-import { Attention, MessageOne, Pushpin, Robot } from '@icon-park/react';
+import { Checkbox, Tooltip } from '@arco-design/web-react';
+import { MessageOne, Pushpin, Robot } from '@icon-park/react';
 import ForkBranchIcon from '@renderer/components/base/ForkBranchIcon';
 import classNames from 'classnames';
 import React from 'react';
@@ -23,6 +23,7 @@ import ConversationRowMenu from './components/ConversationRowMenu';
 import type { ConversationRowProps } from './types';
 import { isConversationPinned } from './utils/groupingHelpers';
 import ConversationBookmarkButton from './components/ConversationBookmarkButton';
+import ConversationLeadingStatus from './components/ConversationLeadingStatus';
 
 const getConversationTitlePopupContainer = (_node: HTMLElement): HTMLElement => document.body;
 const MNP_TITLE_TOOLTIP_STYLE: React.CSSProperties = { width: 'max-content', maxWidth: 'none' };
@@ -113,7 +114,10 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     // When the row is pinned, hovering reveals an overlay on the leading icon —
     // the drag handle when the row is sortable, otherwise a pushpin marker.
     // We dim the resting icon on hover so the overlay reads cleanly.
-    const pinnedHoverFade = isPinned ? 'group-hover:opacity-0 transition-opacity' : '';
+    const pinnedHoverFade =
+      isPinned && !batchMode && !isMobile && !isGenerating && !isWaitingConfirmation
+        ? 'group-hover:opacity-0 transition-opacity'
+        : '';
     const composedClass = classNames(pinnedHoverFade);
 
     const leadingMark = resolveConversationLeadingMark(conversation, assistantInfo, logos);
@@ -183,11 +187,6 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     if (!collapsed) setIsTitleTooltipVisible(false);
   };
 
-  // Waiting on the user takes visual precedence over the generating spinner: a
-  // paused turn still streams frames that mark it "generating", so without this
-  // the distinct icon would never win.
-  const showWaitingConfirmation = isWaitingConfirmation && !batchMode;
-
   const renderCompletionUnreadDot = () => {
     if (batchMode || !hasUnread || isGenerating || isWaitingConfirmation) {
       return null;
@@ -243,24 +242,22 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             isPinned={isPinned}
             isMobile={isMobile}
             onTogglePin={onTogglePin}
+            statusLayout={dimIcon ? 'gutter' : 'compact'}
           />
         )}
         <span
           data-testid={`conversation-leading-icon-${conversation.id}`}
           className='size-22px flex items-center justify-center shrink-0 relative'
         >
-          {showWaitingConfirmation ? (
-            <Attention
-              theme='filled'
-              size='16'
-              className='line-height-0 flex-shrink-0 text-warning animate-wiggle'
-              data-testid={`conversation-waiting-confirmation-${conversation.id}`}
-            />
-          ) : isGenerating && !batchMode ? (
-            <Spin size={16} />
-          ) : (
-            renderLeadingIcon()
-          )}
+          <ConversationLeadingStatus
+            conversationId={conversation.id}
+            isGenerating={isGenerating}
+            isWaitingConfirmation={isWaitingConfirmation}
+            batchMode={batchMode}
+            useLeadingGutter={!collapsed && dimIcon}
+          >
+            {renderLeadingIcon()}
+          </ConversationLeadingStatus>
           {/* Hover overlay on the leading icon: drag handle for sortable pinned rows, pushpin marker otherwise */}
           {!batchMode &&
             isPinned &&
