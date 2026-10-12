@@ -8,6 +8,7 @@ import type { BrowserWindow } from 'electron';
 import { ipcBridge } from '@/common';
 import { AIONUI_PROTOCOL_SCHEME, createBufferedEventRelay, findDeepLinkUrl } from '../startup/bootstrap/protocol';
 import { registerRendererReadinessInvalidation } from '../startup/bootstrap/rendererReadiness';
+import { traceWindowsNotificationActivation } from '../startup/bootstrap/windowsNotification';
 
 export const PROTOCOL_SCHEME = AIONUI_PROTOCOL_SCHEME;
 
@@ -85,7 +86,10 @@ export const registerDeepLinkReadyProvider = (): void => {
       return Promise.resolve();
     }
     if (!detachRendererConsumer) {
-      detachRendererConsumer = rendererRelay.attach((payload) => ipcBridge.deepLink.received.emit(payload));
+      detachRendererConsumer = rendererRelay.attach((payload) => {
+        traceWindowsNotificationActivation(payload, 'renderer-ready');
+        ipcBridge.deepLink.received.emit(payload);
+      });
     }
     return Promise.resolve();
   });
@@ -98,6 +102,7 @@ export const registerDeepLinkReadyProvider = (): void => {
 export const handleDeepLinkUrl = (url: string): void => {
   const parsed = parseDeepLinkUrl(url);
   if (!parsed) return;
+  traceWindowsNotificationActivation(parsed, 'received');
   rendererRelay.publish(parsed);
 };
 

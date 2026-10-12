@@ -15,6 +15,7 @@ import { getPlatformServices } from '@/common/platform';
 import { ipcBridge } from '@/common';
 import { electronNotification } from '@/common/electronSafe';
 import { ProcessConfig } from '@process/utils/initStorage';
+import { buildWindowsConversationToast } from '@process/startup/bootstrap/windowsNotification';
 import type { BrowserWindow } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -50,8 +51,8 @@ const getNotificationIcon = (): string | undefined => {
  *
  * Skips when `system.notificationEnabled` is off, or when the main window is
  * already focused (no nagging). When a real Electron notification is available,
- * clicking it focuses the main window and emits `notification.clicked` so the
- * renderer can navigate to the originating conversation.
+ * Windows conversation toasts activate the registered conversation deep link;
+ * other notifications focus the window and emit `notification.clicked`.
  *
  * In non-Electron mode this falls back to the platform service, which is a no-op.
  */
@@ -82,8 +83,16 @@ export async function showNotification({
   // Prefer a real Electron notification so the click can focus + navigate.
   if (electronNotification) {
     try {
-      const notification = new electronNotification({ title, body, ...(iconPath ? { icon: iconPath } : {}) });
+      const options = { title, body, conversation_id, ...(iconPath ? { icon: iconPath } : {}) };
+      const windowsToast = buildWindowsConversationToast(options);
+      const notification = new electronNotification({
+        title,
+        body,
+        ...(iconPath ? { icon: iconPath } : {}),
+        ...windowsToast,
+      });
       notification.on('click', () => {
+        if (windowsToast) return;
         const win = mainWindowRef;
         if (win && !win.isDestroyed()) {
           if (win.isMinimized()) win.restore();

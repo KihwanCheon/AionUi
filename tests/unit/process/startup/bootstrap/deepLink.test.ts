@@ -6,6 +6,8 @@
 
 import type { BrowserWindow } from 'electron';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DOMParser } from '@xmldom/xmldom';
+import { buildWindowsConversationToast } from '@/process/startup/bootstrap/windowsNotification';
 
 const mocks = vi.hoisted(() => ({
   emit: vi.fn(),
@@ -155,5 +157,28 @@ describe('deep-link renderer readiness', () => {
     deepLink.handleDeepLinkUrl(`aionui://conversation/new?launchId=${launchId}`);
     await mocks.readyProvider?.();
     expect(mocks.emit).toHaveBeenCalledExactlyOnceWith({ action: 'conversation/new', params: { launchId } });
+  });
+
+  it('delivers the Windows toast conversation link exactly once after the renderer is ready', async () => {
+    const deepLink = await import('@/process/utils/deepLink');
+    const { window } = createWindow();
+    const toast = buildWindowsConversationToast(
+      { title: 'AionUi', body: 'done', conversation_id: '58ebaac9' },
+      'win32'
+    );
+    const document = new DOMParser().parseFromString(toast?.toastXml ?? '', 'text/xml');
+    const activationUrl = document.documentElement.getAttribute('launch') ?? '';
+    deepLink.registerDeepLinkReadyProvider();
+    deepLink.setDeepLinkMainWindow(window);
+    deepLink.handleDeepLinkUrl(activationUrl);
+
+    expect(mocks.emit).not.toHaveBeenCalled();
+    await mocks.readyProvider?.();
+    await mocks.readyProvider?.();
+
+    expect(mocks.emit).toHaveBeenCalledExactlyOnceWith({
+      action: 'navigate',
+      params: { route: '/conversation/58ebaac9', source: 'desktop-notification' },
+    });
   });
 });

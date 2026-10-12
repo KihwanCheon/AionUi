@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 let notificationEnabled: boolean | undefined = true;
 const clickedEmit = vi.fn();
 const platformSend = vi.fn();
+const originalPlatform = process.platform;
 
 // Defined via vi.hoisted so the hoisted vi.mock factory can reference the class
 // at evaluation time without a temporal-dead-zone error.
@@ -17,7 +18,7 @@ const { FakeElectronNotification } = vi.hoisted(() => {
     static isSupported = vi.fn(() => true);
     handlers: Record<string, () => void> = {};
     show = vi.fn();
-    constructor(public options: { title: string; body: string; icon?: string }) {
+    constructor(public options: { title: string; body: string; icon?: string; toastXml?: string }) {
       FakeElectronNotification.instances.push(this);
     }
     on(event: string, cb: () => void): this {
@@ -68,6 +69,7 @@ const makeWindow = (focused: boolean) => ({
 let logSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  Object.defineProperty(process, 'platform', { value: 'darwin' });
   notificationEnabled = true;
   clickedEmit.mockClear();
   platformSend.mockClear();
@@ -76,6 +78,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  Object.defineProperty(process, 'platform', { value: originalPlatform });
   logSpy.mockRestore();
 });
 
@@ -110,6 +113,41 @@ describe('showNotification', () => {
     expect(win.show).toHaveBeenCalledTimes(1);
     expect(win.focus).toHaveBeenCalledTimes(1);
     expect(clickedEmit).toHaveBeenCalledWith({ conversation_id: 'c1' });
+  });
+
+  it('uses protocol activation for a Windows conversation notification', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    setNotificationMainWindow(makeWindow(false) as never);
+    await showNotification({ title: 'AionUi', body: 'done', conversation_id: 'c1' });
+
+    expect(FakeElectronNotification.instances[0].options.toastXml).toContain('activationType="protocol"');
+    expect(FakeElectronNotification.instances[0].options.toastXml).toContain('route=%2Fconversation%2Fc1');
+    expect(FakeElectronNotification.instances[0].show).toHaveBeenCalledOnce();
+  });
+
+  it('does not duplicate Windows protocol navigation through the native click event', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    const win = makeWindow(false);
+    setNotificationMainWindow(win as never);
+    await showNotification({ title: 'AionUi', body: 'done', conversation_id: 'c1' });
+
+    FakeElectronNotification.instances[0].handlers.click?.();
+
+    expect(clickedEmit).not.toHaveBeenCalled();
+    expect(win.show).not.toHaveBeenCalled();
+  });
+
+  it('still focuses Windows notifications that have no conversation target', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    const win = makeWindow(false);
+    setNotificationMainWindow(win as never);
+    await showNotification({ title: 'AionUi', body: 'done' });
+
+    FakeElectronNotification.instances[0].handlers.click?.();
+
+    expect(FakeElectronNotification.instances[0].options.toastXml).toBeUndefined();
+    expect(win.focus).toHaveBeenCalledOnce();
+    expect(clickedEmit).toHaveBeenCalledWith({ conversation_id: undefined });
   });
 
   it('logs when skipping because notifications are disabled in settings', async () => {
