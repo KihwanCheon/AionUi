@@ -352,7 +352,10 @@
     "bodyConfirmation": "エージェントが確認を待っています",
     "bodyConfirmationNamed": "「{{name}}」が確認を待っています",
     "bodyTurnCompleted": "エージェントが応答を完了しました",
-    "bodyTurnCompletedNamed": "「{{name}}」の応答が完了しました"
+    "bodyTurnCompletedNamed": "「{{name}}」の応答が完了しました",
+    "bodyTurnFailed": "応答が中断されました: {{reason}}",
+    "bodyTurnFailedNamed": "「{{name}}」の応答が中断されました: {{reason}}",
+    "failureReasonUnavailable": "会話でエラーの詳細を確認してください"
   },
   "notification": "通知",
   "cronNotificationEnabled": "定期タスク完了通知",

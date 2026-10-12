@@ -352,7 +352,10 @@
     "bodyConfirmation": "An agent is waiting for your confirmation",
     "bodyConfirmationNamed": "\"{{name}}\" is waiting for your confirmation",
     "bodyTurnCompleted": "The agent has finished responding",
-    "bodyTurnCompletedNamed": "\"{{name}}\" has finished responding"
+    "bodyTurnCompletedNamed": "\"{{name}}\" has finished responding",
+    "bodyTurnFailed": "The response was interrupted: {{reason}}",
+    "bodyTurnFailedNamed": "\"{{name}}\" was interrupted: {{reason}}",
+    "failureReasonUnavailable": "See the conversation for error details"
   },
   "notification": "Notifications",
   "cronNotificationEnabled": "Scheduled Task Completion",

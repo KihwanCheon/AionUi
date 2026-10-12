@@ -7,8 +7,23 @@
 import { getParentAndCurrentDir } from '@/renderer/utils/workspace/projectPathLabel';
 import { Spin } from '@arco-design/web-react';
 import React from 'react';
+import { Attention } from '@icon-park/react';
+import { useTranslation } from 'react-i18next';
 
 import type { ProjectGroupIndicatorStatus } from '../utils/completionUnread';
+
+const ProjectFailureMarker: React.FC = () => {
+  const { t } = useTranslation();
+  return (
+    <span
+      role='img'
+      aria-label={t('conversation.history.responseFailed')}
+      className='absolute right-8px size-16px flex-center shrink-0 group-hover:hidden'
+    >
+      <Attention theme='filled' size='16' className='line-height-0 text-danger' data-testid='project-failure-unread' />
+    </span>
+  );
+};
 
 type ProjectGroupHeaderProps = {
   workspace: string;
@@ -39,6 +54,7 @@ const ProjectGroupHeader: React.FC<ProjectGroupHeaderProps> = ({
         <Spin size={16} />
       </span>
     )}
+    {indicatorStatus === 'failure-unread' && <ProjectFailureMarker />}
     {indicatorStatus === 'completion-unread' && (
       <span
         data-testid='project-completion-unread'

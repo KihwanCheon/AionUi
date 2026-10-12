@@ -50,12 +50,21 @@ export const useBrowserNotification = (): void => {
           settingEnabled: configService.get('system.notificationEnabled') !== false,
           documentHidden: document.hidden,
         }),
-      bodyFor: (kind, conversationId) => {
+      bodyFor: (kind, conversationId, reason) => {
         const name = conversationId ? getSnapshotConversationName(conversationId) : undefined;
         if (kind === 'confirmation') {
           return name
             ? t('settings.browserNotification.bodyConfirmationNamed', { name: truncateConversationName(name) })
             : t('settings.browserNotification.bodyConfirmation');
+        }
+        if (kind === 'turnFailed') {
+          const failureReason = reason || t('settings.browserNotification.failureReasonUnavailable');
+          return name
+            ? t('settings.browserNotification.bodyTurnFailedNamed', {
+                name: truncateConversationName(name),
+                reason: failureReason,
+              })
+            : t('settings.browserNotification.bodyTurnFailed', { reason: failureReason });
         }
         return name
           ? t('settings.browserNotification.bodyTurnCompletedNamed', { name: truncateConversationName(name) })

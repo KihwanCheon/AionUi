@@ -6,7 +6,7 @@
 
 import type { TChatConversation } from '@/common/config/storage';
 
-export type ProjectGroupIndicatorStatus = 'none' | 'generating' | 'completion-unread';
+export type ProjectGroupIndicatorStatus = 'none' | 'generating' | 'completion-unread' | 'failure-unread';
 
 export const isConversationWindowFocused = (): boolean => typeof document !== 'undefined' && document.hasFocus();
 
@@ -25,10 +25,13 @@ export const resolveProjectGroupIndicatorStatus = (
   expanded: boolean,
   conversations: TChatConversation[],
   isGenerating: (conversationId: string) => boolean,
-  hasCompletionUnread: (conversationId: string) => boolean
+  hasCompletionUnread: (conversationId: string) => boolean,
+  hasFailureUnread?: (conversationId: string) => boolean
 ): ProjectGroupIndicatorStatus => {
   if (expanded) return 'none';
   if (conversations.some((conversation) => isGenerating(conversation.id))) return 'generating';
+  if (hasFailureUnread && conversations.some((conversation) => hasFailureUnread(conversation.id)))
+    return 'failure-unread';
   if (conversations.some((conversation) => hasCompletionUnread(conversation.id))) return 'completion-unread';
   return 'none';
 };

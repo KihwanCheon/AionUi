@@ -76,6 +76,57 @@ describe('createBrowserNotificationController.onStreamMessage', () => {
     expect(show).toHaveBeenCalledWith({ body: 'turnCompleted', conversationId: 'c1', kind: 'turnCompleted' });
   });
 
+  it('reports the provider reason on an error notification', () => {
+    const { show, bodyFor, controller } = makeDeps();
+    controller.onStreamMessage({
+      type: 'error',
+      conversation_id: 'c1',
+      turn_id: 't1',
+      data: { message: 'capacity exceeded' },
+    });
+    expect(bodyFor).toHaveBeenCalledWith('turnFailed', 'c1', 'capacity exceeded');
+    expect(show).toHaveBeenCalledWith({ body: 'turnFailed', conversationId: 'c1', kind: 'turnFailed' });
+  });
+
+  it('reports a persisted send failure tip and ignores advisory error tips', () => {
+    const { show, controller } = makeDeps();
+    const frame = {
+      type: 'tips',
+      conversation_id: 'c1',
+      turn_id: 't1',
+      data: { type: 'error', content: 'capacity exceeded' },
+    };
+    controller.onStreamMessage(frame);
+    expect(show).not.toHaveBeenCalled();
+    controller.onStreamMessage({ ...frame, status: 'error', replace: true });
+    expect(show).toHaveBeenCalledWith({ body: 'turnFailed', conversationId: 'c1', kind: 'turnFailed' });
+  });
+  it('deduplicates failed terminals and suppresses a later finish for the same turn', () => {
+    const { show, controller } = makeDeps();
+    controller.onStreamMessage({ type: 'error', conversation_id: 'c1', turn_id: 't1' });
+    controller.onStreamMessage({ type: 'error', conversation_id: 'c1', turn_id: 't1' });
+    controller.onStreamMessage({ type: 'finish', conversation_id: 'c1', turn_id: 't1' });
+    expect(show).toHaveBeenCalledTimes(1);
+  });
+  it('ignores the older failure while a newer turn is running', () => {
+    const { show, controller } = makeDeps();
+    controller.onStreamMessage({ type: 'start', conversation_id: 'c1', turn_id: 'new' });
+    controller.onStreamMessage({ type: 'error', conversation_id: 'c1', turn_id: 'old' });
+    expect(show).not.toHaveBeenCalled();
+  });
+  it('does not notify failures when the gate is closed', () => {
+    const { show, controller } = makeDeps({ ...openGate, settingEnabled: false });
+    controller.onStreamMessage({ type: 'error', conversation_id: 'c1', turn_id: 't1' });
+    expect(show).not.toHaveBeenCalled();
+  });
+  it('scopes deduplication to the conversation and limits the reason length', () => {
+    const { show, bodyFor, controller } = makeDeps();
+    controller.onStreamMessage({ type: 'error', conversation_id: 'c1', turn_id: 't1', data: 'x'.repeat(200) });
+    controller.onStreamMessage({ type: 'error', conversation_id: 'c2', turn_id: 't1', data: 'other error' });
+    expect(show).toHaveBeenCalledTimes(2);
+    expect(bodyFor).toHaveBeenCalledWith('turnFailed', 'c1', 'x'.repeat(160));
+  });
+
   it('passes the conversation id to bodyFor so the body can name the conversation', () => {
     const { bodyFor, controller } = makeDeps();
     controller.onStreamMessage({ type: 'finish', conversation_id: 'c1', turn_id: 't1' });

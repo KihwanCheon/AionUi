@@ -105,13 +105,22 @@ describe('dedicated Dooray proposal completion', () => {
     }
   );
 
-  it.each(['finish', 'error'])('preserves an ordinary conversation completion through %s', async (type) => {
+  it.each(['finish'])('preserves an ordinary conversation completion through %s', async (type) => {
     mock.list.mockResolvedValue({ items: [ordinary()] });
     const { result } = await mount();
     stream('ordinary', 'start');
     stream('ordinary', type);
     expect(result.current.hasCompletionUnread('ordinary')).toBe(true);
     expect(result.current.completionUnreadCount).toBe(1);
+  });
+
+  it('shows an ordinary failure separately from successful completion', async () => {
+    mock.list.mockResolvedValue({ items: [ordinary()] });
+    const { result } = await mount();
+    stream('ordinary', 'start');
+    stream('ordinary', 'error');
+    expect(result.current.hasFailureUnread('ordinary')).toBe(true);
+    expect(result.current.hasCompletionUnread('ordinary')).toBe(false);
   });
 
   it.each(['card-handoff', 'approval', 'root-handoff'])(

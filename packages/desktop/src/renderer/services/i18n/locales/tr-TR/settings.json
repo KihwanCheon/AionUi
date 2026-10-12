@@ -352,7 +352,10 @@
     "bodyConfirmation": "Bir agent onayınızı bekliyor",
     "bodyConfirmationNamed": "\"{{name}}\" onayınızı bekliyor",
     "bodyTurnCompleted": "Agent yanıtlamayı tamamladı",
-    "bodyTurnCompletedNamed": "\"{{name}}\" yanıtlamayı tamamladı"
+    "bodyTurnCompletedNamed": "\"{{name}}\" yanıtlamayı tamamladı",
+    "bodyTurnFailed": "Yanıt kesildi: {{reason}}",
+    "bodyTurnFailedNamed": "“{{name}}” yanıtı kesildi: {{reason}}",
+    "failureReasonUnavailable": "Hata ayrıntıları için konuşmaya bakın"
   },
   "notification": "Bildirimler",
   "cronNotificationEnabled": "Zamanlanmış Görev Tamamlanma",

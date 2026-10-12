@@ -51,6 +51,8 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     isConversationGenerating,
     isConversationWaitingConfirmation,
     hasCompletionUnread,
+    hasFailureUnread,
+    getConversationFailure,
     isManualUnread,
     markManualUnread,
     clearManualUnread,
@@ -192,6 +194,8 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       isGenerating: isConversationGenerating(conversation.id),
       isWaitingConfirmation: isConversationWaitingConfirmation(conversation.id),
       hasUnread: hasCompletionUnread(conversation.id) || isManualUnread(conversation.id),
+      hasFailureUnread: hasFailureUnread(conversation.id),
+      failureMessage: getConversationFailure(conversation.id)?.message,
       isManualUnread: isManualUnread(conversation.id),
       collapsed,
       tooltipEnabled,
@@ -221,6 +225,8 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       isConversationGenerating,
       isConversationWaitingConfirmation,
       hasCompletionUnread,
+      hasFailureUnread,
+      getConversationFailure,
       isManualUnread,
       selectedConversationIds,
       id,
@@ -453,6 +459,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
             projectGitBranches={projectGitBranches}
             hasCompletionUnread={hasCompletionUnread}
             isConversationGenerating={isConversationGenerating}
+            hasFailureUnread={hasFailureUnread}
             getConversationRowProps={getConversationRowProps}
           />
         )}
@@ -500,7 +507,8 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                             isProjectExpanded,
                             group.conversations,
                             isConversationGenerating,
-                            hasCompletionUnread
+                            hasCompletionUnread,
+                            hasFailureUnread
                           )}
                         />
                       }

@@ -24,4 +24,16 @@ The conversation row keeps its existing provider/assistant leading mark at norma
 bun run test tests/unit/renderer/pages/GroupedHistory/conversationLeadingStatus.dom.test.tsx tests/unit/renderer/pages/GroupedHistory/conversationBookmarkButton.dom.test.tsx tests/unit/conversation/conversationRowWaitingIcon.dom.test.tsx tests/unit/conversation/SortableConversationRow.dom.test.tsx tests/unit/renderer/conversation/ConversationRowManualUnread.dom.test.tsx tests/unit/renderer/conversation/ConversationRowCronMenu.dom.test.tsx tests/unit/renderer/layout/completionUnread.dom.test.ts
 ```
 
-This renderer-only change can apply through development HMR. The parent `run-aionui-dev-no-sentry.bat` compiles the sources on the next startup; no AionCore or package build is needed.
+## Failed turn visibility
+
+An unread terminal error uses a static danger-colored attention icon in the same adjacent slot, while keeping the provider identity visible. Confirmation and generation take precedence; batch mode hides the error decoration. Collapsed project headers aggregate unread failures before successful completions, after running children. The error icon has an accessible label and a tooltip with the provider reason; its inner span permits pointer events for the tooltip without blocking row selection.
+
+`utils/conversationFailure.ts` reconciles the last persisted result and stores per-turn read receipts in localStorage. Opening the conversation acknowledges the error; changing lists or reloading must not discard an unread failure or resurrect an acknowledged one. Late terminals must not clear a newer known turn. Native and browser notifications use the existing settings/focus gates, distinguish failure from success, deduplicate per conversation/turn, and navigate to the failed conversation.
+
+AionCore preserves partial assistant text and always persists the terminal error as a separate `tips` row. Its stable `error:<conversation_id>:<reply_msg_id>` identity matches the live error and deduplicates replay. Error tips have a separate message-index key so they never replace partial text. The latest outcome is stored atomically in `extra.last_turn_result` as `{ turn_id, status: 'error' | 'finish', completed_at, error?: string }`; the detailed error remains in the message row. This preserves concurrent unrelated extra fields and lets list state recover even when the app missed the terminal frame. Persisted send-failure tips (`type=tips`, `status=error`, `replace=true`) are also terminal; advisory tips are not.
+
+```powershell
+bun run test tests/unit/renderer/pages/GroupedHistory/conversationFailure.dom.test.ts tests/unit/conversation/runtime/retryTipMerge.test.ts tests/unit/renderer/browserNotificationCore.test.ts tests/unit/renderer/useBrowserNotification.dom.test.tsx tests/unit/renderer/useDesktopTurnNotification.dom.test.tsx
+```
+
+Renderer changes support development HMR. The failure persistence contract also requires a rebuilt AionCore and a later app restart; do not restart while other conversations are executing. The parent `run-aionui-dev-no-sentry.bat` compiles the UI sources on startup, so no UI package build is required.

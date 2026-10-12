@@ -352,7 +352,10 @@
     "bodyConfirmation": "에이전트가 확인을 기다리고 있습니다",
     "bodyConfirmationNamed": "\"{{name}}\"이(가) 확인을 기다리고 있습니다",
     "bodyTurnCompleted": "에이전트가 응답을 완료했습니다",
-    "bodyTurnCompletedNamed": "\"{{name}}\"의 응답이 완료되었습니다"
+    "bodyTurnCompletedNamed": "\"{{name}}\"의 응답이 완료되었습니다",
+    "bodyTurnFailed": "오류로 응답이 중단되었습니다: {{reason}}",
+    "bodyTurnFailedNamed": "“{{name}}” 응답이 중단되었습니다: {{reason}}",
+    "failureReasonUnavailable": "대화에서 오류 상세를 확인해 주세요"
   },
   "notification": "알림",
   "cronNotificationEnabled": "예약 작업 완료 알림",

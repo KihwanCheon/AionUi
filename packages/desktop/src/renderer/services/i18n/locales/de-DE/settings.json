@@ -1339,7 +1339,10 @@
     "bodyConfirmation": "An agent is waiting for your confirmation",
     "bodyConfirmationNamed": "\"{{name}}\" is waiting for your confirmation",
     "bodyTurnCompleted": "The agent has finished responding",
-    "bodyTurnCompletedNamed": "\"{{name}}\" has finished responding"
+    "bodyTurnCompletedNamed": "\"{{name}}\" has finished responding",
+    "bodyTurnFailed": "Die Antwort wurde unterbrochen: {{reason}}",
+    "bodyTurnFailedNamed": "Die Antwort in „{{name}}“ wurde unterbrochen: {{reason}}",
+    "failureReasonUnavailable": "Fehlerdetails finden Sie im Gespräch"
   },
   "repair": {
     "pathLabel": "Launch Path",

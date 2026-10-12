@@ -49,6 +49,8 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     isGenerating,
     isWaitingConfirmation,
     hasUnread,
+    hasFailureUnread = false,
+    failureMessage,
     collapsed,
     tooltipEnabled,
     batchMode,
@@ -115,7 +117,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     // the drag handle when the row is sortable, otherwise a pushpin marker.
     // We dim the resting icon on hover so the overlay reads cleanly.
     const pinnedHoverFade =
-      isPinned && !batchMode && !isMobile && !isGenerating && !isWaitingConfirmation
+      isPinned && !batchMode && !isMobile && !isGenerating && !isWaitingConfirmation && !hasFailureUnread
         ? 'group-hover:opacity-0 transition-opacity'
         : '';
     const composedClass = classNames(pinnedHoverFade);
@@ -188,7 +190,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   };
 
   const renderCompletionUnreadDot = () => {
-    if (batchMode || !hasUnread || isGenerating || isWaitingConfirmation) {
+    if (batchMode || !hasUnread || isGenerating || isWaitingConfirmation || hasFailureUnread) {
       return null;
     }
 
@@ -253,6 +255,8 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             conversationId={conversation.id}
             isGenerating={isGenerating}
             isWaitingConfirmation={isWaitingConfirmation}
+            hasFailure={hasFailureUnread}
+            failureMessage={failureMessage}
             batchMode={batchMode}
             useLeadingGutter={!collapsed && dimIcon}
           >
@@ -264,6 +268,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             !isMobile &&
             !isGenerating &&
             !isWaitingConfirmation &&
+            !hasFailureUnread &&
             (dragHandle ?? (
               <span
                 className='absolute inset-0 flex-center text-t-secondary pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity'

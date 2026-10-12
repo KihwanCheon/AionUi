@@ -5,11 +5,17 @@
  */
 
 import { ipcBridge } from '@/common';
+import { isTerminalErrorStreamMessage } from '@/common/chat/chatLib';
 import type { TChatConversation } from '@/common/config/storage';
 import { addEventListener } from '@/renderer/utils/emitter';
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { countVisibleCompletionUnread, isConversationWindowFocused } from '../utils/completionUnread';
 import { createDoorayCompletionReadPolicy } from '../utils/doorayCompletionRead';
+import {
+  createConversationFailureTracker,
+  getConversationErrorMessage,
+  type ConversationFailure,
+} from '../utils/conversationFailure';
 
 /**
  * Whitelist of message types that indicate content generation is in progress.
@@ -46,10 +52,15 @@ const isTerminalAgentStatus = (data: unknown): boolean => {
   return status === 'error' || status === 'disconnected';
 };
 
-const isTerminalStreamMessage = (message: { type: string; data: unknown }): boolean => {
+const isTerminalStreamMessage = (message: {
+  type: string;
+  data: unknown;
+  status?: string;
+  replace?: boolean;
+}): boolean => {
   return (
     message.type === 'finish' ||
-    message.type === 'error' ||
+    isTerminalErrorStreamMessage(message) ||
     (message.type === 'agent_status' && isTerminalAgentStatus(message.data))
   );
 };
@@ -221,6 +232,7 @@ type ConversationListSyncSnapshot = {
   waitingConfirmationConversationIds: Set<string>;
   completionUnreadConversationIds: Set<string>;
   manualUnreadConversationIds: Set<string>;
+  failures: ReadonlyMap<string, ConversationFailure>;
 };
 
 /**
@@ -281,6 +293,7 @@ let snapshotState: ConversationListSyncSnapshot = {
   waitingConfirmationConversationIds: waitingConfirmationConversationIdsState,
   completionUnreadConversationIds: completionUnreadConversationIdsState,
   manualUnreadConversationIds: manualUnreadConversationIdsState,
+  failures: new Map(),
 };
 
 const emitStoreChange = () => {
@@ -290,9 +303,19 @@ const emitStoreChange = () => {
     waitingConfirmationConversationIds: waitingConfirmationConversationIdsState,
     completionUnreadConversationIds: completionUnreadConversationIdsState,
     manualUnreadConversationIds: manualUnreadConversationIdsState,
+    failures: failureTracker.getSnapshot(),
   };
   listeners.forEach((listener) => listener());
 };
+
+const failureTracker = createConversationFailureTracker(
+  (id) => activeConversationIdState === id && isConversationWindowFocused(),
+  emitStoreChange
+);
+const activeStreamTurnIds = new Map<string, string>();
+const failedTurnIds = new Map<string, string>();
+const isStaleTerminal = (id: string, turnId?: string | null) =>
+  Boolean(turnId && activeStreamTurnIds.has(id) && activeStreamTurnIds.get(id) !== turnId);
 
 const subscribeConversationListSync = (listener: () => void) => {
   listeners.add(listener);
@@ -348,6 +371,7 @@ const refreshConversations = () => {
           return extra?.is_health_check !== true && !extra?.team_id && !extra?.teamId;
         });
         conversationsState = filteredData;
+        failureTracker.reconcile(filteredData);
         // Use ALL conversation IDs (including team/legacy health-check rows) so the
         // responseStream listener recognises them as known and doesn't
         // trigger an infinite refreshConversations loop.
@@ -604,6 +628,7 @@ const initializeConversationListSyncStore = () => {
     window.addEventListener('focus', () => {
       if (activeConversationIdState) {
         clearCompletionUnreadState(activeConversationIdState);
+        failureTracker.read(activeConversationIdState);
       }
     });
   }
@@ -617,6 +642,9 @@ const initializeConversationListSyncStore = () => {
       completionReadPolicy.forget(event.conversation_id);
       clearManualUnreadState(event.conversation_id);
       clearCompleted(event.conversation_id);
+      failureTracker.forget(event.conversation_id);
+      activeStreamTurnIds.delete(event.conversation_id);
+      failedTurnIds.delete(event.conversation_id);
     }
     refreshConversations();
   });
@@ -637,10 +665,20 @@ const initializeConversationListSyncStore = () => {
     }
 
     if (isTerminalStreamMessage(message)) {
+      if (isStaleTerminal(conversation_id, message.turn_id)) return;
       const wasGenerating = generatingConversationIdsState.has(conversation_id);
-      if (wasGenerating && (activeConversationIdState !== conversation_id || !isConversationWindowFocused())) {
+      if (isTerminalErrorStreamMessage(message)) {
+        failedTurnIds.set(conversation_id, message.turn_id ?? 'unknown');
+        clearCompletionUnreadState(conversation_id);
+        failureTracker.mark(conversation_id, {
+          turnId: message.turn_id ?? message.msg_id ?? `error-${Date.now()}`,
+          completedAt: message.created_at ?? Date.now(),
+          message: getConversationErrorMessage(message.data),
+        });
+      } else if (wasGenerating && (activeConversationIdState !== conversation_id || !isConversationWindowFocused())) {
         markCompletionUnread(conversation_id);
       }
+      markCompleted(conversation_id, message.turn_id);
       clearGenerating(conversation_id, 'terminal');
       clearAllWaitingConfirmation(conversation_id);
       return;
@@ -671,12 +709,20 @@ const initializeConversationListSyncStore = () => {
       return;
     }
     if (decision.markGenerating) {
+      if (message.turn_id) activeStreamTurnIds.set(conversation_id, message.turn_id);
+      if (decision.clearCompleted) {
+        failedTurnIds.delete(conversation_id);
+        failureTracker.read(conversation_id);
+      }
       markGenerating(conversation_id, 'stream');
     }
   });
   ipcBridge.conversation.turnCompleted.on((event) => {
+    if (isStaleTerminal(event.session_id, event.turn_id)) return;
     if (
       isTerminalTurnState(event.state) &&
+      !failureTracker.getSnapshot().has(event.session_id) &&
+      failedTurnIds.get(event.session_id) !== event.turn_id &&
       (activeConversationIdState !== event.session_id || !isConversationWindowFocused())
     ) {
       markCompletionUnread(event.session_id);
@@ -698,6 +744,7 @@ export const useConversationListSync = () => {
     waitingConfirmationConversationIds,
     completionUnreadConversationIds,
     manualUnreadConversationIds,
+    failures,
   } = useSyncExternalStore(
     subscribeConversationListSync,
     getConversationListSyncSnapshot,
@@ -706,6 +753,7 @@ export const useConversationListSync = () => {
 
   const clearCompletionUnread = useCallback((conversation_id: string) => {
     clearCompletionUnreadState(conversation_id);
+    failureTracker.read(conversation_id);
   }, []);
 
   const markManualUnread = useCallback((conversation_id: string) => {
@@ -741,6 +789,9 @@ export const useConversationListSync = () => {
     [completionUnreadConversationIds]
   );
 
+  const getConversationFailure = useCallback((id: string) => failures.get(id), [failures]);
+  const hasFailureUnread = useCallback((id: string) => failures.has(id), [failures]);
+
   const isManualUnread = useCallback(
     (conversation_id: string) => {
       return manualUnreadConversationIds.has(conversation_id);
@@ -758,6 +809,8 @@ export const useConversationListSync = () => {
     isConversationGenerating,
     isConversationWaitingConfirmation,
     hasCompletionUnread,
+    getConversationFailure,
+    hasFailureUnread,
     completionUnreadCount,
     clearCompletionUnread,
     isManualUnread,

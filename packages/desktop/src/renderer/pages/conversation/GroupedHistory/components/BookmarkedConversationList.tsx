@@ -33,6 +33,7 @@ type BookmarkedConversationListProps = {
   onToggleSection: (section: string) => void;
   projectGitBranches: Record<string, string | null>;
   hasCompletionUnread: (conversationId: string) => boolean;
+  hasFailureUnread?: (conversationId: string) => boolean;
   isConversationGenerating: (conversationId: string) => boolean;
   getConversationRowProps: (conversation: TChatConversation) => ConversationRowProps;
 };
@@ -47,6 +48,7 @@ const BookmarkedConversationList: React.FC<BookmarkedConversationListProps> = ({
   onToggleSection,
   projectGitBranches,
   hasCompletionUnread,
+  hasFailureUnread,
   isConversationGenerating,
   getConversationRowProps,
 }) => {
@@ -110,7 +112,8 @@ const BookmarkedConversationList: React.FC<BookmarkedConversationListProps> = ({
                 isProjectExpanded,
                 group.conversations,
                 isConversationGenerating,
-                hasCompletionUnread
+                hasCompletionUnread,
+                hasFailureUnread
               )}
             />
           }

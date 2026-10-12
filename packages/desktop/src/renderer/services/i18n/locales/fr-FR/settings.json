@@ -352,7 +352,10 @@
     "bodyConfirmation": "Un agent attend votre confirmation",
     "bodyConfirmationNamed": "« {{name}} » attend votre confirmation",
     "bodyTurnCompleted": "L'agent a fini de répondre",
-    "bodyTurnCompletedNamed": "« {{name}} » a fini de répondre"
+    "bodyTurnCompletedNamed": "« {{name}} » a fini de répondre",
+    "bodyTurnFailed": "La réponse a été interrompue : {{reason}}",
+    "bodyTurnFailedNamed": "La réponse dans « {{name}} » a été interrompue : {{reason}}",
+    "failureReasonUnavailable": "Consultez la conversation pour les détails de l’erreur"
   },
   "notification": "Notifications",
   "cronNotificationEnabled": "Fin de tâche planifiée",

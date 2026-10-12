@@ -373,6 +373,18 @@ describe('normalizeTextMessageContent', () => {
 });
 
 describe('transformMessage', () => {
+  it('keeps one stable error message identity through stream replay and history hydration', () => {
+    const frame = {
+      type: 'error',
+      conversation_id: 'conversation-1',
+      msg_id: 'reply-1',
+      data: { message: 'capacity exceeded' },
+    } as IResponseMessage;
+    const first = transformMessage(frame) as IMessageTips;
+    const replay = transformMessage(frame) as IMessageTips;
+    expect(first.id).toBe('error:conversation-1:reply-1');
+    expect(replay.id).toBe(first.id);
+  });
   it('returns undefined for hidden system stream messages', () => {
     const message: IResponseMessage = {
       type: 'system',

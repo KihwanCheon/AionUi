@@ -84,6 +84,37 @@ describe('project completion unread state', () => {
 });
 
 describe('project aggregate indicator priority', () => {
+  it('shows a failed child before an ordinary unread completion', () => {
+    expect(
+      resolveProjectGroupIndicatorStatus(
+        false,
+        [conversation('failed')],
+        () => false,
+        () => true,
+        () => true
+      )
+    ).toBe('failure-unread');
+    expect(
+      resolveProjectGroupIndicatorStatus(
+        false,
+        [conversation('failed')],
+        () => true,
+        () => true,
+        () => true
+      )
+    ).toBe('generating');
+  });
+  it('renders an accessible error marker on the collapsed project', () => {
+    render(
+      React.createElement(ProjectGroupHeader, {
+        workspace: 'D:/Project',
+        displayName: 'Project',
+        indicatorStatus: 'failure-unread',
+      })
+    );
+    expect(screen.getByTestId('project-failure-unread')).toBeInTheDocument();
+    expect(screen.queryByTestId('project-completion-unread')).not.toBeInTheDocument();
+  });
   const groupedConversations = [conversation('generating'), conversation('unread')];
 
   it('prioritizes a generating child over an unread completion in a collapsed project', () => {

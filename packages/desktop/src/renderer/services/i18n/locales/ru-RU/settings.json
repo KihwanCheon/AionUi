@@ -360,7 +360,10 @@
     "bodyConfirmation": "Агент ожидает вашего подтверждения",
     "bodyConfirmationNamed": "«{{name}}» ожидает вашего подтверждения",
     "bodyTurnCompleted": "Агент завершил ответ",
-    "bodyTurnCompletedNamed": "«{{name}}» завершил ответ"
+    "bodyTurnCompletedNamed": "«{{name}}» завершил ответ",
+    "bodyTurnFailed": "Ответ прерван: {{reason}}",
+    "bodyTurnFailedNamed": "Ответ в «{{name}}» прерван: {{reason}}",
+    "failureReasonUnavailable": "Подробности ошибки доступны в беседе"
   },
   "notification": "Уведомления",
   "cronNotificationEnabled": "Уведомление о завершении запланированных задач",

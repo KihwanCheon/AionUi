@@ -49,6 +49,8 @@ export type ConversationRowProps = {
    *  replaces the adjacent spinner without hiding conversation identity. */
   isWaitingConfirmation: boolean;
   hasUnread: boolean;
+  hasFailureUnread?: boolean;
+  failureMessage?: string;
   /** Whether the user manually marked this conversation as unread (persisted). */
   isManualUnread: boolean;
   collapsed: boolean;

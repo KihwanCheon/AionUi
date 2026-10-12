@@ -58,6 +58,18 @@ afterEach(() => {
 });
 
 describe('useBrowserNotification', () => {
+  it('opens the failed conversation when its notification is clicked', () => {
+    renderHook(() => useBrowserNotification());
+    emitStream({
+      type: 'error',
+      conversation_id: 'failed-chat',
+      turn_id: 't1',
+      data: { message: 'capacity exceeded' },
+    });
+    expect(FakeNotification.instances[0].options.body).toBe('settings.browserNotification.bodyTurnFailed');
+    FakeNotification.instances[0].onclick?.();
+    expect(navigate).toHaveBeenCalledWith('/conversation/failed-chat');
+  });
   it('shows a confirmation notification on an acp_permission stream message when hidden', () => {
     renderHook(() => useBrowserNotification());
     emitStream({ type: 'acp_permission', conversation_id: 'c1' });

@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Spin } from '@arco-design/web-react';
+import { Spin, Tooltip } from '@arco-design/web-react';
 import { Attention } from '@icon-park/react';
 import React, { type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type ConversationLeadingStatusProps = {
   children: ReactNode;
@@ -14,6 +15,8 @@ type ConversationLeadingStatusProps = {
   isGenerating: boolean;
   isWaitingConfirmation: boolean;
   batchMode: boolean;
+  hasFailure?: boolean;
+  failureMessage?: string;
   /** Expanded indented rows place status in the original bookmark position. */
   useLeadingGutter?: boolean;
 };
@@ -25,15 +28,18 @@ export default function ConversationLeadingStatus({
   isGenerating,
   isWaitingConfirmation,
   batchMode,
+  hasFailure = false,
+  failureMessage,
   useLeadingGutter = false,
 }: ConversationLeadingStatusProps) {
+  const { t } = useTranslation();
   return (
     <>
       {children}
-      {!batchMode && (isWaitingConfirmation || isGenerating) && (
+      {!batchMode && (isWaitingConfirmation || isGenerating || hasFailure) && (
         <span
           className={`absolute top-1/2 -translate-y-1/2 size-16px flex-center pointer-events-none ${useLeadingGutter ? '-start-26px' : '-start-12px'}`}
-          aria-hidden='true'
+          aria-hidden={isWaitingConfirmation || isGenerating ? true : undefined}
         >
           {isWaitingConfirmation ? (
             <Attention
@@ -42,8 +48,23 @@ export default function ConversationLeadingStatus({
               className='line-height-0 flex-shrink-0 text-warning animate-wiggle'
               data-testid={`conversation-waiting-confirmation-${conversationId}`}
             />
-          ) : (
+          ) : isGenerating ? (
             <Spin size={16} data-testid={`conversation-generating-indicator-${conversationId}`} />
+          ) : (
+            <Tooltip content={failureMessage || t('conversation.history.responseFailed')} position='right'>
+              <span
+                role='img'
+                aria-label={t('conversation.history.responseFailed')}
+                className='pointer-events-auto flex-center'
+              >
+                <Attention
+                  theme='filled'
+                  size='16'
+                  className='line-height-0 text-danger'
+                  data-testid={`conversation-failure-${conversationId}`}
+                />
+              </span>
+            </Tooltip>
           )}
         </span>
       )}

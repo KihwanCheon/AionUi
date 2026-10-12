@@ -360,7 +360,10 @@
     "bodyConfirmation": "Агент чекає вашого підтвердження",
     "bodyConfirmationNamed": "«{{name}}» чекає вашого підтвердження",
     "bodyTurnCompleted": "Агент завершив відповідь",
-    "bodyTurnCompletedNamed": "«{{name}}» завершив відповідь"
+    "bodyTurnCompletedNamed": "«{{name}}» завершив відповідь",
+    "bodyTurnFailed": "Відповідь перервано: {{reason}}",
+    "bodyTurnFailedNamed": "Відповідь у «{{name}}» перервано: {{reason}}",
+    "failureReasonUnavailable": "Перегляньте подробиці помилки в розмові"
   },
   "notification": "Сповіщення",
   "cronNotificationEnabled": "Завершення запланованих завдань",

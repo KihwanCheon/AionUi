@@ -1315,7 +1315,10 @@
     "bodyConfirmation": "An agent is waiting for your confirmation",
     "bodyConfirmationNamed": "\"{{name}}\" is waiting for your confirmation",
     "bodyTurnCompleted": "The agent has finished responding",
-    "bodyTurnCompletedNamed": "\"{{name}}\" has finished responding"
+    "bodyTurnCompletedNamed": "\"{{name}}\" has finished responding",
+    "bodyTurnFailed": "La respuesta se interrumpió: {{reason}}",
+    "bodyTurnFailedNamed": "La respuesta en «{{name}}» se interrumpió: {{reason}}",
+    "failureReasonUnavailable": "Consulta los detalles del error en la conversación"
   },
   "repair": {
     "pathLabel": "Launch Path",

@@ -352,7 +352,10 @@
     "bodyConfirmation": "Um agente está aguardando sua confirmação",
     "bodyConfirmationNamed": "\"{{name}}\" está aguardando sua confirmação",
     "bodyTurnCompleted": "O agente terminou de responder",
-    "bodyTurnCompletedNamed": "\"{{name}}\" terminou de responder"
+    "bodyTurnCompletedNamed": "\"{{name}}\" terminou de responder",
+    "bodyTurnFailed": "A resposta foi interrompida: {{reason}}",
+    "bodyTurnFailedNamed": "A resposta em “{{name}}” foi interrompida: {{reason}}",
+    "failureReasonUnavailable": "Consulte os detalhes do erro na conversa"
   },
   "notification": "Notificações",
   "cronNotificationEnabled": "Conclusão de Tarefa Agendada",

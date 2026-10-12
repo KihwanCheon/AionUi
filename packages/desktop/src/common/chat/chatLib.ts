@@ -697,7 +697,7 @@ const transformMessageInner = (message: IResponseMessage): TMessage | undefined 
           ? errorData
           : ((errorData as { message?: string })?.message ?? JSON.stringify(errorData));
       return {
-        id: uuid(),
+        id: message.msg_id ? `error:${message.conversation_id}:${message.msg_id}` : uuid(),
         type: 'tips',
         msg_id: message.msg_id,
         position: 'center',
@@ -1128,4 +1128,24 @@ export const transformMessage = (message: IResponseMessage): TMessage | undefine
     transformed.backend_turn_id = message.backend_turn_id;
   }
   return transformed;
+};
+
+/** Recognize both relay errors and persisted send-failure tips, excluding advisory tips. */
+export const isTerminalErrorStreamMessage = (message: {
+  type?: string;
+  data?: unknown;
+  status?: string;
+  replace?: boolean;
+}): boolean =>
+  message.type === 'error' ||
+  (message.type === 'tips' &&
+    message.status === 'error' &&
+    message.replace === true &&
+    (message.data as { type?: unknown } | null)?.type === 'error');
+
+/** Read the visible error reason from either terminal wire shape. */
+export const getTerminalErrorMessage = (data: unknown): string | undefined => {
+  const record = data as { message?: unknown; content?: unknown; error?: { message?: unknown } } | null;
+  const value = typeof data === 'string' ? data : (record?.error?.message ?? record?.message ?? record?.content);
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 };

@@ -352,7 +352,10 @@
     "bodyConfirmation": "有一個 agent 正在等待你的確認",
     "bodyConfirmationNamed": "「{{name}}」正在等待你確認",
     "bodyTurnCompleted": "已完成本輪回覆",
-    "bodyTurnCompletedNamed": "「{{name}}」已完成本輪回覆"
+    "bodyTurnCompletedNamed": "「{{name}}」已完成本輪回覆",
+    "bodyTurnFailed": "回應已中斷：{{reason}}",
+    "bodyTurnFailedNamed": "「{{name}}」的回應已中斷：{{reason}}",
+    "failureReasonUnavailable": "請在對話中查看錯誤詳情"
   },
   "notification": "通知",
   "cronNotificationEnabled": "定時任務完成通知",

@@ -71,6 +71,20 @@ const indicatorId = 'conversation-generating-indicator-activity-row';
 const waitingId = 'conversation-waiting-confirmation-activity-row';
 
 describe('conversation identity with activity decorations', () => {
+  it('keeps the provider identity beside an accessible unread failure', () => {
+    render(<ConversationRow {...makeProps({ hasFailureUnread: true, failureMessage: 'capacity exceeded' })} />);
+    expect(screen.getByRole('img', { name: 'codex' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'conversation.history.responseFailed' })).toBeInTheDocument();
+    expect(screen.queryByTestId(indicatorId)).not.toBeInTheDocument();
+  });
+
+  it.each([{ isGenerating: true }, { isWaitingConfirmation: true }, { batchMode: true }])(
+    'suppresses unread failure during active or batch state: %o',
+    (state) => {
+      render(<ConversationRow {...makeProps({ hasFailureUnread: true, ...state })} />);
+      expect(screen.queryByTestId('conversation-failure-activity-row')).not.toBeInTheDocument();
+    }
+  );
   beforeEach(() => {
     layout.isMobile = false;
     vi.stubGlobal('matchMedia', (query: string) => ({

@@ -352,7 +352,10 @@
     "bodyConfirmation": "یک ایجنت منتظر تأیید شماست",
     "bodyConfirmationNamed": "«{{name}}» منتظر تأیید شماست",
     "bodyTurnCompleted": "ایجنت پاسخ را کامل کرده است",
-    "bodyTurnCompletedNamed": "«{{name}}» پاسخ را کامل کرد"
+    "bodyTurnCompletedNamed": "«{{name}}» پاسخ را کامل کرد",
+    "bodyTurnFailed": "پاسخ متوقف شد: {{reason}}",
+    "bodyTurnFailedNamed": "پاسخ «{{name}}» متوقف شد: {{reason}}",
+    "failureReasonUnavailable": "جزئیات خطا را در گفتگو ببینید"
   },
   "notification": "اعلان‌ها",
   "cronNotificationEnabled": "اتمام کار زمان‌بندی‌شده",

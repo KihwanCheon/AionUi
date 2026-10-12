@@ -67,6 +67,7 @@ function getMessageIndexKey(message: TMessage): string | undefined {
   // update resolves to whatever frame was appended last and rewrites it.
   if (message.type === 'thinking') return `thinking:${message.msg_id}`;
   if (message.type === 'plan') return `plan:${message.msg_id}`;
+  if (message.type === 'tips' && message.content.type === 'error') return `error:${message.msg_id}`;
   return message.msg_id;
 }
 
@@ -386,8 +387,9 @@ export function composeMessageWithIndex(
 
   // agent_status / tips and other msg_id-based messages:
   // replace the existing item in place instead of appending duplicates.
-  if (message.msg_id) {
-    const existingIdx = index.msgIdIndex.get(message.msg_id);
+  const messageIndexKey = getMessageIndexKey(message);
+  if (messageIndexKey) {
+    const existingIdx = index.msgIdIndex.get(messageIndexKey);
     if (existingIdx !== undefined && existingIdx < list.length) {
       const existingMsg = list[existingIdx];
       const newList = list.slice();
