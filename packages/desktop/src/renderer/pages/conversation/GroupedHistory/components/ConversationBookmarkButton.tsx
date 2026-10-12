@@ -46,7 +46,7 @@ const ConversationBookmarkButton: React.FC<ConversationBookmarkButtonProps> = ({
               : undefined,
           {
             'text-warning-6': isPinned,
-            'opacity-0 group-hover:opacity-100 focus:opacity-100': !isMobile && !isPinned,
+            'opacity-0 group-hover:opacity-100 focus-visible:opacity-100': !isMobile && !isPinned,
           }
         )}
         onClick={(event) => {

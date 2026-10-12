@@ -9,6 +9,7 @@ The conversation row keeps its existing provider/assistant leading mark at norma
 - `GroupedHistory/components/ConversationLeadingStatus.tsx` owns decorative activity presentation only. Use the original `Spin size={16}` and existing attention icon, preserving their shape, color, stroke, and animation. The absolute status wrapper ignores pointer events; do not reduce identity opacity or apply animation to the identity.
 - `ConversationRow.tsx` passes the existing leading mark as children plus the existing generation/confirmation/batch flags. No new runtime subscription, polling, state source, or AionCore change is required.
 - `ConversationBookmarkButton.tsx` translates only the rendered button; its 20px flow slot remains reserved. The translation follows `statusLayout`, not generation state, and reverses in RTL. Keep the real clickable button and tooltip at the visual location, preserving click propagation isolation.
+- Unpinned desktop bookmarks are revealed by row hover or `focus-visible`, not generic `focus`. Pointer pin/unpin leaves native button focus behind; that residual focus must not keep the star visible after the pointer leaves. Preserve keyboard Tab visibility without blurring the button, and keep pinned/mobile bookmarks always visible.
 - Confirmation takes precedence over generation: keep the identity and display the original attention icon in the adjacent status position instead of the spinner. Batch selection suppresses both decorations. Completion-unread dots and their existing priority remain unchanged.
 - Pinned identity fades on hover only when the desktop idle-row drag/pin overlay is actually available. Generating/waiting identity must not disappear on hover. Preserve idle drag-handle click isolation and normal row selection.
 
@@ -20,7 +21,7 @@ The conversation row keeps its existing provider/assistant leading mark at norma
 4. If upstream supplies equivalent behavior, verify the same contracts before replacing the fork helper. Do not maintain duplicate activity decorations.
 
 ```powershell
-bun run test tests/unit/renderer/pages/GroupedHistory/conversationLeadingStatus.dom.test.tsx tests/unit/conversation/conversationRowWaitingIcon.dom.test.tsx tests/unit/conversation/SortableConversationRow.dom.test.tsx tests/unit/renderer/conversation/ConversationRowManualUnread.dom.test.tsx tests/unit/renderer/conversation/ConversationRowCronMenu.dom.test.tsx tests/unit/renderer/layout/completionUnread.dom.test.ts
+bun run test tests/unit/renderer/pages/GroupedHistory/conversationLeadingStatus.dom.test.tsx tests/unit/renderer/pages/GroupedHistory/conversationBookmarkButton.dom.test.tsx tests/unit/conversation/conversationRowWaitingIcon.dom.test.tsx tests/unit/conversation/SortableConversationRow.dom.test.tsx tests/unit/renderer/conversation/ConversationRowManualUnread.dom.test.tsx tests/unit/renderer/conversation/ConversationRowCronMenu.dom.test.tsx tests/unit/renderer/layout/completionUnread.dom.test.ts
 ```
 
 This renderer-only change can apply through development HMR. The parent `run-aionui-dev-no-sentry.bat` compiles the sources on the next startup; no AionCore or package build is needed.
