@@ -10,7 +10,7 @@ The conversation row keeps its existing provider/assistant leading mark at norma
 - `ConversationRow.tsx` passes the existing leading mark as children plus the existing generation/confirmation/batch flags. No new runtime subscription, polling, state source, or AionCore change is required.
 - `ConversationBookmarkButton.tsx` translates only the rendered button; its 20px flow slot remains reserved. The translation follows `statusLayout`, not generation state, and reverses in RTL. Keep the real clickable button and tooltip at the visual location, preserving click propagation isolation.
 - Unpinned desktop bookmarks are revealed by row hover or `focus-visible`, not generic `focus`. Pointer pin/unpin leaves native button focus behind; that residual focus must not keep the star visible after the pointer leaves. Preserve keyboard Tab visibility without blurring the button, and keep pinned/mobile bookmarks always visible.
-- Confirmation takes precedence over generation: keep the identity and display the original attention icon in the adjacent status position instead of the spinner. Batch selection suppresses both decorations. Completion-unread dots and their existing priority remain unchanged.
+- Confirmation takes precedence over generation: keep the identity and display the original attention icon in the adjacent status position instead of the spinner. Batch selection suppresses both decorations. A completion-unread dot remains visible at the row's trailing edge while a newer turn is generating or awaiting confirmation, so every taskbar count has a matching sidebar marker.
 - Pinned identity fades on hover only when the desktop idle-row drag/pin overlay is actually available. Generating/waiting identity must not disappear on hover. Preserve idle drag-handle click isolation and normal row selection.
 
 ## For every upstream rebase
@@ -26,7 +26,7 @@ bun run test tests/unit/renderer/pages/GroupedHistory/conversationLeadingStatus.
 
 ## Failed turn visibility
 
-An unread terminal error uses a static danger-colored attention icon in the same adjacent slot, while keeping the provider identity visible. Confirmation and generation take precedence; batch mode hides the error decoration. Collapsed project headers aggregate unread failures before successful completions, after running children. The error icon has an accessible label and a tooltip with the provider reason; its inner span permits pointer events for the tooltip without blocking row selection.
+An unread terminal error uses a static danger-colored attention icon in the same adjacent slot, while keeping the provider identity visible. Confirmation and generation take precedence; batch mode hides the error decoration. Collapsed project headers retain that priority while overlaying a completion-unread dot when another child has an unread successful completion. The error icon has an accessible label and a tooltip with the provider reason; its inner span permits pointer events for the tooltip without blocking row selection.
 
 `utils/conversationFailure.ts` reconciles the last persisted result and stores per-turn read receipts in localStorage. Opening the conversation acknowledges the error; changing lists or reloading must not discard an unread failure or resurrect an acknowledged one. Late terminals must not clear a newer known turn. Native and browser notifications use the existing settings/focus gates, distinguish failure from success, deduplicate per conversation/turn, and navigate to the failed conversation.
 

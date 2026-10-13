@@ -8,6 +8,7 @@ import { getParentAndCurrentDir } from '@/renderer/utils/workspace/projectPathLa
 import { Spin } from '@arco-design/web-react';
 import React from 'react';
 import { Attention } from '@icon-park/react';
+import classNames from 'classnames';
 import { useTranslation } from 'react-i18next';
 
 import type { ProjectGroupIndicatorStatus } from '../utils/completionUnread';
@@ -40,33 +41,46 @@ const ProjectGroupHeader: React.FC<ProjectGroupHeaderProps> = ({
   branch,
   indicatorStatus = 'none',
   choiceConversationIds = [],
-}) => (
-  <span className='flex items-center flex-1 min-w-0 gap-8px'>
-    <span className='flex flex-col flex-1 min-w-0 leading-tight'>
-      <span className='text-14px font-[500] truncate text-t-primary'>
-        {getParentAndCurrentDir(workspace) || displayName}
+}) => {
+  const isGenerating = indicatorStatus === 'generating' || indicatorStatus === 'generating-completion-unread';
+  const hasFailure = indicatorStatus === 'failure-unread' || indicatorStatus === 'failure-completion-unread';
+  const hasCompletionUnread =
+    indicatorStatus === 'completion-unread' ||
+    indicatorStatus === 'generating-completion-unread' ||
+    indicatorStatus === 'failure-completion-unread';
+  const hasPrimaryStatus = isGenerating || hasFailure;
+
+  return (
+    <span className='flex items-center flex-1 min-w-0 gap-8px'>
+      <span className='flex flex-col flex-1 min-w-0 leading-tight'>
+        <span className='text-14px font-[500] truncate text-t-primary'>
+          {getParentAndCurrentDir(workspace) || displayName}
+        </span>
+        {branch && <span className='text-11px font-[400] truncate text-t-secondary'>({branch})</span>}
       </span>
-      {branch && <span className='text-11px font-[400] truncate text-t-secondary'>({branch})</span>}
+      <ProjectChoiceBadge conversationIds={choiceConversationIds} />
+      {isGenerating && (
+        <span
+          data-testid='project-generating'
+          aria-hidden='true'
+          className='absolute right-8px size-16px flex items-center justify-center shrink-0 group-hover:hidden'
+        >
+          <Spin size={16} />
+        </span>
+      )}
+      {hasFailure && <ProjectFailureMarker />}
+      {hasCompletionUnread && (
+        <span
+          data-testid='project-completion-unread'
+          aria-hidden='true'
+          className={classNames(
+            'absolute h-8px w-8px rounded-full bg-[var(--conversation-completion-unread)] shadow-[0_0_0_2px_var(--conversation-completion-unread-ring)] shrink-0 group-hover:hidden',
+            hasPrimaryStatus ? 'right-5px bottom-5px' : 'right-8px'
+          )}
+        />
+      )}
     </span>
-    <ProjectChoiceBadge conversationIds={choiceConversationIds} />
-    {indicatorStatus === 'generating' && (
-      <span
-        data-testid='project-generating'
-        aria-hidden='true'
-        className='absolute right-8px size-16px flex items-center justify-center shrink-0 group-hover:hidden'
-      >
-        <Spin size={16} />
-      </span>
-    )}
-    {indicatorStatus === 'failure-unread' && <ProjectFailureMarker />}
-    {indicatorStatus === 'completion-unread' && (
-      <span
-        data-testid='project-completion-unread'
-        aria-hidden='true'
-        className='absolute right-8px h-8px w-8px rounded-full bg-[var(--conversation-completion-unread)] shadow-[0_0_0_2px_var(--conversation-completion-unread-ring)] shrink-0 group-hover:hidden'
-      />
-    )}
-  </span>
-);
+  );
+};
 
 export default ProjectGroupHeader;

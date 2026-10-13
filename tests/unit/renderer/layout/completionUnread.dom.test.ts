@@ -84,7 +84,7 @@ describe('project completion unread state', () => {
 });
 
 describe('project aggregate indicator priority', () => {
-  it('shows a failed child before an ordinary unread completion', () => {
+  it('preserves an ordinary unread completion beside the higher-priority child state', () => {
     expect(
       resolveProjectGroupIndicatorStatus(
         false,
@@ -93,7 +93,7 @@ describe('project aggregate indicator priority', () => {
         () => true,
         () => true
       )
-    ).toBe('failure-unread');
+    ).toBe('failure-completion-unread');
     expect(
       resolveProjectGroupIndicatorStatus(
         false,
@@ -102,7 +102,7 @@ describe('project aggregate indicator priority', () => {
         () => true,
         () => true
       )
-    ).toBe('generating');
+    ).toBe('generating-completion-unread');
   });
   it('renders an accessible error marker on the collapsed project', () => {
     render(
@@ -117,7 +117,7 @@ describe('project aggregate indicator priority', () => {
   });
   const groupedConversations = [conversation('generating'), conversation('unread')];
 
-  it('prioritizes a generating child over an unread completion in a collapsed project', () => {
+  it('keeps a generating child and unread completion visible together in a collapsed project', () => {
     const status = resolveProjectGroupIndicatorStatus(
       false,
       groupedConversations,
@@ -125,7 +125,16 @@ describe('project aggregate indicator priority', () => {
       (id) => id === 'unread'
     );
 
-    expect(status).toBe('generating');
+    expect(status).toBe('generating-completion-unread');
+    render(
+      React.createElement(ProjectGroupHeader, {
+        workspace: 'D:/Project',
+        displayName: 'Project',
+        indicatorStatus: status,
+      })
+    );
+    expect(screen.getByTestId('project-generating')).toBeInTheDocument();
+    expect(screen.getByTestId('project-completion-unread')).toHaveClass('right-5px', 'bottom-5px');
   });
 
   it('shows the unread completion after no child is generating', () => {

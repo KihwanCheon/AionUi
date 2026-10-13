@@ -6,7 +6,13 @@
 
 import type { TChatConversation } from '@/common/config/storage';
 
-export type ProjectGroupIndicatorStatus = 'none' | 'generating' | 'completion-unread' | 'failure-unread';
+export type ProjectGroupIndicatorStatus =
+  | 'none'
+  | 'generating'
+  | 'completion-unread'
+  | 'failure-unread'
+  | 'generating-completion-unread'
+  | 'failure-completion-unread';
 
 export const isConversationWindowFocused = (): boolean => typeof document !== 'undefined' && document.hasFocus();
 
@@ -20,7 +26,7 @@ export const countVisibleCompletionUnread = (
 ): number =>
   conversations.reduce((total, conversation) => total + (completionUnreadIds.has(conversation.id) ? 1 : 0), 0);
 
-/** Resolve the single aggregate status shown while a project group is collapsed. */
+/** Resolve the aggregate statuses shown while a project group is collapsed. */
 export const resolveProjectGroupIndicatorStatus = (
   expanded: boolean,
   conversations: TChatConversation[],
@@ -29,9 +35,13 @@ export const resolveProjectGroupIndicatorStatus = (
   hasFailureUnread?: (conversationId: string) => boolean
 ): ProjectGroupIndicatorStatus => {
   if (expanded) return 'none';
-  if (conversations.some((conversation) => isGenerating(conversation.id))) return 'generating';
-  if (hasFailureUnread && conversations.some((conversation) => hasFailureUnread(conversation.id)))
-    return 'failure-unread';
-  if (conversations.some((conversation) => hasCompletionUnread(conversation.id))) return 'completion-unread';
+  const generating = conversations.some((conversation) => isGenerating(conversation.id));
+  const failureUnread = Boolean(
+    hasFailureUnread && conversations.some((conversation) => hasFailureUnread(conversation.id))
+  );
+  const completionUnread = conversations.some((conversation) => hasCompletionUnread(conversation.id));
+  if (generating) return completionUnread ? 'generating-completion-unread' : 'generating';
+  if (failureUnread) return completionUnread ? 'failure-completion-unread' : 'failure-unread';
+  if (completionUnread) return 'completion-unread';
   return 'none';
 };

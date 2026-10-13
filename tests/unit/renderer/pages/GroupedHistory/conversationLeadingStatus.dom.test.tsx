@@ -69,6 +69,7 @@ const makeProps = (overrides: Partial<ConversationRowProps> = {}): ConversationR
 
 const indicatorId = 'conversation-generating-indicator-activity-row';
 const waitingId = 'conversation-waiting-confirmation-activity-row';
+const completionUnreadId = 'conversation-completion-unread-activity-row';
 
 describe('conversation identity with activity decorations', () => {
   it('keeps the provider identity beside an accessible unread failure', () => {
@@ -115,6 +116,16 @@ describe('conversation identity with activity decorations', () => {
     expect(slot).toHaveClass('size-22px', 'relative');
     expect(slot).toContainElement(screen.getByRole('img', { name: backend }));
     expect(slot).toContainElement(screen.getByTestId(indicatorId));
+  });
+
+  it.each([
+    { isGenerating: true, statusId: indicatorId },
+    { isWaitingConfirmation: true, statusId: waitingId },
+  ])('keeps the completion unread dot visible beside an active status: %o', ({ statusId, ...state }) => {
+    render(<ConversationRow {...makeProps({ hasUnread: true, ...state })} />);
+
+    expect(screen.getByTestId(statusId)).toBeInTheDocument();
+    expect(screen.getByTestId(completionUnreadId)).toBeInTheDocument();
   });
 
   it('keeps the logo mounted through generation, confirmation, and completion', () => {
