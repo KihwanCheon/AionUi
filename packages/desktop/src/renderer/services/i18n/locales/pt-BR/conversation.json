@@ -1,8 +1,10 @@
 {
   "userChoiceNotifications": {
-    "title": "Escolha do usuário necessária",
-    "label": "Conversas aguardando sua escolha: {{count}}",
-    "empty": "Nenhuma notificação precisa da sua escolha.",
+    "title": "Atenção do usuário necessária",
+    "label": "Conversas que precisam de atenção: {{count}}",
+    "empty": "Nenhuma notificação precisa da sua atenção.",
+    "choiceRequired": "Escolha do usuário necessária",
+    "unreadFailure": "Erro não lido",
     "dismiss": "Dispensar notificação",
     "questionPending": "Recebendo a pergunta…"
   },

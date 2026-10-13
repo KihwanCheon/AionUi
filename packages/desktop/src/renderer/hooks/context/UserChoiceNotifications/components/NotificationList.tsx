@@ -3,7 +3,7 @@ import { Button } from '@arco-design/web-react';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getSnapshotConversationName } from '@renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync';
-import type { ChoiceNotice } from '../store';
+import type { AttentionNotice } from '../useAttentionNotifications';
 import styles from './notifications.module.css';
 
 export default function NotificationList({
@@ -11,9 +11,9 @@ export default function NotificationList({
   onOpen,
   onDismiss,
 }: {
-  notices: readonly ChoiceNotice[];
-  onOpen: (notice: ChoiceNotice) => void;
-  onDismiss: (key: string) => void;
+  notices: readonly AttentionNotice[];
+  onOpen: (notice: AttentionNotice) => void;
+  onDismiss: (notice: AttentionNotice) => void;
 }) {
   const { t } = useTranslation();
   const [names, setNames] = useState<Record<string, string>>({});
@@ -44,16 +44,28 @@ export default function NotificationList({
         .map((notice) => (
           <div className={styles.item} key={notice.key}>
             <Button type='text' className={styles.open} onClick={() => onOpen(notice)}>
+              <span className={notice.kind === 'failure' ? 'text-danger text-12px' : 'text-warning text-12px'}>
+                {t(
+                  notice.kind === 'failure'
+                    ? 'conversation.userChoiceNotifications.unreadFailure'
+                    : 'conversation.userChoiceNotifications.choiceRequired'
+                )}
+              </span>
               <span className={styles.name}>
                 {getSnapshotConversationName(notice.conversationId) ||
                   names[notice.conversationId] ||
                   t('conversation.welcome.newConversation')}
               </span>
               <span className={styles.preview}>
-                {notice.preview || t('conversation.userChoiceNotifications.questionPending')}
+                {notice.preview ||
+                  t(
+                    notice.kind === 'failure'
+                      ? 'conversation.history.responseFailed'
+                      : 'conversation.userChoiceNotifications.questionPending'
+                  )}
               </span>
             </Button>
-            <Button type='text' size='small' onClick={() => onDismiss(notice.key)}>
+            <Button type='text' size='small' onClick={() => onDismiss(notice)}>
               {t('conversation.userChoiceNotifications.dismiss')}
             </Button>
           </div>

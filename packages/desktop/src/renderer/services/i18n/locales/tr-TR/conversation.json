@@ -1,8 +1,10 @@
 {
   "userChoiceNotifications": {
-    "title": "Kullanıcı seçimi gerekli",
-    "label": "Seçiminizi bekleyen konuşmalar: {{count}}",
-    "empty": "Seçiminizi bekleyen bildirim yok.",
+    "title": "Kullanıcı kontrolü gerekli",
+    "label": "Kontrolünüzü bekleyen konuşmalar: {{count}}",
+    "empty": "Kontrolünüzü bekleyen bildirim yok.",
+    "choiceRequired": "Kullanıcı seçimi gerekli",
+    "unreadFailure": "Okunmamış hata",
     "dismiss": "Bildirimi kaldır",
     "questionPending": "Soru alınıyor…"
   },

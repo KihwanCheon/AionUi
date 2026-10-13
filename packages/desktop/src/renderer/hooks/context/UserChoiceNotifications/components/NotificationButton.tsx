@@ -4,13 +4,12 @@ import { useLayoutContext } from '@renderer/hooks/context/LayoutContext';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { useUserChoiceNotifications } from '..';
-import type { ChoiceNotice } from '../store';
+import { useAttentionNotifications, type AttentionNotice } from '../useAttentionNotifications';
 import NotificationList from './NotificationList';
 import styles from './notifications.module.css';
 
 export default function UserChoiceNotificationButton() {
-  const { notices, dismiss } = useUserChoiceNotifications();
+  const { notices, dismiss, acknowledge } = useAttentionNotifications();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const layout = useLayoutContext();
@@ -18,10 +17,16 @@ export default function UserChoiceNotificationButton() {
   const count = new Set(notices.map((notice) => notice.conversationId)).size;
   const label = t('conversation.userChoiceNotifications.label', { count });
   const phone = Boolean(layout?.isMobile && window.innerWidth < 768);
-  const onOpen = (notice: ChoiceNotice) => {
+  const onOpen = (notice: AttentionNotice) => {
     setOpen(false);
-    // Existing message-anchor navigation also supports same-route clicks.
-    void navigate(`/conversation/${notice.conversationId}`, { state: { targetMessageId: notice.messageId } });
+    if (notice.kind === 'failure') {
+      // Opening an error is a read receipt, never an approval or retry.
+      acknowledge(notice.conversationId);
+      void navigate(`/conversation/${notice.conversationId}`);
+    } else {
+      // Existing message-anchor navigation also supports same-route clicks.
+      void navigate(`/conversation/${notice.conversationId}`, { state: { targetMessageId: notice.messageId } });
+    }
   };
   const trigger = (
     <Button

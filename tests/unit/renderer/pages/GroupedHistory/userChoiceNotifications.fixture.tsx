@@ -21,6 +21,7 @@ import { createChoiceNoticeStore } from '@/renderer/hooks/context/UserChoiceNoti
 import { USER_CHOICE_MARKER } from '@/renderer/hooks/context/UserChoiceNotifications/protocol';
 import ConversationRow from '@/renderer/pages/conversation/GroupedHistory/ConversationRow';
 import type { ConversationRowProps } from '@/renderer/pages/conversation/GroupedHistory/types';
+import { useUnreadConversationFailures } from '@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync';
 import ProjectGroupHeader from '@/renderer/pages/conversation/GroupedHistory/components/ProjectGroupHeader';
 import { applyTheme } from '@/renderer/utils/theme/applyTheme';
 import { BUILTIN_THEMES } from '@/renderer/theme/builtinThemes';
@@ -31,6 +32,9 @@ await i18next.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 ipcBridge.conversation.responseStream.on = () => () => {};
+ipcBridge.conversation.listChanged.on = () => () => {};
+ipcBridge.conversation.turnCompleted.on = () => () => {};
+ipcBridge.conversation.confirmation.remove.on = () => () => {};
 const conversations = ['conversation-a', 'conversation-b'].map(
   (id, index) =>
     ({
@@ -39,11 +43,27 @@ const conversations = ['conversation-a', 'conversation-b'].map(
       type: 'acp',
       created_at: 1,
       modified_at: 1,
-      extra: { backend: index ? 'claude' : 'codex', isPinned: true },
+      extra: {
+        backend: index ? 'claude' : 'codex',
+        isPinned: true,
+        ...(index === 0 && {
+          last_turn_result: {
+            turn_id: 'failed-turn',
+            status: 'error',
+            completed_at: Date.now(),
+            error: 'AI 서버가 일시적으로 요청을 처리할 수 없습니다.',
+          },
+        }),
+      },
       model: {},
     }) as TChatConversation
 );
 ipcBridge.conversation.get.invoke = async ({ id }) => conversations.find((item) => item.id === id)!;
+ipcBridge.database.getUserConversations.invoke = async () => ({
+  items: conversations,
+  total: conversations.length,
+  has_more: false,
+});
 const store = createChoiceNoticeStore(localStorage, 'isolated-choice-notification-fixture');
 for (const conversation of conversations) {
   store.consume({
@@ -81,6 +101,7 @@ const rowProps = (conversation: TChatConversation): ConversationRowProps => ({
 function Fixture() {
   const location = useLocation();
   const { notices } = useUserChoiceNotifications();
+  const { failures } = useUnreadConversationFailures();
   const state = location.state as { targetMessageId?: string } | null;
   return (
     <div className='bg-1 text-t-primary min-h-screen p-16px'>
@@ -102,6 +123,7 @@ function Fixture() {
         </div>
       </div>
       <output data-testid='fixture-pending'>{notices.length}</output>
+      <output data-testid='fixture-failures'>{failures.size}</output>
       <output data-testid='fixture-navigation' data-path={location.pathname} data-message={state?.targetMessageId} />
     </div>
   );

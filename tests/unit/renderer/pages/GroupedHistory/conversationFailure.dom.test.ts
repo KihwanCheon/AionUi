@@ -3,12 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TChatConversation } from '@/common/config/storage';
 import { createConversationFailureTracker } from '@/renderer/pages/conversation/GroupedHistory/utils/conversationFailure';
 
-const mock = vi.hoisted(() => ({ events: new Map<string, (event: unknown) => void>(), list: vi.fn(), log: vi.fn() }));
+const mock = vi.hoisted(() => ({
+  events: new Map<string, (event: unknown) => void>(),
+  list: vi.fn(),
+  log: vi.fn(),
+  streamSubscriptions: 0,
+}));
 vi.mock('@/renderer/utils/emitter', () => ({
   addEventListener: (name: string, cb: (event: unknown) => void) => mock.events.set(name, cb),
 }));
 vi.mock('@/common', () => {
-  const on = (name: string) => (cb: (event: unknown) => void) => mock.events.set(name, cb);
+  const on = (name: string) => (cb: (event: unknown) => void) => {
+    if (name === 'stream') mock.streamSubscriptions++;
+    mock.events.set(name, cb);
+  };
   return {
     ipcBridge: {
       database: { getUserConversations: { invoke: mock.list } },
@@ -39,10 +47,13 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 const emit = (name: string, event: unknown) => act(() => mock.events.get(name)?.(event));
 let removeListeners = () => {};
 const mount = async () => {
-  const { useConversationListSync } =
+  const { useConversationListSync, useUnreadConversationFailures } =
     await import('@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync');
   const add = vi.spyOn(window, 'addEventListener');
-  const view = renderHook(() => useConversationListSync());
+  const view = renderHook(() => ({
+    ...useConversationListSync(),
+    failureNotifications: useUnreadConversationFailures(),
+  }));
   const listeners = add.mock.calls.filter(([name]) => name === 'focus');
   removeListeners = () => listeners.forEach(([name, cb, options]) => window.removeEventListener(name, cb, options));
   await act(flush);
@@ -53,6 +64,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   mock.events.clear();
+  mock.streamSubscriptions = 0;
   mock.list.mockResolvedValue({ items: [] });
   mock.log.mockResolvedValue(undefined);
   vi.spyOn(document, 'hasFocus').mockReturnValue(false);
@@ -168,5 +180,41 @@ describe('sidebar failure event wiring', () => {
     emit('list', { conversation_id: 'conversation', action: 'updated' });
     await act(flush);
     expect(result.current.hasFailureUnread('conversation')).toBe(false);
+  });
+
+  it('shares live error state with the notification selector even before the conversation list loads', async () => {
+    const { result } = await mount();
+    stream('error');
+    expect(result.current.failureNotifications.failures.get('conversation')?.message).toBe(reason);
+    expect(mock.streamSubscriptions).toBe(1);
+  });
+
+  it('clears notification items when the sidebar acknowledges the failure', async () => {
+    mock.list.mockResolvedValue({ items: [failedConversation()] });
+    const { result } = await mount();
+    expect(result.current.failureNotifications.failures.size).toBe(1);
+    act(() => result.current.clearCompletionUnread('conversation'));
+    expect(result.current.failureNotifications.failures.size).toBe(0);
+  });
+
+  it('keeps a notification-dismissed failure read in the sidebar and after reconciliation', async () => {
+    mock.list.mockResolvedValue({ items: [failedConversation()] });
+    const { result } = await mount();
+    act(() => result.current.failureNotifications.acknowledge('conversation'));
+    emit('list', { conversation_id: 'conversation', action: 'updated' });
+    await act(flush);
+    expect(result.current.hasFailureUnread('conversation')).toBe(false);
+    expect(result.current.failureNotifications.failures.size).toBe(0);
+  });
+
+  it('does not recreate an unread failure on duplicate terminals or publish new failure snapshots for ordinary text', async () => {
+    const { result } = await mount();
+    const empty = result.current.failureNotifications.failures;
+    stream('content');
+    expect(result.current.failureNotifications.failures).toBe(empty);
+    stream('error');
+    act(() => result.current.failureNotifications.acknowledge('conversation'));
+    stream('error');
+    expect(result.current.failureNotifications.failures.size).toBe(0);
   });
 });

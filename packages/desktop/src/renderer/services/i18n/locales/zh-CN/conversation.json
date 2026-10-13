@@ -1,8 +1,10 @@
 {
   "userChoiceNotifications": {
-    "title": "需要用户选择",
-    "label": "需要您选择的对话：{{count}}",
-    "empty": "没有需要您选择的通知。",
+    "title": "需要用户确认",
+    "label": "需要您确认的对话：{{count}}",
+    "empty": "没有需要您确认的通知。",
+    "choiceRequired": "需要用户选择",
+    "unreadFailure": "未读错误",
     "dismiss": "清除通知",
     "questionPending": "正在接收问题…"
   },

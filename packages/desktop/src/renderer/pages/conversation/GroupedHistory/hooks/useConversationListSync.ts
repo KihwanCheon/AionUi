@@ -819,3 +819,18 @@ export const useConversationListSync = () => {
     setActiveConversation,
   };
 };
+
+const getUnreadFailureSnapshot = () => failureTracker.getSnapshot();
+
+/** Reuse sidebar read receipts without a second event listener or notification store. */
+export const useUnreadConversationFailures = () => {
+  useEffect(() => {
+    initializeConversationListSyncStore();
+  }, []);
+  const failures = useSyncExternalStore(
+    subscribeConversationListSync,
+    getUnreadFailureSnapshot,
+    getUnreadFailureSnapshot
+  );
+  return { failures, acknowledge: failureTracker.read };
+};

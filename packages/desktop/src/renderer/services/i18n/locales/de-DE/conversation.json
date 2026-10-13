@@ -1,8 +1,10 @@
 {
   "userChoiceNotifications": {
-    "title": "Benutzerauswahl erforderlich",
-    "label": "Gespräche, die Ihre Auswahl benötigen: {{count}}",
-    "empty": "Keine Benachrichtigungen benötigen Ihre Auswahl.",
+    "title": "Benutzeraufmerksamkeit erforderlich",
+    "label": "Gespräche, die Aufmerksamkeit benötigen: {{count}}",
+    "empty": "Keine Benachrichtigungen benötigen Ihre Aufmerksamkeit.",
+    "choiceRequired": "Benutzerauswahl erforderlich",
+    "unreadFailure": "Ungelesener Fehler",
     "dismiss": "Benachrichtigung verwerfen",
     "questionPending": "Frage wird empfangen…"
   },

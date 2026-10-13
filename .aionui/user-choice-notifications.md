@@ -5,9 +5,10 @@ Feature ID: `prose-user-choice-notifications`. Preserve this behavior across rep
 ## User-visible contract
 
 - A real prose question requiring a user choice is accompanied by a standalone `[[AIONUI_USER_CHOICE_REQUIRED]]` line. Arbitrary question wording is not classified heuristically.
-- The global titlebar bell counts conversations with notifications, independent of the selected conversation, bookmarks, history period filters, or collapsed sidebar. Desktop/tablets use a popup; narrow phones use a bottom sheet.
-- Selecting an entry opens its originating conversation and navigates to its persisted message anchor using the existing chat message-jump mechanism. It does not dismiss the notification or add composer focus behavior.
-- Only the user's explicit **Dismiss notification** action removes an entry. Opening, sending a reply, finishing/interruption, or any AI resolution marker never clears it. Dismissal is not an approval, reply, or command to an AI.
+- The global titlebar bell is labeled **User attention needed** and combines prose questions with unread terminal errors. It counts distinct conversations across both sources, independent of bookmarks, history period filters, or collapsed sidebar. Both types remain separate entries when they belong to the same conversation. Desktop/tablets use a popup; narrow phones use a bottom sheet.
+- Selecting a question entry opens its originating conversation and navigates to its persisted message anchor using the existing chat message-jump mechanism. It does not dismiss the question or add composer focus behavior.
+- Only the user's explicit **Dismiss notification** action removes a question entry. Opening, sending a reply, finishing/interruption, or any AI resolution marker never clears it. Dismissal is not an approval, reply, or command to an AI.
+- Error entries show their provider reason (or the existing error fallback), open the failed conversation, and acknowledge the same per-turn read receipt as the sidebar. Dismissing an error also acknowledges that receipt. Reading an error never dismisses an independent question or retries/approves an AI action. Sidebar reads and notifications stay synchronized, including reload recovery; do not duplicate failure state in the choice store.
 - Dismissal tombstones survive reloads and suppress replay/replacement of the same question. Notification and dismissal persistence are local to the browser/device and scoped by the backend user ID; there is no cross-device dismissal synchronization.
 - The conversation's separate warning badge coexists with its original provider identity, spinner, and bookmark. A collapsed project group shows a warning alongside its existing aggregate status. Both All and Bookmarks supply their collapsed group members. Titles may truncate to reserve right-side space; left-side geometry stays unchanged.
 - Only visible assistant text is inspected. User messages, thinking, tool output, hidden messages, teammate content, quoted/inline/indented/fenced examples do not register notifications. The same message's streamed fragments share stable notification keys; multiple markers remain independently dismissible.
@@ -28,11 +29,12 @@ The instruction preserves authority boundaries: unanswered choices do not author
 5. Keep the same outbound prompt guidance at normal and mid-turn send boundaries if AionCore reorganizes dispatch. Verify slash commands and persisted message content against the then-current implementation.
 6. Preserve stable conversation/message/marker-index keys and user-scoped local persistence. Do not replace manual dismissal with unread-clearing logic.
 7. Keep localization keys in every supported locale and regenerate i18n types.
+8. Preserve `useAttentionNotifications`' presentation-only combination and the `useUnreadConversationFailures` selector on the existing history store. Reconnect this small seam if upstream moves failure tracking. Both sources have distinct lifecycle and storage policies: never replace manually dismissed questions with automatically read failures or add another error-stream listener/polling loop.
 
 ## Focused verification
 
 ```powershell
-bun run test tests/unit/renderer/pages/GroupedHistory/userChoiceNotifications.test.ts tests/unit/renderer/pages/GroupedHistory/userChoiceNotifications.dom.test.tsx tests/unit/renderer/pages/GroupedHistory/conversationLeadingStatus.dom.test.tsx tests/unit/renderer/pages/GroupedHistory/conversationBookmarkButton.dom.test.tsx tests/unit/renderer/layout/TitlebarWorkspaceToggle.dom.test.tsx tests/unit/renderer/layout/completionUnread.dom.test.ts
+bun run test tests/unit/renderer/pages/GroupedHistory/userChoiceNotifications.test.ts tests/unit/renderer/pages/GroupedHistory/userChoiceNotifications.dom.test.tsx tests/unit/renderer/pages/GroupedHistory/conversationFailure.dom.test.ts tests/unit/renderer/pages/GroupedHistory/conversationLeadingStatus.dom.test.tsx tests/unit/renderer/pages/GroupedHistory/conversationBookmarkButton.dom.test.tsx tests/unit/renderer/layout/TitlebarWorkspaceToggle.dom.test.tsx tests/unit/renderer/layout/completionUnread.dom.test.ts
 ```
 
 For AionCore run `cargo test -p aionui-ai-agent user_choice_notice --lib`. Verify the emitted prompt contract through the `AgentInstance` boundary; do not claim model/CLI compliance from synthetic fixtures alone. For visual verification, use an isolated browser fixture to check desktop popup, tablet placement, phone sheet, warning/spinner co-visibility, right-side hover-menu separation, and local restoration.

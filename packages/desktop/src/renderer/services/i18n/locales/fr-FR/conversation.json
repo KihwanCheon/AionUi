@@ -1,8 +1,10 @@
 {
   "userChoiceNotifications": {
-    "title": "Choix utilisateur requis",
-    "label": "Conversations nécessitant votre choix : {{count}}",
-    "empty": "Aucune notification ne nécessite votre choix.",
+    "title": "Vérification utilisateur requise",
+    "label": "Conversations nécessitant votre attention : {{count}}",
+    "empty": "Aucune notification ne nécessite votre attention.",
+    "choiceRequired": "Choix utilisateur requis",
+    "unreadFailure": "Erreur non lue",
     "dismiss": "Fermer la notification",
     "questionPending": "Réception de la question…"
   },

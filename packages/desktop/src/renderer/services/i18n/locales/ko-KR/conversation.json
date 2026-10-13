@@ -1,8 +1,10 @@
 {
   "userChoiceNotifications": {
-    "title": "사용자 선택 필요",
-    "label": "선택이 필요한 대화 {{count}}개",
-    "empty": "선택이 필요한 알림이 없습니다.",
+    "title": "사용자 확인 필요",
+    "label": "확인이 필요한 대화 {{count}}개",
+    "empty": "확인이 필요한 알림이 없습니다.",
+    "choiceRequired": "사용자 선택 필요",
+    "unreadFailure": "미확인 오류",
     "dismiss": "알림 해제",
     "questionPending": "질문을 수신 중입니다."
   },

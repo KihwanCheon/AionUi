@@ -1,8 +1,10 @@
 {
   "userChoiceNotifications": {
-    "title": "User choice needed",
-    "label": "Conversations needing your choice: {{count}}",
-    "empty": "No notifications need your choice.",
+    "title": "User attention needed",
+    "label": "Conversations needing attention: {{count}}",
+    "empty": "No notifications need your attention.",
+    "choiceRequired": "User choice needed",
+    "unreadFailure": "Unread error",
     "dismiss": "Dismiss notification",
     "questionPending": "Receiving the question…"
   },

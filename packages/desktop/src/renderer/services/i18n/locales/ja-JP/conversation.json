@@ -1,8 +1,10 @@
 {
   "userChoiceNotifications": {
-    "title": "ユーザーの選択が必要",
-    "label": "選択が必要な会話：{{count}}",
-    "empty": "選択が必要な通知はありません。",
+    "title": "ユーザーの確認が必要",
+    "label": "確認が必要な会話：{{count}}",
+    "empty": "確認が必要な通知はありません。",
+    "choiceRequired": "ユーザーの選択が必要",
+    "unreadFailure": "未確認のエラー",
     "dismiss": "通知を解除",
     "questionPending": "質問を受信中…"
   },
