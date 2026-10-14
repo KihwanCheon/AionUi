@@ -269,6 +269,33 @@ export const auth = {
 // Conversation — REST + WS
 // ---------------------------------------------------------------------------
 
+type ApiChoiceNotice = {
+  key: string;
+  conversation_id: string;
+  message_id: string;
+  marker_index: number;
+  preview: string;
+  created_at: number;
+};
+
+export type IChoiceNotice = {
+  key: string;
+  conversationId: string;
+  messageId: string;
+  markerIndex: number;
+  preview: string;
+  createdAt: number;
+};
+
+const fromApiChoiceNotice = (notice: ApiChoiceNotice): IChoiceNotice => ({
+  key: notice.key,
+  conversationId: notice.conversation_id,
+  messageId: notice.message_id,
+  markerIndex: notice.marker_index,
+  preview: notice.preview,
+  createdAt: notice.created_at,
+});
+
 export const conversation = {
   create: withResponseMap(
     httpPost<TChatConversation, ICreateConversationParams>('/api/conversations', (p) => buildCreateConversationBody(p)),
@@ -442,6 +469,36 @@ export const conversation = {
     (p) => `/api/conversations/${p.conversation_id}/artifacts/${p.artifact_id}`,
     (p) => ({ status: p.status })
   ),
+  listChoiceNotices: withResponseMap(httpGet<ApiChoiceNotice[], void>('/api/choice-notifications'), (list) =>
+    list.map(fromApiChoiceNotice)
+  ),
+  registerChoiceNotice: withResponseMap(
+    httpPost<ApiChoiceNotice[], IChoiceNotice>('/api/choice-notifications', (notice) => ({
+      conversation_id: notice.conversationId,
+      message_id: notice.messageId,
+      marker_index: notice.markerIndex,
+      preview: notice.preview,
+      created_at: notice.createdAt,
+    })),
+    (list) => list.map(fromApiChoiceNotice)
+  ),
+  dismissChoiceNotice: withResponseMap(
+    httpPost<ApiChoiceNotice[], IChoiceNotice>('/api/choice-notifications/dismiss', (notice) => ({
+      conversation_id: notice.conversationId,
+      message_id: notice.messageId,
+      marker_index: notice.markerIndex,
+      preview: notice.preview,
+      created_at: notice.createdAt,
+    })),
+    (list) => list.map(fromApiChoiceNotice)
+  ),
+  choiceNoticesChanged: wsMappedEmitter<{ user_id: string; items: IChoiceNotice[] }>(
+    'conversation.choiceNoticesChanged',
+    (raw) => {
+      const payload = raw as { user_id: string; items: ApiChoiceNotice[] };
+      return { user_id: payload.user_id, items: payload.items.map(fromApiChoiceNotice) };
+    }
+  ),
   responseStream: wsEmitter<IResponseMessage>('message.stream'),
   userCreated: wsEmitter<{
     conversation_id: string;
@@ -453,6 +510,8 @@ export const conversation = {
     client_msg_id?: string;
     content: string;
     position: 'right';
+    /** Distinguishes an actual send from a programmatic visible agent turn. */
+    source?: 'user' | 'agent_turn';
     /** 'pending' for a message delivered mid-turn that the agent hasn't
      * consumed yet (see `message.statusChanged`); 'finish' otherwise. */
     status: 'finish' | 'pending';

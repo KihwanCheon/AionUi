@@ -8,13 +8,28 @@ const state = vi.hoisted(() => ({
   navigate: vi.fn(),
   mobile: false,
   onStream: vi.fn(),
+  onUserCreated: vi.fn(),
+  onChoiceNoticesChanged: vi.fn(),
+  listChoiceNotices: vi.fn(),
+  registerChoiceNotice: vi.fn(),
+  dismissChoiceNotice: vi.fn(),
   getConversation: vi.fn().mockResolvedValue({ name: 'Conversation A' }),
   lookupName: vi.fn(),
   failures: new Map<string, ConversationFailure>(),
   acknowledge: vi.fn(),
 }));
 vi.mock('@/common', () => ({
-  ipcBridge: { conversation: { responseStream: { on: state.onStream }, get: { invoke: state.getConversation } } },
+  ipcBridge: {
+    conversation: {
+      responseStream: { on: state.onStream },
+      userCreated: { on: state.onUserCreated },
+      choiceNoticesChanged: { on: state.onChoiceNoticesChanged },
+      listChoiceNotices: { invoke: state.listChoiceNotices },
+      registerChoiceNotice: { invoke: state.registerChoiceNotice },
+      dismissChoiceNotice: { invoke: state.dismissChoiceNotice },
+      get: { invoke: state.getConversation },
+    },
+  },
 }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => state.navigate }));
 vi.mock('react-i18next', () => ({
@@ -39,11 +54,15 @@ import { USER_CHOICE_MARKER } from '@/renderer/hooks/context/UserChoiceNotificat
 import ProjectGroupHeader from '@/renderer/pages/conversation/GroupedHistory/components/ProjectGroupHeader';
 import ConversationLeadingStatus from '@/renderer/pages/conversation/GroupedHistory/components/ConversationLeadingStatus';
 
-const frame = (conversationId = 'conversation-a', messageId = 'message-a'): IResponseMessage => ({
+const frame = (
+  conversationId = 'conversation-a',
+  messageId = 'message-a',
+  preview = '재시작해도 될까요?'
+): IResponseMessage => ({
   type: 'content',
   conversation_id: conversationId,
   msg_id: messageId,
-  data: `${USER_CHOICE_MARKER}\n재시작해도 될까요?\n`,
+  data: `${USER_CHOICE_MARKER}\n${preview}\n`,
 });
 const setup = (content?: React.ReactNode, withQuestion = true) => {
   const store = createChoiceNoticeStore();
@@ -60,12 +79,20 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.mobile = false;
   state.onStream.mockReturnValue(vi.fn());
+  state.onUserCreated.mockReturnValue(vi.fn());
+  state.onChoiceNoticesChanged.mockReturnValue(vi.fn());
+  state.listChoiceNotices.mockResolvedValue([]);
+  state.registerChoiceNotice.mockResolvedValue([]);
+  state.dismissChoiceNotice.mockResolvedValue([]);
   state.lookupName.mockReturnValue('Conversation A');
   state.getConversation.mockResolvedValue({ name: 'Conversation A' });
   state.failures = new Map();
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe('in-app attention notification UI', () => {
   it('opens the originating conversation and question without dismissing it', async () => {
@@ -78,15 +105,74 @@ describe('in-app attention notification UI', () => {
     expect(store.getSnapshot()).toHaveLength(1);
   });
 
-  it('counts conversations rather than individual questions and clears only by dismissal', async () => {
+  it('counts conversations rather than individual questions and dismisses only the selected question', async () => {
     const store = setup();
-    act(() => store.consume(frame('conversation-a', 'message-b')));
+    act(() => store.consume(frame('conversation-a', 'message-b', '배포해도 될까요?')));
     expect(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));
     const buttons = await screen.findAllByRole('button', { name: 'conversation.userChoiceNotifications.dismiss' });
     fireEvent.click(buttons[0]);
     expect(store.getSnapshot()).toHaveLength(1);
     expect(state.navigate).not.toHaveBeenCalled();
+  });
+
+  it('clears existing choices only when a visible user send is created', () => {
+    const store = setup(<ConversationChoiceBadge conversationId='conversation-a' />);
+    const callback = state.onUserCreated.mock.calls[0][0] as (message: {
+      conversation_id: string;
+      hidden: boolean;
+      source: 'user' | 'agent_turn';
+    }) => void;
+
+    act(() => callback({ conversation_id: 'conversation-a', hidden: false, source: 'agent_turn' }));
+    expect(store.getSnapshot()).toHaveLength(1);
+    act(() => callback({ conversation_id: 'conversation-a', hidden: true, source: 'user' }));
+    expect(store.getSnapshot()).toHaveLength(1);
+    act(() => callback({ conversation_id: 'conversation-a', hidden: false, source: 'user' }));
+    expect(store.getSnapshot()).toHaveLength(0);
+  });
+
+  it('replaces the local list when another device changes the server snapshot', () => {
+    const store = setup(<ConversationChoiceBadge conversationId='conversation-b' />);
+    const callback = state.onChoiceNoticesChanged.mock.calls[0][0] as (event: {
+      user_id: string;
+      items: ReturnType<typeof store.getSnapshot>;
+    }) => void;
+    const remote = createChoiceNoticeStore();
+    remote.consume(frame('conversation-b', 'message-b', '배포해도 될까요?'));
+
+    act(() => callback({ user_id: 'user-a', items: remote.getSnapshot() }));
+    expect(store.getSnapshot().map((item) => item.conversationId)).toEqual(['conversation-b']);
+    expect(screen.getByTestId('conversation-choice-conversation-b')).toBeInTheDocument();
+  });
+
+  it('loads the shared server snapshot when a device opens the app', async () => {
+    const remote = createChoiceNoticeStore();
+    remote.consume(frame('conversation-b', 'message-b', '배포해도 될까요?'));
+    state.listChoiceNotices.mockResolvedValue(remote.getSnapshot());
+    render(
+      <UserChoiceNotificationsProvider>
+        <ConversationChoiceBadge conversationId='conversation-b' />
+      </UserChoiceNotificationsProvider>
+    );
+
+    expect(await screen.findByTestId('conversation-choice-conversation-b')).toBeInTheDocument();
+    expect(state.listChoiceNotices).toHaveBeenCalledOnce();
+  });
+
+  it('cancels a pending registration when the notice is dismissed immediately', async () => {
+    vi.useFakeTimers();
+    const store = setup(undefined, false);
+    const callback = state.onStream.mock.calls[0][0] as (message: IResponseMessage) => void;
+    act(() => callback(frame()));
+    const notice = store.getSnapshot()[0];
+
+    act(() => store.dismiss(notice.key));
+    await act(async () => vi.runAllTimersAsync());
+
+    expect(state.registerChoiceNotice).not.toHaveBeenCalled();
+    expect(state.dismissChoiceNotice).toHaveBeenCalledWith(notice);
+    vi.useRealTimers();
   });
 
   it('keeps the AI identity, running spinner and independent choice badge together', () => {

@@ -1,18 +1,13 @@
-import type { IResponseMessage } from '@/common/adapter/ipcBridge';
+import type { IChoiceNotice, IResponseMessage } from '@/common/adapter/ipcBridge';
 import { normalizeTextMessageContent } from '@/common/chat/chatLib';
 import { ChoiceSignalParser } from './protocol';
 
-export type ChoiceNotice = {
-  key: string;
-  conversationId: string;
-  messageId: string;
-  markerIndex: number;
-  preview: string;
-  createdAt: number;
-};
+export type ChoiceNotice = IChoiceNotice;
 
-type SavedChoices = { pending: ChoiceNotice[]; dismissed: string[] };
-type Persistence = Pick<Storage, 'getItem' | 'setItem'>;
+type SyncHandlers = {
+  upsert: (notice: ChoiceNotice) => void;
+  dismiss: (notice: ChoiceNotice) => void;
+};
 
 export const choiceNoticeKey = (conversationId: string, messageId: string, index: number): string =>
   JSON.stringify([conversationId, messageId, index]);
@@ -33,53 +28,50 @@ const isNotice = (value: unknown): value is ChoiceNotice => {
   );
 };
 
-/** Dismissal is a durable tombstone, not a transient read/turn-completion flag. */
-export const createChoiceNoticeStore = (initialPersistence?: Persistence, initialStorageKey = '') => {
-  let persistence = initialPersistence;
-  let storageKey = initialStorageKey;
+const normalizedPreview = (preview: string): string => preview.trim().replace(/\s+/g, ' ');
+
+/** Local mirror of the server-owned choice-notification snapshot. */
+export const createChoiceNoticeStore = () => {
   let pending: ChoiceNotice[] = [];
-  const dismissed = new Set<string>();
+  const suppressed = new Map<string, ChoiceNotice>();
+  const staged = new Map<string, ChoiceNotice>();
   const listeners = new Set<() => void>();
   const parsers = new Map<string, { conversationId: string; parser: ChoiceSignalParser }>();
-  let persistenceWarningReported = false;
-  const restore = () => {
-    try {
-      const raw: unknown = JSON.parse(persistence?.getItem(storageKey) || 'null');
-      if (raw && typeof raw === 'object') {
-        const saved = raw as Partial<SavedChoices>;
-        if (Array.isArray(saved.dismissed)) {
-          for (const key of saved.dismissed) if (typeof key === 'string') dismissed.add(key);
-        }
-        if (Array.isArray(saved.pending)) {
-          const merged = new Map([...saved.pending.filter(isNotice), ...pending].map((notice) => [notice.key, notice]));
-          pending = [...merged.values()].filter((notice) => !dismissed.has(notice.key));
-        }
-      }
-    } catch {
-      console.warn('[ChoiceNotifications] Could not restore local notification state');
-    }
-  };
-  restore();
+  let syncHandlers: SyncHandlers | undefined;
 
   const publish = () => {
-    try {
-      persistence?.setItem(storageKey, JSON.stringify({ pending, dismissed: [...dismissed] }));
-    } catch {
-      if (!persistenceWarningReported) {
-        persistenceWarningReported = true;
-        console.warn('[ChoiceNotifications] Could not persist local notification state');
-      }
-    }
     listeners.forEach((listener) => listener());
   };
 
   const register = (notice: ChoiceNotice): void => {
-    if (dismissed.has(notice.key)) return;
+    if (suppressed.has(notice.key)) return;
     const previous = pending.find((item) => item.key === notice.key);
-    if (previous?.preview === notice.preview) return;
-    pending = previous
-      ? pending.map((item) => (item.key === notice.key ? { ...item, preview: notice.preview } : item))
-      : [...pending, notice];
+    let changed = previous?.preview !== notice.preview;
+    if (changed) {
+      pending = previous
+        ? pending.map((item) => (item.key === notice.key ? { ...item, preview: notice.preview } : item))
+        : [...pending, notice];
+    }
+    const preview = normalizedPreview(notice.preview);
+    if (preview) {
+      const duplicates = pending.filter(
+        (item) =>
+          item.key !== notice.key &&
+          item.conversationId === notice.conversationId &&
+          item.messageId !== notice.messageId &&
+          normalizedPreview(item.preview) === preview
+      );
+      if (duplicates.length) {
+        const duplicateKeys = new Set(duplicates.map((item) => item.key));
+        duplicates.forEach((item) => {
+          staged.delete(item.key);
+          suppressed.set(item.key, item);
+        });
+        pending = pending.filter((item) => !duplicateKeys.has(item.key));
+        changed = true;
+      }
+    }
+    if (!changed) return;
     if (!previous) {
       console.info('[ChoiceNotifications] Registered', {
         conversationId: notice.conversationId,
@@ -87,6 +79,23 @@ export const createChoiceNoticeStore = (initialPersistence?: Persistence, initia
         markerIndex: notice.markerIndex,
       });
     }
+    publish();
+    if (preview && syncHandlers) {
+      const normalizedNotice = { ...notice, preview };
+      staged.set(notice.key, normalizedNotice);
+      syncHandlers.upsert(normalizedNotice);
+    }
+  };
+
+  const replaceFromServer = (notices: ChoiceNotice[]) => {
+    const remote = new Map(notices.filter(isNotice).map((notice) => [notice.key, notice]));
+    for (const key of suppressed.keys()) {
+      if (!remote.has(key)) suppressed.delete(key);
+    }
+    for (const key of staged.keys()) {
+      if (remote.has(key)) staged.delete(key);
+    }
+    pending = [...remote.values(), ...staged.values()].filter((notice) => !suppressed.has(notice.key));
     publish();
   };
 
@@ -98,17 +107,26 @@ export const createChoiceNoticeStore = (initialPersistence?: Persistence, initia
         listeners.delete(listener);
       };
     },
-    hydrate: (nextPersistence: Persistence | undefined, nextStorageKey: string) => {
-      // Keep live parser fragments and early manual dismissals across identity loading.
-      persistence = nextPersistence;
-      storageKey = nextStorageKey;
-      restore();
+    setSyncHandlers: (handlers: SyncHandlers | undefined) => {
+      syncHandlers = handlers;
+    },
+    replaceAll: (notices: ChoiceNotice[]) => {
+      replaceFromServer(notices);
+    },
+    settleUpsert: (key: string, notices: ChoiceNotice[]) => {
+      staged.delete(key);
+      replaceFromServer(notices);
+    },
+    mergeAll: (notices: ChoiceNotice[]) => {
+      const merged = new Map([...notices.filter(isNotice), ...pending].map((notice) => [notice.key, notice]));
+      pending = [...merged.values()].filter((notice) => !suppressed.has(notice.key));
       publish();
     },
     dismiss: (key: string) => {
       const notice = pending.find((item) => item.key === key);
       if (!notice) return;
-      dismissed.add(key);
+      staged.delete(key);
+      suppressed.set(key, notice);
       pending = pending.filter((item) => item.key !== key);
       console.info('[ChoiceNotifications] Dismissed', {
         conversationId: notice.conversationId,
@@ -116,10 +134,35 @@ export const createChoiceNoticeStore = (initialPersistence?: Persistence, initia
         markerIndex: notice.markerIndex,
       });
       publish();
+      syncHandlers?.dismiss(notice);
+    },
+    rollbackDismiss: (key: string) => {
+      const notice = suppressed.get(key);
+      if (!notice) return;
+      suppressed.delete(key);
+      if (!pending.some((item) => item.key === key)) pending = [...pending, notice];
+      publish();
+    },
+    resolveConversation: (conversationId: string) => {
+      const resolved = pending.filter((item) => item.conversationId === conversationId);
+      for (const [key, value] of staged) {
+        if (value.conversationId === conversationId) staged.delete(key);
+      }
+      for (const [key, value] of parsers) {
+        if (value.conversationId === conversationId) parsers.delete(key);
+      }
+      if (!resolved.length) return;
+      resolved.forEach((item) => suppressed.set(item.key, item));
+      pending = pending.filter((item) => item.conversationId !== conversationId);
+      console.info('[ChoiceNotifications] Resolved by user message', {
+        conversationId,
+        count: resolved.length,
+      });
+      publish();
     },
     consume: (message: IResponseMessage) => {
       if (message.type === 'finish' || message.type === 'error') {
-        // Drop scratch buffers, never pending notifications or dismissal tombstones.
+        // Drop scratch buffers, never pending notifications.
         for (const [key, value] of parsers) {
           if (value.conversationId === message.conversation_id) parsers.delete(key);
         }

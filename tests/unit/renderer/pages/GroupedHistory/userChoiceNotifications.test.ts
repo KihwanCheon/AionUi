@@ -11,15 +11,6 @@ const frame = (data: unknown, overrides: Partial<IResponseMessage> = {}): IRespo
   ...overrides,
 });
 const question = `${USER_CHOICE_MARKER}\n재시작해도 될까요?\n`;
-const storage = () => {
-  const values = new Map<string, string>();
-  return {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
-    },
-  };
-};
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -71,35 +62,33 @@ describe('explicit prose question signal', () => {
   });
 });
 
-describe('manually dismissed prose notifications', () => {
-  it('preserves a marker fragmented across asynchronous user-identity restoration', () => {
+describe('prose notification lifecycle', () => {
+  it('preserves a fragmented marker while the initial server snapshot merges', () => {
     const store = createChoiceNoticeStore();
     store.consume(frame(USER_CHOICE_MARKER.slice(0, 12)));
-    store.hydrate(storage(), 'user-a');
+    store.mergeAll([]);
     store.consume(frame(`${USER_CHOICE_MARKER.slice(12)}\n재시작해도 될까요?\n`));
     expect(store.getSnapshot()).toHaveLength(1);
   });
 
-  it('preserves early manual dismissal while restoring an older pending record', () => {
-    const saved = storage();
-    const previous = createChoiceNoticeStore(saved, 'user-a');
-    previous.consume(frame(question));
-    const current = createChoiceNoticeStore();
-    current.consume(frame(question));
-    current.dismiss(current.getSnapshot()[0].key);
-    current.hydrate(saved, 'user-a');
-    expect(current.getSnapshot()).toEqual([]);
-    expect(createChoiceNoticeStore(saved, 'user-a').getSnapshot()).toEqual([]);
+  it('does not revive an optimistic dismissal from a stale server snapshot', () => {
+    const store = createChoiceNoticeStore();
+    store.consume(frame(question));
+    const notice = store.getSnapshot()[0];
+    store.dismiss(notice.key);
+    store.replaceAll([notice]);
+    expect(store.getSnapshot()).toEqual([]);
   });
-  it('does not publish or persist normal streaming content', () => {
-    const saved = storage();
-    const persist = vi.spyOn(saved, 'setItem');
-    const store = createChoiceNoticeStore(saved, 'user-a');
+
+  it('does not publish or synchronize normal streaming content', () => {
+    const store = createChoiceNoticeStore();
     const change = vi.fn();
+    const upsert = vi.fn();
     store.subscribe(change);
+    store.setSyncHandlers({ upsert, dismiss: vi.fn() });
     store.consume(frame('ordinary response'));
     expect(change).not.toHaveBeenCalled();
-    expect(persist).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
   });
 
   it('accumulates streamed preview text without duplicate registrations', () => {
@@ -111,33 +100,100 @@ describe('manually dismissed prose notifications', () => {
     expect(store.getSnapshot()[0].preview).toBe('재시작해도 될까요?');
   });
 
-  it('does not clear on finishing, answering, opening, or an AI resolution marker', () => {
+  it('synchronizes only non-empty question previews', () => {
+    const store = createChoiceNoticeStore();
+    const upsert = vi.fn();
+    store.setSyncHandlers({ upsert, dismiss: vi.fn() });
+    store.consume(frame(`${USER_CHOICE_MARKER}\n`));
+    expect(upsert).not.toHaveBeenCalled();
+    store.consume(frame('  재시작해도   될까요?  \n'));
+    expect(upsert).toHaveBeenLastCalledWith(expect.objectContaining({ preview: '재시작해도 될까요?' }));
+  });
+
+  it('keeps an unsynchronized local notice across an unrelated server snapshot', () => {
+    const store = createChoiceNoticeStore();
+    store.setSyncHandlers({ upsert: vi.fn(), dismiss: vi.fn() });
+    store.consume(frame(question));
+    const notice = store.getSnapshot()[0];
+
+    store.replaceAll([]);
+    expect(store.getSnapshot()).toEqual([notice]);
+
+    store.settleUpsert(notice.key, []);
+    expect(store.getSnapshot()).toEqual([]);
+  });
+
+  it('synchronizes an immediate dismissal with the complete notice', () => {
+    const store = createChoiceNoticeStore();
+    const dismiss = vi.fn();
+    store.setSyncHandlers({ upsert: vi.fn(), dismiss });
+    store.consume(frame(question));
+    const notice = store.getSnapshot()[0];
+
+    store.dismiss(notice.key);
+
+    expect(dismiss).toHaveBeenCalledWith(notice);
+    store.replaceAll([]);
+    expect(store.getSnapshot()).toEqual([]);
+  });
+
+  it('does not clear on lifecycle frames, opening, or an AI resolution marker', () => {
     const store = createChoiceNoticeStore();
     store.consume(frame(question));
-    for (const type of ['finish', 'start', 'user_content', 'error', 'ask', 'permission']) {
+    for (const type of ['finish', 'start', 'error', 'ask', 'permission']) {
       store.consume(frame('answered', { type }));
     }
     store.consume(frame('[[AIONUI_USER_CHOICE_RESOLVED]]\n', { msg_id: 'message-b' }));
     expect(store.getSnapshot()).toHaveLength(1);
   });
 
-  it('keeps dismissed notifications dismissed across snapshots, replay and restart', () => {
-    const saved = storage();
-    const store = createChoiceNoticeStore(saved, 'user-a');
-    store.consume(frame(question));
-    store.dismiss(store.getSnapshot()[0].key);
-    store.consume(frame(question, { replace: true }));
-    const restored = createChoiceNoticeStore(saved, 'user-a');
-    restored.consume(frame(question));
-    expect(restored.getSnapshot()).toEqual([]);
+  it('coalesces an identical repeated question onto its newest message', () => {
+    const store = createChoiceNoticeStore();
+    store.consume(frame(question, { created_at: 1 }));
+    store.consume(frame(question, { msg_id: 'message-b', created_at: 2 }));
+    expect(store.getSnapshot()).toHaveLength(1);
+    expect(store.getSnapshot()[0].messageId).toBe('message-b');
   });
 
-  it('restores pending notifications but isolates different user storage keys', () => {
-    const saved = storage();
-    const store = createChoiceNoticeStore(saved, 'user-a');
+  it('keeps different questions from separate messages until the user replies', () => {
+    const store = createChoiceNoticeStore();
     store.consume(frame(question));
-    expect(createChoiceNoticeStore(saved, 'user-a').getSnapshot()).toHaveLength(1);
-    expect(createChoiceNoticeStore(saved, 'user-b').getSnapshot()).toEqual([]);
+    store.consume(frame(`${USER_CHOICE_MARKER}\n배포해도 될까요?\n`, { msg_id: 'message-b' }));
+    expect(store.getSnapshot()).toHaveLength(2);
+  });
+
+  it('resolves the conversation locally while the server snapshot catches up', () => {
+    const store = createChoiceNoticeStore();
+    store.consume(frame(question));
+    store.consume(frame(`${USER_CHOICE_MARKER}\n배포해도 될까요?\n`, { msg_id: 'message-b' }));
+    store.consume(frame(question, { conversation_id: 'conversation-b' }));
+    const staleSnapshot = [...store.getSnapshot()];
+
+    store.resolveConversation('conversation-a');
+    expect(store.getSnapshot().map((item) => item.conversationId)).toEqual(['conversation-b']);
+
+    store.replaceAll(staleSnapshot);
+    store.consume(frame(question, { replace: true }));
+    expect(store.getSnapshot().map((item) => item.conversationId)).toEqual(['conversation-b']);
+  });
+
+  it('keeps dismissed notifications hidden across snapshots and replay', () => {
+    const store = createChoiceNoticeStore();
+    store.consume(frame(question));
+    const notice = store.getSnapshot()[0];
+    store.dismiss(notice.key);
+    store.replaceAll([notice]);
+    store.consume(frame(question, { replace: true }));
+    expect(store.getSnapshot()).toEqual([]);
+  });
+
+  it('replaces local state with an authoritative server snapshot', () => {
+    const source = createChoiceNoticeStore();
+    source.consume(frame(question, { conversation_id: 'conversation-b' }));
+    const store = createChoiceNoticeStore();
+    store.consume(frame(question));
+    store.replaceAll(source.getSnapshot());
+    expect(store.getSnapshot().map((item) => item.conversationId)).toEqual(['conversation-b']);
   });
 
   it('dismisses only the selected question, not its conversation siblings', () => {
@@ -171,29 +227,19 @@ describe('manually dismissed prose notifications', () => {
     expect(store.getSnapshot()).toHaveLength(1);
   });
 
-  it('rejects malformed persistence without crashing or reviving arbitrary records', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const saved = storage();
-    saved.setItem('user-a', '{broken');
-    expect(createChoiceNoticeStore(saved, 'user-a').getSnapshot()).toEqual([]);
-    saved.setItem('user-a', JSON.stringify({ pending: [null, {}, { key: 'forged' }], dismissed: 'invalid' }));
-    expect(createChoiceNoticeStore(saved, 'user-a').getSnapshot()).toEqual([]);
+  it('rejects malformed server snapshot records', () => {
+    const store = createChoiceNoticeStore();
+    store.replaceAll([null, {}, { key: 'forged' }] as never[]);
+    expect(store.getSnapshot()).toEqual([]);
   });
 
-  it('keeps registration and dismissal working if storage is unavailable', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const store = createChoiceNoticeStore(
-      {
-        getItem: () => null,
-        setItem: () => {
-          throw new Error('quota');
-        },
-      },
-      'user-a'
-    );
+  it('restores an optimistic dismissal when server synchronization fails', () => {
+    const store = createChoiceNoticeStore();
     store.consume(frame(question));
-    expect(store.getSnapshot()).toHaveLength(1);
-    store.dismiss(store.getSnapshot()[0].key);
+    const key = store.getSnapshot()[0].key;
+    store.dismiss(key);
     expect(store.getSnapshot()).toEqual([]);
+    store.rollbackDismiss(key);
+    expect(store.getSnapshot()).toHaveLength(1);
   });
 });
