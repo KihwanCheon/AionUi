@@ -816,5 +816,17 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "계획 펼치기",
     "collapse": "계획 접기"
+  },
+  "mnpUnlinked": {
+    "title": "MnP 미연결 대화 목록",
+    "description": "기간 필터와 관계없이 그룹 전체를 확인합니다. 보관한 대화는 설정에서 복원할 수 있으며, 실행 중인 대화는 중지됩니다.",
+    "checking": "MnP 연결 확인 중: {{checked}} / {{total}}",
+    "lookupFailed": "대화 {{count}}개의 연결을 확인하지 못했습니다. 해당 대화는 보관 대상에서 제외했습니다.",
+    "archiveSelected": "선택한 {{count}}개 보관",
+    "selectAll": "전체 선택 ({{count}}개)",
+    "selectConversation": "{{name}} 선택",
+    "running": "실행 중",
+    "noConfirmed": "미연결로 확인된 대화가 없습니다. 조회 실패 항목을 다시 확인해 주세요.",
+    "empty": "이 그룹에 MnP 미연결 대화가 없습니다."
   }
 }

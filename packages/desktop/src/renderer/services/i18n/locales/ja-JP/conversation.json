@@ -816,5 +816,17 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "プランを展開",
     "collapse": "プランを折りたたむ"
+  },
+  "mnpUnlinked": {
+    "title": "MnP未接続の会話一覧",
+    "description": "期間フィルターに関係なくグループ全体を確認します。アーカイブした会話は設定から復元できます。実行中の会話は停止されます。",
+    "checking": "MnP接続を確認中: {{checked}} / {{total}}",
+    "lookupFailed": "{{count}}件の会話の接続を確認できませんでした。アーカイブ対象から除外しています。",
+    "archiveSelected": "選択した{{count}}件をアーカイブ",
+    "selectAll": "すべて選択（{{count}}件）",
+    "selectConversation": "{{name}}を選択",
+    "running": "実行中",
+    "noConfirmed": "未接続と確認できた会話はありません。確認に失敗した項目を再試行してください。",
+    "empty": "このグループにMnP未接続の会話はありません。"
   }
 }

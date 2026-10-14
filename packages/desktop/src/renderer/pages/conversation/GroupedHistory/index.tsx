@@ -8,10 +8,11 @@ import type { TChatConversation } from '@/common/config/storage';
 import AionModal from '@/renderer/components/base/AionModal';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useCronJobsMap } from '@/renderer/pages/cron';
+import { getParentAndCurrentDir } from '@/renderer/utils/workspace/projectPathLabel';
 import { Button, Dropdown, Empty, Input, Menu, Modal, Tooltip } from '@arco-design/web-react';
 import { FolderClose, MoreOne, Plus, Right } from '@icon-park/react';
 import classNames from 'classnames';
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -21,6 +22,7 @@ import BookmarkedConversationList from './components/BookmarkedConversationList'
 import ConversationActivityFilter from './components/ConversationActivityFilter';
 import HistoryViewTabs from './components/HistoryViewTabs';
 import ProjectGroupHeader from './components/ProjectGroupHeader';
+import MnpUnlinkedConversationsModal from './components/MnpUnlinkedConversationsModal';
 import { useBatchSelection } from './hooks/useBatchSelection';
 import { useConversationActivityFilter } from './hooks/useConversationActivityFilter';
 import { useConversationActions } from './hooks/useConversationActions';
@@ -45,6 +47,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
   const { getJobStatus, markAsRead, setActiveConversation } = useCronJobsMap();
+  const [mnpUnlinkedGroup, setMnpUnlinkedGroup] = useState<{ workspace: string; displayName: string } | null>(null);
 
   const {
     conversations,
@@ -308,6 +311,15 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
 
   return (
     <>
+      {mnpUnlinkedGroup && (
+        <MnpUnlinkedConversationsModal
+          key={mnpUnlinkedGroup.workspace}
+          groupName={getParentAndCurrentDir(mnpUnlinkedGroup.workspace) || mnpUnlinkedGroup.displayName}
+          conversations={allProjectConversations.get(mnpUnlinkedGroup.workspace) ?? []}
+          isConversationGenerating={isConversationGenerating}
+          onClose={() => setMnpUnlinkedGroup(null)}
+        />
+      )}
       <Modal
         title={t('conversation.history.renameTitle')}
         visible={renameModalVisible}
@@ -474,6 +486,9 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                 const projectMenu = (
                   <Menu
                     onClickMenuItem={(key) => {
+                      if (key === 'mnp-unlinked') {
+                        setMnpUnlinkedGroup({ workspace: group.workspace, displayName: group.displayName });
+                      }
                       if (key === 'archive') {
                         handleArchiveProject(
                           group.displayName,
@@ -482,6 +497,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                       }
                     }}
                   >
+                    <Menu.Item key='mnp-unlinked'>{t('conversation.mnpUnlinked.title')}</Menu.Item>
                     <Menu.Item key='archive'>
                       <span className='flex items-center gap-8px'>
                         <FolderClose theme='outline' size='14' />

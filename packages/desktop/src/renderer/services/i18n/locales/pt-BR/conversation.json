@@ -822,5 +822,17 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "Expandir plano",
     "collapse": "Recolher plano"
+  },
+  "mnpUnlinked": {
+    "title": "Conversas não vinculadas ao MnP",
+    "description": "Verifica todo o grupo, independentemente do filtro de data. Conversas arquivadas podem ser restauradas nas Configurações; as que estiverem em execução serão interrompidas.",
+    "checking": "Verificando vínculos do MnP: {{checked}} / {{total}}",
+    "lookupFailed": "Não foi possível verificar {{count}} conversas. Elas foram excluídas do arquivamento.",
+    "archiveSelected": "Arquivar selecionadas ({{count}})",
+    "selectAll": "Selecionar todas ({{count}})",
+    "selectConversation": "Selecionar {{name}}",
+    "running": "Em execução",
+    "noConfirmed": "Nenhuma conversa foi confirmada como não vinculada. Tente novamente as consultas que falharam.",
+    "empty": "Não há conversas não vinculadas ao MnP neste grupo."
   }
 }

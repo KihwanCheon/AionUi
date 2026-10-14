@@ -817,5 +817,17 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "Expandir plan",
     "collapse": "Contraer plan"
+  },
+  "mnpUnlinked": {
+    "title": "Conversaciones sin vincular a MnP",
+    "description": "Comprueba todo el grupo sin aplicar el filtro de fecha. Las conversaciones archivadas se pueden restaurar en Ajustes; las que estén en curso se detendrán.",
+    "checking": "Comprobando vínculos de MnP: {{checked}} / {{total}}",
+    "lookupFailed": "No se pudieron comprobar {{count}} conversaciones. Se excluyeron del archivado.",
+    "archiveSelected": "Archivar selección ({{count}})",
+    "selectAll": "Seleccionar todo ({{count}})",
+    "selectConversation": "Seleccionar {{name}}",
+    "running": "En curso",
+    "noConfirmed": "No hay conversaciones confirmadas sin vínculo. Reintenta las consultas fallidas.",
+    "empty": "No hay conversaciones sin vincular a MnP en este grupo."
   }
 }

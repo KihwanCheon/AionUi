@@ -816,5 +816,17 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "展開計劃",
     "collapse": "收合計劃"
+  },
+  "mnpUnlinked": {
+    "title": "未關聯 MnP 的對話清單",
+    "description": "檢查整個群組，不受日期篩選影響。封存的對話可在設定中還原；正在執行的對話將被停止。",
+    "checking": "正在檢查 MnP 關聯：{{checked}} / {{total}}",
+    "lookupFailed": "無法檢查 {{count}} 個對話，已將其排除在封存範圍之外。",
+    "archiveSelected": "封存所選（{{count}}）",
+    "selectAll": "全選（{{count}}）",
+    "selectConversation": "選取 {{name}}",
+    "running": "執行中",
+    "noConfirmed": "沒有已確認未關聯的對話。請重試查詢失敗的項目。",
+    "empty": "此群組中沒有未關聯 MnP 的對話。"
   }
 }

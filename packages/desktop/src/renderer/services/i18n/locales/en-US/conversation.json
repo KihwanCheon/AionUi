@@ -816,5 +816,17 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "Expand plan",
     "collapse": "Collapse plan"
+  },
+  "mnpUnlinked": {
+    "title": "Conversations not linked to MnP",
+    "description": "Checks the entire group regardless of the date filter. Archived conversations can be restored in Settings; running conversations will be stopped.",
+    "checking": "Checking MnP links: {{checked}} / {{total}}",
+    "lookupFailed": "Could not check {{count}} conversations. They are excluded from archiving.",
+    "archiveSelected": "Archive selected ({{count}})",
+    "selectAll": "Select all ({{count}})",
+    "selectConversation": "Select {{name}}",
+    "running": "Running",
+    "noConfirmed": "No conversations are confirmed as unlinked. Retry the failed lookups.",
+    "empty": "No conversations in this group are unlinked from MnP."
   }
 }

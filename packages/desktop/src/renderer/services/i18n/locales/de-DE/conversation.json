@@ -817,5 +817,17 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "Plan ausklappen",
     "collapse": "Plan einklappen"
+  },
+  "mnpUnlinked": {
+    "title": "Nicht mit MnP verknüpfte Unterhaltungen",
+    "description": "Prüft die gesamte Gruppe unabhängig vom Datumsfilter. Archivierte Unterhaltungen können in den Einstellungen wiederhergestellt werden; laufende Unterhaltungen werden gestoppt.",
+    "checking": "MnP-Verknüpfungen prüfen: {{checked}} / {{total}}",
+    "lookupFailed": "{{count}} Unterhaltungen konnten nicht geprüft werden. Sie werden nicht archiviert.",
+    "archiveSelected": "Auswahl archivieren ({{count}})",
+    "selectAll": "Alle auswählen ({{count}})",
+    "selectConversation": "{{name}} auswählen",
+    "running": "Läuft",
+    "noConfirmed": "Keine Unterhaltung wurde als unverknüpft bestätigt. Fehlgeschlagene Abfragen erneut versuchen.",
+    "empty": "Alle Unterhaltungen dieser Gruppe sind mit MnP verknüpft."
   }
 }

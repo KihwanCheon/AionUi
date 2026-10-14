@@ -816,5 +816,17 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "展开计划",
     "collapse": "收起计划"
+  },
+  "mnpUnlinked": {
+    "title": "未关联 MnP 的对话列表",
+    "description": "检查整个分组，不受日期筛选影响。归档的对话可在设置中恢复；正在运行的对话将被停止。",
+    "checking": "正在检查 MnP 关联：{{checked}} / {{total}}",
+    "lookupFailed": "无法检查 {{count}} 个对话，已将其排除在归档范围之外。",
+    "archiveSelected": "归档所选（{{count}}）",
+    "selectAll": "全选（{{count}}）",
+    "selectConversation": "选择 {{name}}",
+    "running": "运行中",
+    "noConfirmed": "没有已确认未关联的对话。请重试查询失败的项目。",
+    "empty": "此分组中没有未关联 MnP 的对话。"
   }
 }

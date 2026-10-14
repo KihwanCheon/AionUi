@@ -818,5 +818,17 @@
     "progress": "{{completed}}/{{total}}",
     "expand": "Planı genişlet",
     "collapse": "Planı daralt"
+  },
+  "mnpUnlinked": {
+    "title": "MnP bağlantısı olmayan konuşmalar",
+    "description": "Tarih filtresinden bağımsız olarak tüm grubu kontrol eder. Arşivlenen konuşmalar Ayarlar üzerinden geri yüklenebilir; çalışan konuşmalar durdurulur.",
+    "checking": "MnP bağlantıları kontrol ediliyor: {{checked}} / {{total}}",
+    "lookupFailed": "{{count}} konuşma kontrol edilemedi. Bunlar arşivlemenin dışında tutuldu.",
+    "archiveSelected": "Seçilenleri arşivle ({{count}})",
+    "selectAll": "Tümünü seç ({{count}})",
+    "selectConversation": "{{name}} seç",
+    "running": "Çalışıyor",
+    "noConfirmed": "Bağlantısız olduğu doğrulanmış konuşma yok. Başarısız kontrolleri yeniden deneyin.",
+    "empty": "Bu grupta MnP bağlantısı olmayan konuşma yok."
   }
 }
