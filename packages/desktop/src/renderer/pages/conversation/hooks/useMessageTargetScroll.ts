@@ -80,6 +80,9 @@ export function useMessageTargetScroll({
         }
         const marker = markerIndex === undefined ? undefined : findMarkerRange(target, markerIndex);
         const targetRect = marker?.getBoundingClientRect() ?? target.getBoundingClientRect();
+        // Structured questions own a message without a prose marker. Keep its
+        // heading visible even when the choices extend beyond the viewport.
+        const targetHeight = markerIndex !== undefined && !marker ? 0 : targetRect.height;
         const viewport = scroller.getBoundingClientRect();
         const top = Math.max(
           0,
@@ -87,7 +90,7 @@ export function useMessageTargetScroll({
             scroller.scrollHeight - scroller.clientHeight,
             scroller.scrollTop +
               targetRect.top +
-              targetRect.height / 2 -
+              targetHeight / 2 -
               viewport.top -
               scroller.clientTop -
               scroller.clientHeight / 2

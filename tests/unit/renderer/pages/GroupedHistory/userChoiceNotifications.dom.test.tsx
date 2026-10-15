@@ -95,6 +95,37 @@ afterEach(() => {
 });
 
 describe('in-app attention notification UI', () => {
+  it('opens and manually dismisses a server-owned structured question without a prose marker', async () => {
+    const store = setup(undefined, false);
+    const notice = {
+      key: JSON.stringify(['conversation-a', 'question-async-0', 0]),
+      conversationId: 'conversation-a',
+      messageId: 'question-async-0',
+      markerIndex: 0,
+      preview: 'Teams도 포함할까요?',
+      createdAt: 100,
+    };
+    act(() => {
+      state.onStream.mock.calls[0][0]({
+        type: 'content',
+        conversation_id: notice.conversationId,
+        msg_id: notice.messageId,
+        data: { content: 'Teams도 포함할까요?\n- 일반 대화\n- Teams 포함' },
+        replace: true,
+      });
+      state.onChoiceNoticesChanged.mock.calls[0][0]({ user_id: 'user-a', items: [notice] });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Conversation A/ }));
+    expect(state.navigate).toHaveBeenCalledWith('/conversation/conversation-a', {
+      state: { targetMessageId: notice.messageId, targetMarkerIndex: 0 },
+    });
+    expect(store.getSnapshot()).toEqual([notice]);
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'conversation.userChoiceNotifications.dismiss' }));
+    await waitFor(() => expect(state.dismissChoiceNotice).toHaveBeenCalledWith(notice));
+  });
+
   it('opens the originating conversation and question without dismissing it', async () => {
     const store = setup();
     fireEvent.click(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));

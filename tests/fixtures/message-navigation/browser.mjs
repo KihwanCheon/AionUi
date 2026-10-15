@@ -14,6 +14,8 @@ try {
     ['older-anchor', 0],
     ['long-message', 0],
     ['two-markers', 0],
+    ['structured-older-anchor', 900],
+    ['structured-long-options', 150],
   ]) {
     const context = await browser.newContext({ viewport: { width: 1100, height: 720 } });
     const page = await context.newPage();
@@ -87,6 +89,8 @@ try {
     const resumed = await page
       .getByTestId('message-list-scroller')
       .evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop < 2);
+    // Replying and finishing navigation must leave the question pending.
+    await page.getByRole('button', { name: '확인이 필요한 대화 1개' }).waitFor();
     results.push({ scenario, imageDelay, visible, released, repeatedVisible, resumed, geometry, errors });
     console.log(JSON.stringify(results.at(-1)));
     await context.close();

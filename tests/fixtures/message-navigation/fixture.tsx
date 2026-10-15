@@ -26,12 +26,14 @@ import {
   UserChoiceNotificationsProvider,
   UserChoiceNotificationButton,
 } from '@/renderer/hooks/context/UserChoiceNotifications';
-import { createChoiceNoticeStore } from '@/renderer/hooks/context/UserChoiceNotifications/store';
+import { choiceNoticeKey, createChoiceNoticeStore } from '@/renderer/hooks/context/UserChoiceNotifications/store';
 import { USER_CHOICE_MARKER } from '@/renderer/hooks/context/UserChoiceNotifications/protocol';
 import koConversation from '@/renderer/services/i18n/locales/ko-KR/conversation.json';
 
 const params = new URLSearchParams(location.search);
 const scenario = params.get('scenario') ?? 'delayed-image';
+const structuredQuestion = scenario.startsWith('structured-');
+const olderAnchor = scenario === 'older-anchor' || scenario === 'structured-older-anchor';
 const conversationId = 'isolated-message-navigation';
 const conversation = {
   id: conversationId,
@@ -51,11 +53,13 @@ const message = (index: number, text: string): IMessageText => ({
 });
 const targetId = 'navigation-10';
 const markerExamples = `> ${USER_CHOICE_MARKER}\n\n\`${USER_CHOICE_MARKER}\`\n\n\`\`\`text\n${USER_CHOICE_MARKER}\n\`\`\`\n\n`;
-const targetText = `${scenario === 'long-message' ? '긴 설명 문단입니다.\n\n'.repeat(45) : ''}${scenario === 'two-markers' ? `${markerExamples}${USER_CHOICE_MARKER}\n첫 질문입니다.\n\n${'긴 설명입니다.\n\n'.repeat(25)}` : ''}${USER_CHOICE_MARKER}\n검증용 승인 질문입니다.\n`;
+const targetText = structuredQuestion
+  ? `검증용 승인 질문입니다.\n\n${'- 긴 선택지 설명입니다. '.repeat(10)}\n\n${'- 추가 선택지입니다.\n'.repeat(scenario === 'structured-long-options' ? 60 : 2)}`
+  : `${scenario === 'long-message' ? '긴 설명 문단입니다.\n\n'.repeat(45) : ''}${scenario === 'two-markers' ? `${markerExamples}${USER_CHOICE_MARKER}\n첫 질문입니다.\n\n${'긴 설명입니다.\n\n'.repeat(25)}` : ''}${USER_CHOICE_MARKER}\n검증용 승인 질문입니다.\n`;
 const messages = Array.from({ length: 25 }, (_, i) =>
   message(i, i === 10 ? targetText : `기록 ${i}\n\n일반 대화 내용입니다.\n\n${'추가 설명입니다. '.repeat(8)}`)
 );
-if (scenario === 'delayed-image') {
+if (scenario === 'delayed-image' || structuredQuestion) {
   messages[3] = message(3, '![늦게 표시되는 이미지](https://fixture.invalid/growth.svg)');
 }
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -74,10 +78,10 @@ ipcBridge.conversation.get.invoke = async () => conversation;
 ipcBridge.database.getUserConversations.invoke = async () => ({ items: [conversation], total: 1, has_more: false });
 ipcBridge.database.getConversationMessages.invoke = async ({ limit, anchor_message_id, before }) => {
   await wait(limit === 200 ? 0 : 120);
-  const items = limit === 200 || anchor_message_id || scenario !== 'older-anchor' ? messages : messages.slice(18);
+  const items = limit === 200 || anchor_message_id || !olderAnchor ? messages : messages.slice(18);
   return {
     items: before ? [] : items,
-    has_more_before: !before && scenario === 'older-anchor' && !anchor_message_id && limit !== 200,
+    has_more_before: !before && olderAnchor && !anchor_message_id && limit !== 200,
     has_more_after: false,
     oldest_cursor: 'oldest',
     newest_cursor: 'newest',
@@ -90,7 +94,21 @@ await i18next.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 const store = createChoiceNoticeStore();
-store.consume({ type: 'content', conversation_id: conversationId, msg_id: targetId, data: targetText });
+if (structuredQuestion) {
+  // Structured questions arrive through the server-owned snapshot, without markers.
+  store.replaceAll([
+    {
+      key: choiceNoticeKey(conversationId, targetId, 0),
+      conversationId,
+      messageId: targetId,
+      markerIndex: 0,
+      preview: '검증용 승인 질문입니다.',
+      createdAt: 10,
+    },
+  ]);
+} else {
+  store.consume({ type: 'content', conversation_id: conversationId, msg_id: targetId, data: targetText });
+}
 
 function Chat() {
   useMessageLstCache(conversationId);
