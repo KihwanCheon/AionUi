@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TTeam } from '@/common/types/team/teamTypes';
@@ -175,5 +175,26 @@ describe('TeamSiderSection running state', () => {
 
     expect(screen.getByTestId('collapsed-team-icon-idle-team')).toHaveAttribute('data-mock-icon', 'Peoples');
     expect(screen.queryByTestId('collapsed-team-spinner-idle-team')).not.toBeInTheDocument();
+  });
+
+  it('keeps aggregate activity visible when the Teams section is collapsed or expanded', () => {
+    renderSection(false);
+    const header = screen.getByTestId('team-section-toggle');
+    expect(within(header).getByRole('img', { name: 'common.processing' })).toBeInTheDocument();
+    fireEvent.click(header);
+    expect(within(header).getByRole('img', { name: 'common.processing' })).toBeInTheDocument();
+    expect(screen.getByTestId('team-spinner-running-team')).toBeInTheDocument();
+  });
+
+  it('clears aggregate activity only after the last listed team finishes', () => {
+    fixtures.runningTeamIds.add('idle-team');
+    const view = renderSection(false);
+    fixtures.runningTeamIds.delete('running-team');
+    view.rerender(<TeamSiderSection collapsed={false} pathname='/guid' siderTooltipProps={{}} />);
+    expect(screen.getByRole('img', { name: 'common.processing' })).toBeInTheDocument();
+    fixtures.runningTeamIds.delete('idle-team');
+    fixtures.runningTeamIds.add('removed-team');
+    view.rerender(<TeamSiderSection collapsed={false} pathname='/guid' siderTooltipProps={{}} />);
+    expect(screen.queryByRole('img', { name: 'common.processing' })).not.toBeInTheDocument();
   });
 });

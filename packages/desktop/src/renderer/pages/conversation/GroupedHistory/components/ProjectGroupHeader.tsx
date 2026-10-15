@@ -5,9 +5,9 @@
  */
 
 import { getParentAndCurrentDir } from '@/renderer/utils/workspace/projectPathLabel';
-import { Spin } from '@arco-design/web-react';
+import { Spin, Tooltip } from '@arco-design/web-react';
 import React from 'react';
-import { Attention } from '@icon-park/react';
+import { Attention, Pushpin } from '@icon-park/react';
 import classNames from 'classnames';
 import { useTranslation } from 'react-i18next';
 
@@ -31,6 +31,7 @@ type ProjectGroupHeaderProps = {
   workspace: string;
   displayName: string;
   branch?: string | null;
+  pinned?: boolean;
   indicatorStatus?: ProjectGroupIndicatorStatus;
   choiceConversationIds?: readonly string[];
 };
@@ -39,9 +40,11 @@ const ProjectGroupHeader: React.FC<ProjectGroupHeaderProps> = ({
   workspace,
   displayName,
   branch,
+  pinned = false,
   indicatorStatus = 'none',
   choiceConversationIds = [],
 }) => {
+  const { t } = useTranslation();
   const isGenerating = indicatorStatus === 'generating' || indicatorStatus === 'generating-completion-unread';
   const hasFailure = indicatorStatus === 'failure-unread' || indicatorStatus === 'failure-completion-unread';
   const hasCompletionUnread =
@@ -52,6 +55,17 @@ const ProjectGroupHeader: React.FC<ProjectGroupHeaderProps> = ({
 
   return (
     <span className='flex items-center flex-1 min-w-0 gap-8px'>
+      {pinned && (
+        <Tooltip content={t('conversation.history.projectPinned')}>
+          <span
+            role='img'
+            aria-label={t('conversation.history.projectPinned')}
+            className='flex-center shrink-0 text-t-secondary'
+          >
+            <Pushpin theme='filled' size='14' />
+          </span>
+        </Tooltip>
+      )}
       <span className='flex flex-col flex-1 min-w-0 leading-tight'>
         <span className='text-14px font-[500] truncate text-t-primary'>
           {getParentAndCurrentDir(workspace) || displayName}

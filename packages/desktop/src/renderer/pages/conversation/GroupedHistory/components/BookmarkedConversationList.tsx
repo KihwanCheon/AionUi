@@ -22,9 +22,11 @@ import type { ConversationRowProps } from '../types';
 import { groupBookmarkedConversations } from '../utils/bookmarkHelpers';
 import { resolveProjectGroupIndicatorStatus } from '../utils/completionUnread';
 import ProjectGroupHeader from './ProjectGroupHeader';
+import { orderProjectGroups } from '../ProjectPins/order';
 
 type BookmarkedConversationListProps = {
   conversations: TChatConversation[];
+  pinnedWorkspaces?: readonly string[];
   collapsed: boolean;
   batchMode: boolean;
   expandedWorkspaces: string[];
@@ -40,6 +42,7 @@ type BookmarkedConversationListProps = {
 
 const BookmarkedConversationList: React.FC<BookmarkedConversationListProps> = ({
   conversations,
+  pinnedWorkspaces = [],
   collapsed,
   batchMode,
   expandedWorkspaces,
@@ -53,7 +56,10 @@ const BookmarkedConversationList: React.FC<BookmarkedConversationListProps> = ({
   getConversationRowProps,
 }) => {
   const { t } = useTranslation();
-  const groups = useMemo(() => groupBookmarkedConversations(conversations, t), [conversations, t]);
+  const groups = useMemo(
+    () => orderProjectGroups(groupBookmarkedConversations(conversations, t), pinnedWorkspaces),
+    [conversations, t, pinnedWorkspaces]
+  );
   const { sensors, handleDragEnd, isDragEnabled } = useDragAndDrop({
     pinnedConversations: conversations,
     batchMode,
@@ -107,6 +113,7 @@ const BookmarkedConversationList: React.FC<BookmarkedConversationListProps> = ({
             <ProjectGroupHeader
               workspace={workspace}
               displayName={group.label}
+              pinned={pinnedWorkspaces.includes(workspace)}
               branch={projectGitBranches[workspace]}
               choiceConversationIds={isProjectExpanded ? [] : group.conversations.map((item) => item.id)}
               indicatorStatus={resolveProjectGroupIndicatorStatus(

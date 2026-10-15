@@ -21,6 +21,7 @@ import { ipcBridge } from '@/common';
 import SiderItem from './SiderItem';
 import type { SiderMenuItem } from './SiderItem';
 import { useSiderTeamRunning } from './useSiderTeamRunning';
+import SectionActivityIndicator from './SiderNav/SectionActivityIndicator';
 
 const TEAM_PINNED_KEY = 'team-pinned-ids';
 
@@ -187,6 +188,7 @@ const TeamSiderSection: React.FC<TeamSiderSectionProps> = ({
             <span className='text-14px text-t-tertiary sider-section-title group-hover/label:text-t-primary transition-colors font-[500] leading-none'>
               {t('team.sider.title')}
             </span>
+            {teams.some((team) => isTeamRunning(team.id)) && <SectionActivityIndicator />}
             <span className='ms-2px flex items-center justify-center opacity-0 group-hover/label:opacity-100 transition-opacity text-t-tertiary shrink-0'>
               <Right
                 theme='outline'
