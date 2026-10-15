@@ -8,6 +8,7 @@ import type { IConversationArtifact } from '@/common/adapter/ipcBridge';
 import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup, TMessage } from '@/common/chat/chatLib';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useFillMessageViewport } from '@/renderer/pages/conversation/hooks/useFillMessageViewport';
+import { useMessageTargetScroll } from '@/renderer/pages/conversation/hooks/useMessageTargetScroll';
 import { useConversationRuntimeView } from '@/renderer/pages/conversation/runtime/useConversationRuntimeView';
 import { getChatSurfaceWidthClass } from '@/renderer/pages/conversation/utils/chatSurfaceWidth';
 import { iconColors } from '@/renderer/styles/colors';
@@ -108,6 +109,7 @@ const isWriteFileResult = (value: unknown): value is WriteFileResult =>
 
 type ConversationLocationState = {
   targetMessageId?: string;
+  targetMarkerIndex?: number;
   fromConversationSearch?: boolean;
 };
 
@@ -349,11 +351,21 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
   const location = useLocation();
   const locationState = (location.state || {}) as ConversationLocationState;
   const targetMessageId = locationState.targetMessageId;
+  const targetMarkerIndex = locationState.targetMarkerIndex;
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | undefined>();
   const handledTargetKeyRef = useRef<string>('');
-  const loadingTargetKeyRef = useRef<string>('');
+  const requestedTargetKeyRef = useRef<string>('');
   const scrollerElementRef = useRef<HTMLDivElement | null>(null);
   const contentElementRef = useRef<HTMLDivElement | null>(null);
+  const {
+    start: scrollToTarget,
+    cancel: cancelTargetScroll,
+    isActive: isScrollLocked,
+  } = useMessageTargetScroll({
+    scrollerRef: scrollerElementRef,
+    contentRef: contentElementRef,
+    navigationKey: location.key,
+  });
 
   // Pre-process message list to group tool outputs into summary cards
   const processedList = useMemo(() => {
@@ -526,6 +538,8 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
   } = useAutoScroll({
     messages: list,
     itemCount: processedList.length,
+    isScrollLocked,
+    onAutoFollowResumed: cancelTargetScroll,
   });
 
   const setScrollerRef = useCallback(
@@ -553,13 +567,14 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     isLoadingBefore: pagination.isLoadingBefore,
     renderedItemCount: processedList.length,
     loadPreviousPage: loadPreviousMessagePage,
+    isScrollLocked,
   });
 
   const handleMessageListScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
       handleScroll(event);
       const scroller = event.currentTarget;
-      if (!pagination.hasMoreBefore || pagination.isLoadingBefore || scroller.scrollTop > 160) {
+      if (isScrollLocked() || !pagination.hasMoreBefore || pagination.isLoadingBefore || scroller.scrollTop > 160) {
         return;
       }
 
@@ -567,16 +582,17 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       void loadPreviousMessagePage().then((loaded) => {
         if (!loaded) return;
         requestAnimationFrame(() => {
+          if (isScrollLocked()) return;
           const nextHeight = contentElementRef.current?.scrollHeight ?? previousHeight;
           scroller.scrollTop += nextHeight - previousHeight;
         });
       });
     },
-    [handleScroll, loadPreviousMessagePage, pagination.hasMoreBefore, pagination.isLoadingBefore]
+    [handleScroll, isScrollLocked, loadPreviousMessagePage, pagination.hasMoreBefore, pagination.isLoadingBefore]
   );
 
   useEffect(() => {
-    if (!targetMessageId || processedList.length === 0) {
+    if (!targetMessageId || isMessageListLoading || pagination.isLoadingAnchor || pagination.isLoadingBefore) {
       return;
     }
 
@@ -585,38 +601,47 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       return;
     }
 
-    const targetIndex = processedList.findIndex((item) => matchesTargetMessage(item, targetMessageId));
-    if (targetIndex === -1) {
-      if (loadingTargetKeyRef.current !== targetKey) {
-        loadingTargetKeyRef.current = targetKey;
-        void loadAnchorMessageWindow(targetMessageId).then((loaded) => {
-          if (!loaded) {
-            loadingTargetKeyRef.current = '';
-          }
-        });
+    const frame = requestAnimationFrame(() => {
+      const targetIndex = processedList.findIndex((item) => matchesTargetMessage(item, targetMessageId));
+      if (targetIndex === -1) {
+        if (requestedTargetKeyRef.current !== targetKey) {
+          // One request per navigation; a failed/missing anchor can be retried by clicking again.
+          requestedTargetKeyRef.current = targetKey;
+          void loadAnchorMessageWindow(targetMessageId);
+        }
+        return;
       }
-      return;
-    }
 
-    handledTargetKeyRef.current = targetKey;
-    loadingTargetKeyRef.current = '';
-    setHighlightedMessageId(targetMessageId);
-    hideScrollButton();
-
-    requestAnimationFrame(() => {
       const targetElement = document.getElementById(`message-${getProcessedItemAnchorId(processedList[targetIndex])}`);
-      scrollElementIntoView(targetElement, {
-        behavior: 'smooth',
-        block: 'center',
-      });
+      if (!targetElement || !scrollerElementRef.current?.contains(targetElement)) return;
+
+      if (!scrollToTarget(targetElement, targetMarkerIndex)) return;
+      // Consume the navigation only after the loaded message has a mounted scroll target.
+      handledTargetKeyRef.current = targetKey;
+      setHighlightedMessageId(targetMessageId);
     });
 
+    return () => cancelAnimationFrame(frame);
+  }, [
+    isMessageListLoading,
+    loadAnchorMessageWindow,
+    location.key,
+    pagination.isLoadingAnchor,
+    pagination.isLoadingBefore,
+    processedList,
+    scrollToTarget,
+    targetMessageId,
+    targetMarkerIndex,
+  ]);
+
+  useEffect(() => {
+    if (!highlightedMessageId) return;
     const timer = window.setTimeout(() => {
-      setHighlightedMessageId((current) => (current === targetMessageId ? undefined : current));
+      setHighlightedMessageId(undefined);
     }, 2400);
 
     return () => window.clearTimeout(timer);
-  }, [hideScrollButton, loadAnchorMessageWindow, location.key, processedList, scrollElementIntoView, targetMessageId]);
+  }, [highlightedMessageId, location.key]);
 
   useEffect(() => {
     const handleMessageJump = (event: Event) => {

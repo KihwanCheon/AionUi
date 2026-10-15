@@ -25,7 +25,9 @@ export default function UserChoiceNotificationButton() {
       void navigate(`/conversation/${notice.conversationId}`);
     } else {
       // Existing message-anchor navigation also supports same-route clicks.
-      void navigate(`/conversation/${notice.conversationId}`, { state: { targetMessageId: notice.messageId } });
+      void navigate(`/conversation/${notice.conversationId}`, {
+        state: { targetMessageId: notice.messageId, targetMarkerIndex: notice.markerIndex },
+      });
     }
   };
   const trigger = (

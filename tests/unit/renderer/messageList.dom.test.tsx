@@ -769,6 +769,35 @@ describe('useFillMessageViewport', () => {
     expect(loadPreviousPage).toHaveBeenCalledTimes(1);
   });
 
+  it('does not apply a stale prepend correction after a notification takes over scrolling', async () => {
+    const elements = createViewportElements(300, 600);
+    let locked = false;
+    let resolveLoad: ((loaded: boolean) => void) | undefined;
+    const loadPreviousPage = vi.fn(() => new Promise<boolean>((resolve) => (resolveLoad = resolve)));
+    renderHook(() =>
+      useFillMessageViewport({
+        conversationId: 'conversation-1',
+        ...elements,
+        oldestCursor: 'cursor-1',
+        hasMoreBefore: true,
+        isLoadingBefore: false,
+        renderedItemCount: 5,
+        loadPreviousPage,
+        isScrollLocked: () => locked,
+      })
+    );
+    await waitFor(() => expect(loadPreviousPage).toHaveBeenCalledTimes(1));
+
+    locked = true;
+    elements.scroller.scrollTop = 120;
+    elements.content.scrollHeight = 750;
+    await act(async () => {
+      resolveLoad?.(true);
+      await nextAnimationFrame();
+    });
+    expect(elements.scroller.scrollTop).toBe(120);
+  });
+
   it('does not load automatically when the message list is already scrollable', async () => {
     const elements = createViewportElements(900, 600);
     const loadPreviousPage = vi.fn().mockResolvedValue(true);

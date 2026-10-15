@@ -8,10 +8,39 @@ import React, { type PropsWithChildren } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageText } from '@/common/chat/chatLib';
-import { MessageListProvider } from '@/renderer/pages/conversation/Messages/hooks';
+import type { MessageCursorPage } from '@/common/adapter/ipcBridge';
+import {
+  MessageListLoadingProvider,
+  MessageListProvider,
+  MessagePaginationProvider,
+  useMessageLstCache,
+} from '@/renderer/pages/conversation/Messages/hooks';
 import MessageList from '@/renderer/pages/conversation/Messages/MessageList';
 
 let resizeObserverCallback: ResizeObserverCallback | null = null;
+let locationState: { key: string; state: { targetMessageId?: string } } = { key: 'location-key', state: {} };
+const { loadLatest, loadAnchor } = vi.hoisted(() => ({ loadLatest: vi.fn(), loadAnchor: vi.fn() }));
+
+vi.mock('@/common', () => ({
+  ipcBridge: {
+    conversation: {
+      userCreated: { on: () => () => {} },
+      statusChanged: { on: () => () => {} },
+      turnCompleted: { on: () => () => {} },
+    },
+  },
+}));
+
+vi.mock('@/renderer/utils/chat/messagePagination', () => ({
+  DEFAULT_MESSAGE_PAGE_LIMIT: 50,
+  loadLatestConversationMessages: loadLatest,
+  loadConversationAnchorWindow: loadAnchor,
+  loadConversationMessagePage: vi.fn(),
+}));
+
+vi.mock('@/renderer/pages/conversation/runtime/useConversationRuntimeView', () => ({
+  useConversationRuntimeView: () => ({ isProcessing: false }),
+}));
 
 class ResizeObserverMock {
   constructor(callback: ResizeObserverCallback) {
@@ -34,10 +63,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('react-router-dom', () => ({
-  useLocation: () => ({
-    key: 'location-key',
-    state: {},
-  }),
+  useLocation: () => locationState,
 }));
 
 vi.mock('@arco-design/web-react', () => ({
@@ -47,11 +73,15 @@ vi.mock('@arco-design/web-react', () => ({
 }));
 
 vi.mock('@/renderer/hooks/context/ConversationContext', () => ({
-  useConversationContextSafe: () => null,
+  useConversationContextSafe: () => ({ conversation_id: 'conversation-1' }),
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/artifacts', () => ({
   useConversationArtifacts: () => [],
+}));
+
+vi.mock('@/renderer/pages/conversation/Messages/anchorRail', () => ({
+  MessageAnchorRail: () => null,
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/components/MessageText', () => ({
@@ -138,6 +168,44 @@ function Wrapper({ children, messages }: PropsWithChildren<{ messages: IMessageT
   return <MessageListProvider value={messages}>{children}</MessageListProvider>;
 }
 
+function LoadedMessageList(): JSX.Element {
+  useMessageLstCache('conversation-1');
+  return <MessageList />;
+}
+
+function Conversation({ messages = [] }: { messages?: IMessageText[] }): JSX.Element {
+  return (
+    <MessageListProvider value={messages}>
+      <MessageListLoadingProvider value={false}>
+        <MessagePaginationProvider
+          value={{ hasMoreBefore: false, hasMoreAfter: false, isLoadingBefore: false, isLoadingAnchor: false }}
+        >
+          <LoadedMessageList />
+        </MessagePaginationProvider>
+      </MessageListLoadingProvider>
+    </MessageListProvider>
+  );
+}
+
+function messagePage(items: IMessageText[]): MessageCursorPage<IMessageText> {
+  return { items, has_more_before: false, has_more_after: false, oldest_cursor: null, newest_cursor: null };
+}
+
+function deferredPage() {
+  let resolve!: (page: MessageCursorPage<IMessageText>) => void;
+  const promise = new Promise<MessageCursorPage<IMessageText>>((fulfill) => (resolve = fulfill));
+  return { promise, resolve };
+}
+
+function trackTargetScroll(id = 'message-1') {
+  const scroller = screen.getByTestId('message-list-scroller') as HTMLDivElement;
+  setScrollableMetrics(scroller, { scrollTop: 0 });
+  const target = document.getElementById(`message-${id}`)!;
+  target.getBoundingClientRect = () => new DOMRect(0, 300 - scroller.scrollTop, 100, 40);
+  scroller.getBoundingClientRect = () => new DOMRect(0, 0, 400, 400);
+  return { scroller, target };
+}
+
 function setScrollableMetrics(
   scroller: HTMLDivElement,
   {
@@ -186,10 +254,14 @@ describe('MessageList streaming scroll behavior', () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
     vi.stubGlobal('cancelAnimationFrame', (handle: number) => window.clearTimeout(handle));
     resizeObserverCallback = null;
+    locationState = { key: 'location-key', state: {} };
+    loadLatest.mockReset();
+    loadAnchor.mockReset();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.clearAllTimers();
     vi.useRealTimers();
   });
@@ -263,5 +335,123 @@ describe('MessageList streaming scroll behavior', () => {
     flushResizeObserver();
 
     expect(scroller.scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('keeps the notification target in view on the first visit after delayed history loads', async () => {
+    const latest = deferredPage();
+    loadLatest.mockReturnValue(latest.promise);
+    locationState.state.targetMessageId = 'message-1';
+    render(<Conversation />);
+    expect(screen.getByTestId('message-list-skeleton')).toBeInTheDocument();
+
+    await act(async () => latest.resolve(messagePage([createTextMessage('approval question')])));
+    const { scroller } = trackTargetScroll();
+    act(() => vi.runAllTimers());
+    flushResizeObserver();
+
+    expect(scroller.scrollTop).toBe(120);
+  });
+
+  it('waits for initial history even when the target is already present from a live update', async () => {
+    const latest = deferredPage();
+    loadLatest.mockReturnValue(latest.promise);
+    locationState.state.targetMessageId = 'message-1';
+    const message = createTextMessage('approval question');
+    render(<Conversation messages={[message]} />);
+    const { scroller } = trackTargetScroll();
+    act(() => vi.runAllTimers());
+    expect(scroller.scrollTop).not.toBe(120);
+
+    await act(async () => latest.resolve(messagePage([message])));
+    act(() => vi.runAllTimers());
+    expect(scroller.scrollTop).toBe(120);
+  });
+
+  it('loads an older notification target and preserves its position after rendering', async () => {
+    const latest = deferredPage();
+    const anchor = deferredPage();
+    loadLatest.mockReturnValue(latest.promise);
+    loadAnchor.mockReturnValue(anchor.promise);
+    locationState.state.targetMessageId = 'message-1';
+    render(<Conversation />);
+    const recent = { ...createTextMessage('recent'), id: 'recent', msg_id: 'recent', created_at: 2 };
+    await act(async () => latest.resolve(messagePage([recent])));
+    setScrollableMetrics(screen.getByTestId('message-list-scroller') as HTMLDivElement);
+    act(() => vi.runAllTimers());
+    expect(loadAnchor).toHaveBeenCalledTimes(1);
+
+    await act(async () => anchor.resolve(messagePage([createTextMessage('approval question'), recent])));
+    const { scroller } = trackTargetScroll();
+    act(() => vi.runAllTimers());
+    flushResizeObserver();
+
+    expect(scroller.scrollTop).toBe(120);
+  });
+
+  it('cancels a scheduled notification jump when navigation changes before the next frame', () => {
+    const messages = [createTextMessage('approval question')];
+    locationState.state.targetMessageId = 'message-1';
+    const { rerender } = render(
+      <Wrapper messages={messages}>
+        <MessageList />
+      </Wrapper>
+    );
+    const { scroller } = trackTargetScroll();
+    locationState = { key: 'another-location', state: {} };
+    rerender(
+      <Wrapper messages={messages}>
+        <MessageList />
+      </Wrapper>
+    );
+    act(() => vi.runAllTimers());
+
+    expect(scroller.scrollTop).not.toBe(120);
+  });
+
+  it('allows another click on the same notification after its first jump', () => {
+    const messages = [createTextMessage('approval question')];
+    locationState.state.targetMessageId = 'message-1';
+    const { rerender } = render(
+      <Wrapper messages={messages}>
+        <MessageList />
+      </Wrapper>
+    );
+    const { scroller } = trackTargetScroll();
+    act(() => vi.runAllTimers());
+    fireEvent.wheel(scroller, { deltaY: -100 });
+    scroller.scrollTop = 20;
+    locationState = { key: 'second-click', state: { targetMessageId: 'message-1' } };
+    rerender(
+      <Wrapper messages={messages}>
+        <MessageList />
+      </Wrapper>
+    );
+    act(() => vi.runAllTimers());
+
+    expect(scroller.scrollTop).toBe(120);
+  });
+
+  it.each(['missing', 'failed'])('retries a %s anchor only on a new notification click', async (outcome) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const latest = deferredPage();
+    loadLatest.mockReturnValue(latest.promise);
+    if (outcome === 'failed') loadAnchor.mockRejectedValueOnce(new Error('offline'));
+    else loadAnchor.mockResolvedValueOnce(messagePage([]));
+    locationState.state.targetMessageId = 'message-1';
+    const { rerender } = render(<Conversation />);
+    await act(async () => latest.resolve(messagePage([])));
+    await act(async () => vi.runAllTimersAsync());
+    rerender(<Conversation />);
+    await act(async () => vi.runAllTimersAsync());
+    expect(loadAnchor).toHaveBeenCalledTimes(1);
+
+    loadAnchor.mockResolvedValueOnce(messagePage([createTextMessage('approval question')]));
+    locationState = { key: 'retry-click', state: { targetMessageId: 'message-1' } };
+    rerender(<Conversation />);
+    // Fetch the anchor, then allow React to mount its message before scrolling.
+    await act(async () => vi.runAllTimersAsync());
+    const { scroller } = trackTargetScroll();
+    act(() => vi.runAllTimers());
+    expect(scroller.scrollTop).toBe(120);
   });
 });

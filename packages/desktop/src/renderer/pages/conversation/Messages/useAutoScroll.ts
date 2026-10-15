@@ -23,6 +23,8 @@ const FOLLOW_BOTTOM_THRESHOLD_PX = 4;
 interface UseAutoScrollOptions {
   messages: TMessage[];
   itemCount: number;
+  isScrollLocked?: () => boolean;
+  onAutoFollowResumed?: () => void;
 }
 
 interface ScrollElementIntoViewOptions {
@@ -46,7 +48,12 @@ const getBottomGap = (element: HTMLElement): number => {
   return element.scrollHeight - element.clientHeight - element.scrollTop;
 };
 
-export function useAutoScroll({ messages, itemCount }: UseAutoScrollOptions): UseAutoScrollReturn {
+export function useAutoScroll({
+  messages,
+  itemCount,
+  isScrollLocked,
+  onAutoFollowResumed,
+}: UseAutoScrollOptions): UseAutoScrollReturn {
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
   const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -64,25 +71,29 @@ export function useAutoScroll({ messages, itemCount }: UseAutoScrollOptions): Us
     lastProgrammaticScrollTimeRef.current = Date.now();
   }, []);
 
-  const updateBottomState = useCallback((element: HTMLDivElement) => {
-    const bottomGap = getBottomGap(element);
-    const withinButtonThreshold = bottomGap <= AT_BOTTOM_THRESHOLD_PX;
-    const pinnedToBottom = bottomGap <= FOLLOW_BOTTOM_THRESHOLD_PX;
-    setShowScrollButton(!withinButtonThreshold);
+  const updateBottomState = useCallback(
+    (element: HTMLDivElement) => {
+      const bottomGap = getBottomGap(element);
+      const withinButtonThreshold = bottomGap <= AT_BOTTOM_THRESHOLD_PX;
+      const pinnedToBottom = bottomGap <= FOLLOW_BOTTOM_THRESHOLD_PX;
+      setShowScrollButton(!withinButtonThreshold);
 
-    if (pinnedToBottom) {
-      userScrolledRef.current = false;
-      userInputActiveRef.current = false;
-      lastProgrammaticScrollTimeRef.current = Date.now() - (PROGRAMMATIC_SCROLL_GUARD_MS - 50);
-    }
+      if (pinnedToBottom && !isScrollLocked?.()) {
+        userScrolledRef.current = false;
+        userInputActiveRef.current = false;
+        lastProgrammaticScrollTimeRef.current = Date.now() - (PROGRAMMATIC_SCROLL_GUARD_MS - 50);
+      }
 
-    return pinnedToBottom;
-  }, []);
+      return pinnedToBottom;
+    },
+    [isScrollLocked]
+  );
 
   const scrollToBottom = useCallback(
     (behavior: ScrollBehavior = 'smooth') => {
       if (itemCount <= 0 || !scrollerEl) return;
 
+      onAutoFollowResumed?.();
       markProgrammaticScroll();
       scrollerEl.scrollTo({
         top: scrollerEl.scrollHeight - scrollerEl.clientHeight,
@@ -91,11 +102,11 @@ export function useAutoScroll({ messages, itemCount }: UseAutoScrollOptions): Us
       userScrolledRef.current = false;
       setShowScrollButton(false);
     },
-    [itemCount, markProgrammaticScroll, scrollerEl]
+    [itemCount, markProgrammaticScroll, onAutoFollowResumed, scrollerEl]
   );
 
   const scheduleAutoFollow = useCallback(() => {
-    if (!scrollerEl || userScrolledRef.current) return;
+    if (!scrollerEl || userScrolledRef.current || isScrollLocked?.()) return;
 
     if (pendingAutoFollowFrameRef.current !== null) {
       cancelAnimationFrame(pendingAutoFollowFrameRef.current);
@@ -103,14 +114,14 @@ export function useAutoScroll({ messages, itemCount }: UseAutoScrollOptions): Us
 
     pendingAutoFollowFrameRef.current = requestAnimationFrame(() => {
       pendingAutoFollowFrameRef.current = null;
-      if (!scrollerEl || userScrolledRef.current) return;
+      if (!scrollerEl || userScrolledRef.current || isScrollLocked?.()) return;
 
       const gap = getBottomGap(scrollerEl);
       if (gap > 2) {
         scrollToBottom('auto');
       }
     });
-  }, [scrollerEl, scrollToBottom]);
+  }, [isScrollLocked, scrollerEl, scrollToBottom]);
 
   const handleScrollerRef = useCallback((ref: HTMLDivElement | null) => {
     setScrollerEl(ref);
@@ -124,7 +135,15 @@ export function useAutoScroll({ messages, itemCount }: UseAutoScrollOptions): Us
     (element: HTMLElement | null, options?: ScrollElementIntoViewOptions) => {
       if (!element) return;
 
-      userScrolledRef.current = false;
+      onAutoFollowResumed?.();
+      // An explicit jump is an intent to read history. Pending initial/follow
+      // frames and later content resizes must not pull it back to the bottom.
+      userScrolledRef.current = true;
+      initialScrollDoneRef.current = true;
+      if (pendingAutoFollowFrameRef.current !== null) {
+        cancelAnimationFrame(pendingAutoFollowFrameRef.current);
+        pendingAutoFollowFrameRef.current = null;
+      }
       setShowScrollButton(false);
       markProgrammaticScroll();
       element.scrollIntoView({
@@ -133,7 +152,7 @@ export function useAutoScroll({ messages, itemCount }: UseAutoScrollOptions): Us
         inline: 'nearest',
       });
     },
-    [markProgrammaticScroll]
+    [markProgrammaticScroll, onAutoFollowResumed]
   );
 
   const handleScroll = useCallback(
@@ -194,10 +213,11 @@ export function useAutoScroll({ messages, itemCount }: UseAutoScrollOptions): Us
 
     initialScrollDoneRef.current = true;
     requestAnimationFrame(() => {
+      if (userScrolledRef.current || isScrollLocked?.()) return;
       scrollToBottom('auto');
       lastScrollTopRef.current = scrollerEl.scrollTop;
     });
-  }, [itemCount, scrollerEl, scrollToBottom]);
+  }, [isScrollLocked, itemCount, scrollerEl, scrollToBottom]);
 
   useEffect(() => {
     const currentListLength = messages.length;
@@ -228,13 +248,15 @@ export function useAutoScroll({ messages, itemCount }: UseAutoScrollOptions): Us
       return;
     }
 
+    onAutoFollowResumed?.();
     userScrolledRef.current = false;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        if (userScrolledRef.current || isScrollLocked?.()) return;
         scrollToBottom('auto');
       });
     });
-  }, [messages, scheduleAutoFollow, scrollToBottom]);
+  }, [isScrollLocked, messages, onAutoFollowResumed, scheduleAutoFollow, scrollToBottom]);
 
   useEffect(() => {
     return () => {

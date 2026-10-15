@@ -433,4 +433,35 @@ describe('useAutoScroll', () => {
       inline: 'nearest',
     });
   });
+
+  it('keeps bottom resizes from overriding a notification until bottom-follow is explicitly resumed', () => {
+    let locked = true;
+    const scroller = createScroller({ scrollTop: 600 });
+    const content = createContent();
+    const { result } = renderHook(() =>
+      useAutoScroll({
+        messages: [createLeftMessage('reply')],
+        itemCount: 1,
+        isScrollLocked: () => locked,
+        onAutoFollowResumed: () => {
+          locked = false;
+        },
+      })
+    );
+    attachElements(result, scroller, content);
+    act(() => {
+      resizeObserverCallback?.([], {} as ResizeObserver);
+      vi.runAllTimers();
+    });
+    scroller.scrollHeight = 1400;
+    act(() => {
+      resizeObserverCallback?.([], {} as ResizeObserver);
+      vi.runAllTimers();
+    });
+    expect(scroller.scrollTop).toBe(600);
+
+    act(() => result.current.scrollToBottom('auto'));
+    expect(scroller.scrollTop).toBe(1000);
+    expect(locked).toBe(false);
+  });
 });

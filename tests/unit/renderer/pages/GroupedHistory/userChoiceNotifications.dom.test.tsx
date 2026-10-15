@@ -100,7 +100,7 @@ describe('in-app attention notification UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));
     fireEvent.click(await screen.findByRole('button', { name: /Conversation A/ }));
     expect(state.navigate).toHaveBeenCalledWith('/conversation/conversation-a', {
-      state: { targetMessageId: 'message-a' },
+      state: { targetMessageId: 'message-a', targetMarkerIndex: 0 },
     });
     expect(store.getSnapshot()).toHaveLength(1);
   });
@@ -225,7 +225,7 @@ describe('in-app attention notification UI', () => {
     await waitFor(() => expect(document.querySelector('.arco-drawer')).toHaveStyle({ bottom: '0px', height: '65vh' }));
     fireEvent.click(await screen.findByRole('button', { name: /Conversation A/ }));
     expect(state.navigate).toHaveBeenCalledWith('/conversation/conversation-a', {
-      state: { targetMessageId: 'message-a' },
+      state: { targetMessageId: 'message-a', targetMarkerIndex: 0 },
     });
   });
 

@@ -19,6 +19,7 @@ type UseFillMessageViewportOptions = {
   isLoadingBefore: boolean;
   renderedItemCount: number;
   loadPreviousPage: () => Promise<boolean>;
+  isScrollLocked?: () => boolean;
 };
 
 const VIEWPORT_HEIGHT_TOLERANCE_PX = 1;
@@ -36,6 +37,7 @@ export const useFillMessageViewport = ({
   isLoadingBefore,
   renderedItemCount,
   loadPreviousPage,
+  isScrollLocked,
 }: UseFillMessageViewportOptions): void => {
   const attemptedPageRef = useRef<string | undefined>(undefined);
   const activeConversationRef = useRef(conversationId);
@@ -46,7 +48,7 @@ export const useFillMessageViewport = ({
 
     const frame = requestAnimationFrame(() => {
       const scroller = scrollerRef.current;
-      if (!scroller || !needsMoreContent(scroller)) return;
+      if (!scroller || isScrollLocked?.() || !needsMoreContent(scroller)) return;
 
       const pageKey = `${conversationId}:${oldestCursor}`;
       if (attemptedPageRef.current === pageKey) return;
@@ -57,7 +59,12 @@ export const useFillMessageViewport = ({
         .then((loaded) => {
           if (!loaded || activeConversationRef.current !== conversationId) return;
           requestAnimationFrame(() => {
-            if (activeConversationRef.current !== conversationId || scrollerRef.current !== scroller) return;
+            if (
+              activeConversationRef.current !== conversationId ||
+              scrollerRef.current !== scroller ||
+              isScrollLocked?.()
+            )
+              return;
             const nextHeight = contentRef.current?.scrollHeight ?? scroller.scrollHeight;
             scroller.scrollTop += Math.max(0, nextHeight - previousHeight);
           });
@@ -74,6 +81,7 @@ export const useFillMessageViewport = ({
     conversationId,
     hasMoreBefore,
     isLoadingBefore,
+    isScrollLocked,
     loadPreviousPage,
     oldestCursor,
     renderedItemCount,
