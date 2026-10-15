@@ -86,6 +86,42 @@ describe('archive retention settings', () => {
     );
   });
 
+  it('enables schedule fields only while automatic deletion is enabled', async () => {
+    render(<ArchiveRetentionSettings />);
+    const toggle = await open();
+    const days = screen.getByRole('spinbutton') as HTMLInputElement;
+    const time = screen.getByDisplayValue('04:30') as HTMLInputElement;
+    expect([days.disabled, time.disabled]).toEqual([true, true]);
+    fireEvent.click(toggle);
+    expect([days.disabled, time.disabled]).toEqual([false, false]);
+    fireEvent.click(toggle);
+    expect([days.disabled, time.disabled]).toEqual([true, true]);
+  });
+
+  it('preserves schedule values and allows saving when automatic deletion is switched off', async () => {
+    get.mockResolvedValue({
+      ...response(),
+      settings: { ...response().settings, enabled: true, retention_days: 14, run_at: '05:45' },
+    });
+    render(<ArchiveRetentionSettings />);
+    const toggle = await open();
+    const days = screen.getByRole('spinbutton');
+    fireEvent.change(days, { target: { value: '7' } });
+    fireEvent.blur(days);
+    fireEvent.click(toggle);
+    expect((days as HTMLInputElement).value).toBe('7');
+    expect((screen.getByDisplayValue('05:45') as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith({
+        enabled: false,
+        retention_days: 7,
+        run_at: '05:45',
+        timezone: 'Asia/Seoul',
+      })
+    );
+  });
+
   it('retains edited values after a failed save and allows retry', async () => {
     save.mockRejectedValueOnce(new Error('network unavailable'));
     render(<ArchiveRetentionSettings />);

@@ -114,6 +114,7 @@ export default function ArchiveRetentionSettings() {
               <Form.Item label={t('settings.archived.retention.days')}>
                 <InputNumber
                   aria-label={t('settings.archived.retention.days')}
+                  disabled={saving || !draft.enabled}
                   min={1}
                   max={3650}
                   precision={0}
@@ -124,6 +125,7 @@ export default function ArchiveRetentionSettings() {
               <Form.Item label={t('settings.archived.retention.time')}>
                 <TimePicker
                   aria-label={t('settings.archived.retention.time')}
+                  disabled={saving || !draft.enabled}
                   format='HH:mm'
                   value={draft.run_at}
                   disableConfirm
