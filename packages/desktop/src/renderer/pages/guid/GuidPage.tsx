@@ -83,8 +83,8 @@ const GuidPage: React.FC = () => {
 
   // --- Skills state ---
   // Skill metadata comes from the database-backed catalog. Built-in auto-inject
-  // skills default unchecked; the rest are opt-in per conversation or pre-checked
-  // by assistant defaults.
+  // skills default unchecked except session-message; the rest are opt-in per
+  // conversation or pre-checked by assistant defaults.
   const [allSkills, setAllSkills] = useState<Array<{ name: string; description: string; isAuto: boolean }>>([]);
   const [guidDisabledBuiltinSkills, setGuidDisabledBuiltinSkills] = useState<string[] | undefined>(undefined);
   const [guidEnabledSkills, setGuidEnabledSkills] = useState<string[] | undefined>(undefined);
@@ -116,23 +116,6 @@ const GuidPage: React.FC = () => {
         setAvailableMcpServers([]);
       });
   }, []);
-
-  const handleToggleSkill = useCallback(
-    (skillName: string, isAuto: boolean) => {
-      if (isAuto) {
-        setGuidDisabledBuiltinSkills((prev) => {
-          const list = prev ?? allSkills.filter((skill) => skill.isAuto).map((skill) => skill.name);
-          return list.includes(skillName) ? list.filter((s) => s !== skillName) : [...list, skillName];
-        });
-      } else {
-        setGuidEnabledSkills((prev) => {
-          const list = prev ?? [];
-          return list.includes(skillName) ? list.filter((s) => s !== skillName) : [...list, skillName];
-        });
-      }
-    },
-    [allSkills]
-  );
 
   const handleToggleMcpServer = useCallback((serverId: string) => {
     setGuidSelectedMcpServerIds((prev) => {
@@ -186,12 +169,30 @@ const GuidPage: React.FC = () => {
   );
   const defaultDisabledBuiltinSkillIds = useMemo(
     () => [
-      ...new Set([
-        ...allSkills.filter((skill) => skill.isAuto).map((skill) => skill.name),
-        ...resolvedAssistantDefaults.disabledBuiltinSkillIds,
-      ]),
+      ...new Set(
+        [
+          ...allSkills.filter((skill) => skill.isAuto).map((skill) => skill.name),
+          ...resolvedAssistantDefaults.disabledBuiltinSkillIds,
+        ].filter((name) => name !== 'session-message')
+      ),
     ],
     [allSkills, resolvedAssistantDefaults.disabledBuiltinSkillIds]
+  );
+  const handleToggleSkill = useCallback(
+    (skillName: string, isAuto: boolean) => {
+      if (isAuto) {
+        setGuidDisabledBuiltinSkills((prev) => {
+          const list = prev ?? defaultDisabledBuiltinSkillIds;
+          return list.includes(skillName) ? list.filter((s) => s !== skillName) : [...list, skillName];
+        });
+      } else {
+        setGuidEnabledSkills((prev) => {
+          const list = prev ?? [];
+          return list.includes(skillName) ? list.filter((s) => s !== skillName) : [...list, skillName];
+        });
+      }
+    },
+    [defaultDisabledBuiltinSkillIds]
   );
   const selectedSkillNames = useMemo(() => {
     const disabledBuiltinSkillSet = new Set(guidDisabledBuiltinSkills ?? defaultDisabledBuiltinSkillIds);
@@ -393,6 +394,13 @@ const GuidPage: React.FC = () => {
     setGuidDisabledBuiltinSkills(defaultDisabledBuiltinSkillIds);
     setGuidEnabledSkills(resolvedDefaults.skillIds);
   }, [defaultDisabledBuiltinSkillIds, selectedAssistantDetail, selectedAssistantId]);
+
+  // New Chat reapplies this default even when Guid is already open.
+  useEffect(() => {
+    if (resetAssistantRequested) {
+      setGuidDisabledBuiltinSkills((previous) => previous?.filter((name) => name !== 'session-message'));
+    }
+  }, [location.key, resetAssistantRequested]);
 
   const appliedAssistantDefaultsKeyRef = useRef<string | null>(null);
   const manualModelSelectionAssistantRef = useRef<string | null>(null);

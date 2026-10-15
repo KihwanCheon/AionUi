@@ -526,8 +526,16 @@ describe('GuidPage', () => {
     expect(screen.getByRole('button', { name: 'guid.defaultPrompts.create' })).toBeInTheDocument();
   });
 
-  it('leaves every auto-inject skill unchecked by default', async () => {
+  it('selects session-message by default in both the skill picker and conversation creation options', async () => {
     listAvailableSkillsInvokeMock.mockResolvedValue([
+      {
+        name: 'session-message',
+        description: 'Cross-session messages',
+        location: '/builtin/session-message/SKILL.md',
+        is_auto_inject: true,
+        is_custom: false,
+        source: 'builtin',
+      },
       {
         name: 'officecli',
         description: 'Office documents',
@@ -592,6 +600,50 @@ describe('GuidPage', () => {
         'aionui-config',
       ]);
     });
+  });
+
+  it('honors a manual session-message opt-out before assistant details load', async () => {
+    listAvailableSkillsInvokeMock.mockResolvedValue([
+      { name: 'session-message', description: 'Messages', source: 'builtin', is_auto_inject: true },
+      { name: 'cron', description: 'Schedule tasks', source: 'builtin', is_auto_inject: true },
+    ]);
+    render(<GuidPage />);
+    await waitFor(() => expect(capturedGuidActionRowProps.at(-1)?.disabledBuiltinSkills).toEqual(['cron']));
+
+    act(() => {
+      const toggle = capturedGuidActionRowProps.at(-1)?.onToggleSkill as (name: string, isAuto: boolean) => void;
+      toggle('session-message', true);
+    });
+
+    expect(capturedGuidActionRowProps.at(-1)?.disabledBuiltinSkills).toEqual(['cron', 'session-message']);
+    expect(capturedGuidSendDeps.at(-1)?.guidDisabledBuiltinSkills).toEqual(['cron', 'session-message']);
+  });
+
+  it('starts each new chat with session-message selected even when assistant preferences previously disabled it', async () => {
+    listAvailableSkillsInvokeMock.mockResolvedValue([
+      { name: 'session-message', description: 'Messages', source: 'builtin', is_auto_inject: true },
+      { name: 'cron', description: 'Schedule tasks', source: 'builtin', is_auto_inject: true },
+    ]);
+    swrMock.useSWRMock.mockReturnValue({ data: assistantDetailFixture });
+    resolveGuidAssistantDefaultsMock.mockReturnValue({
+      disabledBuiltinSkillIds: ['session-message'],
+      skillIds: [],
+      mcpIds: [],
+    });
+    const { rerender } = render(<GuidPage />);
+    await waitFor(() => expect(capturedGuidActionRowProps.at(-1)?.disabledBuiltinSkills).toEqual(['cron']));
+    act(() => {
+      const toggle = capturedGuidActionRowProps.at(-1)?.onToggleSkill as (name: string, isAuto: boolean) => void;
+      toggle('session-message', true);
+      toggle('cron', true);
+    });
+    rerender(<GuidPage />);
+    expect(capturedGuidSendDeps.at(-1)?.guidDisabledBuiltinSkills).toEqual(['session-message']);
+
+    locationMock.state = { resetAssistant: true };
+    locationMock.key = 'next-new-chat';
+    rerender(<GuidPage />);
+    expect(capturedGuidActionRowProps.at(-1)?.disabledBuiltinSkills).toEqual([]);
   });
 
   it('does not seed skill defaults from the assistant list while detail is loading', async () => {
