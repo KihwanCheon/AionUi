@@ -1387,6 +1387,20 @@
     "clearFailed": "인터넷 사용 정보 삭제에 실패했습니다"
   },
   "archived": {
+    "retention": {
+      "title": "Batch Delete",
+      "enabled": "자동 완전 삭제",
+      "days": "보관 후 경과 일수",
+      "time": "매일 삭제 시각",
+      "timezone": "시간대: {{timezone}}",
+      "description": "보관 후 지정한 일수를 초과한 일반 대화를 완전 삭제합니다. 삭제한 대화는 복구할 수 없습니다.",
+      "runtime": "AionCore 실행 중 작동합니다. 놓친 예약은 AionCore가 다시 실행될 때 한 번 처리합니다. 저장하면 다음 예약 시각부터 적용됩니다.",
+      "nextRun": "다음 실행: {{time}}",
+      "lastRun": "최근 실행: {{time}} · 삭제 {{deleted}}건 · 실패 {{failed}}건",
+      "loadFailed": "자동 삭제 설정을 불러오지 못했습니다.",
+      "saveFailed": "자동 삭제 설정을 저장하지 못했습니다.",
+      "saved": "자동 삭제 설정을 저장했습니다."
+    },
     "navLabel": "Archived conversations",
     "title": "Archived",
     "description": "Conversations and teams you archived. Restore them to the sidebar, or batch delete them permanently.",

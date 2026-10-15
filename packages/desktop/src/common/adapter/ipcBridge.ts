@@ -2567,6 +2567,13 @@ export const team = {
 };
 
 export const sidebar = {
+  getArchiveRetention: httpGet<import('@/common/types/sidebar').ArchiveRetentionResponse, void>(
+    '/api/sidebar/archive-retention'
+  ),
+  saveArchiveRetention: httpPut<
+    import('@/common/types/sidebar').ArchiveRetentionResponse,
+    import('@/common/types/sidebar').ArchiveRetentionSettings
+  >('/api/sidebar/archive-retention'),
   // First screen: pinned → project area (real projects + dir pseudo-groups) → chats.
   // `win` is a repeated query param (one per group to widen); `limit` caps items per group.
   get: withResponseMap(

@@ -1387,6 +1387,20 @@
     "clearFailed": "閲覧データの消去に失敗しました"
   },
   "archived": {
+    "retention": {
+      "title": "一括削除",
+      "enabled": "自動で完全に削除",
+      "days": "アーカイブ後の日数",
+      "time": "毎日の削除時刻",
+      "timezone": "タイムゾーン: {{timezone}}",
+      "description": "指定した日数を超えてアーカイブされている独立した会話を完全に削除します。削除は元に戻せません。",
+      "runtime": "AionCore の実行中に動作します。実行できなかった予約は再起動時に一度実行されます。保存後は次回の予定から適用されます。",
+      "nextRun": "次回の実行: {{time}}",
+      "lastRun": "前回の実行: {{time}} · 削除: {{deleted}} · 失敗: {{failed}}",
+      "loadFailed": "自動削除設定を読み込めませんでした。",
+      "saveFailed": "自動削除設定を保存できませんでした。",
+      "saved": "自動削除設定を保存しました。"
+    },
     "navLabel": "Archived conversations",
     "title": "Archived",
     "description": "Conversations and teams you archived. Restore them to the sidebar, or batch delete them permanently.",

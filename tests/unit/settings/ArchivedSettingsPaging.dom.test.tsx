@@ -99,6 +99,13 @@ describe('ArchivedSettings paging', () => {
     cleanup();
   });
 
+  it('keeps the batch deletion settings available when the archive is empty', async () => {
+    getMock.mockResolvedValue({ groups: [], has_more_groups: false });
+    renderPage();
+    const button = await screen.findByRole('button', { name: 'settings.archived.retention.title' });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('requests the first screen with an explicit page-size limit and the archived flag', async () => {
     getMock.mockResolvedValue({
       groups: [projectGroup('P1', 'Alpha', [conv('c1', 'Chat One')], false)],

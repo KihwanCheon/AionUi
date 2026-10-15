@@ -1385,6 +1385,20 @@
     "clearFailed": "No se pudieron borrar los datos de navegación"
   },
   "archived": {
+    "retention": {
+      "title": "Eliminación por lotes",
+      "enabled": "Eliminar permanentemente de forma automática",
+      "days": "Días desde el archivado",
+      "time": "Hora diaria de eliminación",
+      "timezone": "Zona horaria: {{timezone}}",
+      "description": "Elimina permanentemente las conversaciones independientes archivadas durante más días de los indicados. No se puede deshacer.",
+      "runtime": "Se ejecuta mientras AionCore está activo. Una ejecución omitida se recupera una vez al reiniciar. Los cambios se aplican desde la próxima hora programada.",
+      "nextRun": "Próxima ejecución: {{time}}",
+      "lastRun": "Última ejecución: {{time}} · Eliminadas: {{deleted}} · Fallidas: {{failed}}",
+      "loadFailed": "No se pudo cargar la configuración.",
+      "saveFailed": "No se pudo guardar la configuración.",
+      "saved": "Configuración de eliminación automática guardada."
+    },
     "navLabel": "Archived conversations",
     "title": "Archived",
     "description": "Conversations and teams you archived. Restore them to the sidebar, or batch delete them permanently.",

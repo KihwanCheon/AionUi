@@ -1385,6 +1385,20 @@
     "clearFailed": "Browserdaten konnten nicht gelöscht werden"
   },
   "archived": {
+    "retention": {
+      "title": "Stapelweise löschen",
+      "enabled": "Automatisch endgültig löschen",
+      "days": "Tage seit der Archivierung",
+      "time": "Tägliche Löschzeit",
+      "timezone": "Zeitzone: {{timezone}}",
+      "description": "Eigenständige Gespräche werden nach der gewählten Anzahl von Archivtagen endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.",
+      "runtime": "Läuft, solange AionCore aktiv ist. Verpasste Termine werden beim Neustart einmal nachgeholt. Änderungen gelten ab dem nächsten zukünftigen Termin.",
+      "nextRun": "Nächster Lauf: {{time}}",
+      "lastRun": "Letzter Lauf: {{time}} · Gelöscht: {{deleted}} · Fehlgeschlagen: {{failed}}",
+      "loadFailed": "Einstellungen konnten nicht geladen werden.",
+      "saveFailed": "Einstellungen konnten nicht gespeichert werden.",
+      "saved": "Einstellungen für automatisches Löschen gespeichert."
+    },
     "navLabel": "Archived conversations",
     "title": "Archived",
     "description": "Conversations and teams you archived. Restore them to the sidebar, or batch delete them permanently.",

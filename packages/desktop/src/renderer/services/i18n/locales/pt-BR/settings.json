@@ -1388,6 +1388,20 @@
     "clearFailed": "Falha ao limpar dados de navegação"
   },
   "archived": {
+    "retention": {
+      "title": "Exclusão em lote",
+      "enabled": "Excluir permanentemente de forma automática",
+      "days": "Dias desde o arquivamento",
+      "time": "Horário diário de exclusão",
+      "timezone": "Fuso horário: {{timezone}}",
+      "description": "Exclui permanentemente conversas independentes arquivadas há mais dias do que o período escolhido. A exclusão não pode ser desfeita.",
+      "runtime": "Executa enquanto o AionCore está ativo. Uma execução perdida ocorre uma vez ao reiniciar. As alterações valem a partir do próximo horário agendado.",
+      "nextRun": "Próxima execução: {{time}}",
+      "lastRun": "Última execução: {{time}} · Excluídas: {{deleted}} · Falhas: {{failed}}",
+      "loadFailed": "Não foi possível carregar as configurações.",
+      "saveFailed": "Não foi possível salvar as configurações.",
+      "saved": "Configurações de exclusão automática salvas."
+    },
     "navLabel": "Archived conversations",
     "title": "Archived",
     "description": "Conversations and teams you archived. Restore them to the sidebar, or batch delete them permanently.",

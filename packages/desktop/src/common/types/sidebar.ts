@@ -134,3 +134,18 @@ export type ArchiveDeleteResult = {
   teams_deleted: number;
   conversations_deleted: number;
 };
+
+export type ArchiveRetentionSettings = {
+  enabled: boolean;
+  retention_days: number;
+  run_at: string;
+  timezone: string;
+};
+
+export type ArchiveRetentionResponse = {
+  settings: ArchiveRetentionSettings;
+  next_run_at: number | null;
+  last_run_at: number | null;
+  last_deleted: number;
+  last_failed: number;
+};

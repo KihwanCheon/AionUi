@@ -1386,6 +1386,20 @@
     "clearFailed": "清空浏览数据失败"
   },
   "archived": {
+    "retention": {
+      "title": "批量删除",
+      "enabled": "自动永久删除",
+      "days": "归档后的天数",
+      "time": "每日删除时间",
+      "timezone": "时区：{{timezone}}",
+      "description": "永久删除归档超过指定天数的独立对话。删除后无法恢复。",
+      "runtime": "AionCore 运行时执行。错过的计划会在重新启动时补执行一次。保存后从下一个计划时间开始生效。",
+      "nextRun": "下次执行：{{time}}",
+      "lastRun": "上次执行：{{time}} · 已删除：{{deleted}} · 失败：{{failed}}",
+      "loadFailed": "无法加载自动删除设置。",
+      "saveFailed": "无法保存自动删除设置。",
+      "saved": "自动删除设置已保存。"
+    },
     "navLabel": "已归档的对话",
     "title": "已归档",
     "description": "你归档的会话和团队。可以恢复到侧边栏，或批量删除将其永久删除。",

@@ -1400,6 +1400,20 @@
     "clearFailed": "Не вдалося очистити дані браузера"
   },
   "archived": {
+    "retention": {
+      "title": "Пакетне видалення",
+      "enabled": "Автоматично видаляти назавжди",
+      "days": "Днів від архівування",
+      "time": "Щоденний час видалення",
+      "timezone": "Часовий пояс: {{timezone}}",
+      "description": "Безповоротно видаляє окремі розмови, що перебувають в архіві довше за вказану кількість днів. Видалення не можна скасувати.",
+      "runtime": "Працює, коли AionCore запущено. Пропущений запуск виконується один раз після перезапуску. Зміни діють із наступного запланованого часу.",
+      "nextRun": "Наступний запуск: {{time}}",
+      "lastRun": "Останній запуск: {{time}} · Видалено: {{deleted}} · Помилок: {{failed}}",
+      "loadFailed": "Не вдалося завантажити налаштування.",
+      "saveFailed": "Не вдалося зберегти налаштування.",
+      "saved": "Налаштування автоматичного видалення збережено."
+    },
     "navLabel": "Archived conversations",
     "title": "Archived",
     "description": "Conversations and teams you archived. Restore them to the sidebar, or batch delete them permanently.",

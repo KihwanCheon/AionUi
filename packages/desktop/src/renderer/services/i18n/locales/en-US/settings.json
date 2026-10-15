@@ -1385,6 +1385,20 @@
     "clearFailed": "Failed to clear browsing data"
   },
   "archived": {
+    "retention": {
+      "title": "Batch Delete",
+      "enabled": "Automatically delete permanently",
+      "days": "Days since archiving",
+      "time": "Daily deletion time",
+      "timezone": "Time zone: {{timezone}}",
+      "description": "Permanently delete independent conversations archived longer than the chosen number of days. Deletion cannot be undone.",
+      "runtime": "Runs while AionCore is running. A missed schedule runs once when AionCore starts again. Saving schedules the next future run.",
+      "nextRun": "Next run: {{time}}",
+      "lastRun": "Last run: {{time}} · Deleted: {{deleted}} · Failed: {{failed}}",
+      "loadFailed": "Could not load the automatic deletion settings.",
+      "saveFailed": "Could not save the automatic deletion settings.",
+      "saved": "Automatic deletion settings saved."
+    },
     "navLabel": "Archived conversations",
     "title": "Archived",
     "description": "Conversations and teams you archived. Restore them to the sidebar, or batch delete them permanently.",

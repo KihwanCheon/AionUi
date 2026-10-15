@@ -1385,6 +1385,20 @@
     "clearFailed": "پاک کردن داده‌های مرور ناموفق بود"
   },
   "archived": {
+    "retention": {
+      "title": "حذف گروهی",
+      "enabled": "حذف دائمی خودکار",
+      "days": "روزهای سپری‌شده از بایگانی",
+      "time": "زمان حذف روزانه",
+      "timezone": "منطقه زمانی: {{timezone}}",
+      "description": "گفتگوهای مستقل بایگانی‌شده برای بیش از تعداد روزهای انتخاب‌شده را برای همیشه حذف می‌کند. حذف قابل بازگشت نیست.",
+      "runtime": "هنگام اجرای AionCore فعال است. اجرای ازدست‌رفته پس از راه‌اندازی مجدد یک بار انجام می‌شود. تنظیمات ذخیره‌شده از زمان بعدی اعمال می‌شوند.",
+      "nextRun": "اجرای بعدی: {{time}}",
+      "lastRun": "آخرین اجرا: {{time}} · حذف‌شده: {{deleted}} · ناموفق: {{failed}}",
+      "loadFailed": "بارگیری تنظیمات ممکن نشد.",
+      "saveFailed": "ذخیره تنظیمات ممکن نشد.",
+      "saved": "تنظیمات حذف خودکار ذخیره شد."
+    },
     "navLabel": "Archived conversations",
     "title": "Archived",
     "description": "Conversations and teams you archived. Restore them to the sidebar, or batch delete them permanently.",

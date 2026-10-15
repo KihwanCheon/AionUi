@@ -1385,6 +1385,20 @@
     "clearFailed": "Tarama verileri temizlenemedi"
   },
   "archived": {
+    "retention": {
+      "title": "Toplu silme",
+      "enabled": "Otomatik olarak kalıcı sil",
+      "days": "Arşivlemeden sonra geçen gün",
+      "time": "Günlük silme saati",
+      "timezone": "Saat dilimi: {{timezone}}",
+      "description": "Seçilen gün sayısından uzun süredir arşivlenmiş bağımsız konuşmaları kalıcı olarak siler. Silme işlemi geri alınamaz.",
+      "runtime": "AionCore çalışırken yürütülür. Kaçırılan zamanlama yeniden başlatmada bir kez çalıştırılır. Kaydedilen ayarlar bir sonraki zamanlamadan itibaren geçerlidir.",
+      "nextRun": "Sonraki çalıştırma: {{time}}",
+      "lastRun": "Son çalıştırma: {{time}} · Silinen: {{deleted}} · Başarısız: {{failed}}",
+      "loadFailed": "Ayarlar yüklenemedi.",
+      "saveFailed": "Ayarlar kaydedilemedi.",
+      "saved": "Otomatik silme ayarları kaydedildi."
+    },
     "navLabel": "Archived conversations",
     "title": "Archived",
     "description": "Conversations and teams you archived. Restore them to the sidebar, or batch delete them permanently.",
