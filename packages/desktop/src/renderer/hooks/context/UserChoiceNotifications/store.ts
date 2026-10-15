@@ -143,23 +143,6 @@ export const createChoiceNoticeStore = () => {
       if (!pending.some((item) => item.key === key)) pending = [...pending, notice];
       publish();
     },
-    resolveConversation: (conversationId: string) => {
-      const resolved = pending.filter((item) => item.conversationId === conversationId);
-      for (const [key, value] of staged) {
-        if (value.conversationId === conversationId) staged.delete(key);
-      }
-      for (const [key, value] of parsers) {
-        if (value.conversationId === conversationId) parsers.delete(key);
-      }
-      if (!resolved.length) return;
-      resolved.forEach((item) => suppressed.set(item.key, item));
-      pending = pending.filter((item) => item.conversationId !== conversationId);
-      console.info('[ChoiceNotifications] Resolved by user message', {
-        conversationId,
-        count: resolved.length,
-      });
-      publish();
-    },
     consume: (message: IResponseMessage) => {
       if (message.type === 'finish' || message.type === 'error') {
         // Drop scratch buffers, never pending notifications.

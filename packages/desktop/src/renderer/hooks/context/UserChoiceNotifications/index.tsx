@@ -77,9 +77,6 @@ export function UserChoiceNotificationsProvider({
     };
     store.setSyncHandlers({ upsert: scheduleUpsert, dismiss: scheduleDismiss });
     const unsubscribeStream = ipcBridge.conversation?.responseStream?.on(store.consume);
-    const unsubscribeUserCreated = ipcBridge.conversation?.userCreated?.on((message) => {
-      if (!message.hidden && message.source === 'user') store.resolveConversation(message.conversation_id);
-    });
     const unsubscribeChoiceNotices = ipcBridge.conversation?.choiceNoticesChanged?.on((event) => {
       store.replaceAll(event.items);
     });
@@ -96,7 +93,6 @@ export function UserChoiceNotificationsProvider({
       store.setSyncHandlers(undefined);
       timers.forEach((timer) => clearTimeout(timer));
       unsubscribeStream?.();
-      unsubscribeUserCreated?.();
       unsubscribeChoiceNotices?.();
     };
   }, [store, suppliedStore]);

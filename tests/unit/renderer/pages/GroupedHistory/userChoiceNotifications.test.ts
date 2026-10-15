@@ -155,26 +155,26 @@ describe('prose notification lifecycle', () => {
     expect(store.getSnapshot()[0].messageId).toBe('message-b');
   });
 
-  it('keeps different questions from separate messages until the user replies', () => {
+  it('keeps different questions from separate messages until explicitly dismissed', () => {
     const store = createChoiceNoticeStore();
     store.consume(frame(question));
     store.consume(frame(`${USER_CHOICE_MARKER}\n배포해도 될까요?\n`, { msg_id: 'message-b' }));
     expect(store.getSnapshot()).toHaveLength(2);
   });
 
-  it('resolves the conversation locally while the server snapshot catches up', () => {
+  it('keeps existing choices when user content and later assistant turns arrive', () => {
     const store = createChoiceNoticeStore();
     store.consume(frame(question));
     store.consume(frame(`${USER_CHOICE_MARKER}\n배포해도 될까요?\n`, { msg_id: 'message-b' }));
     store.consume(frame(question, { conversation_id: 'conversation-b' }));
-    const staleSnapshot = [...store.getSnapshot()];
+    const pending = [...store.getSnapshot()];
 
-    store.resolveConversation('conversation-a');
-    expect(store.getSnapshot().map((item) => item.conversationId)).toEqual(['conversation-b']);
-
-    store.replaceAll(staleSnapshot);
+    store.consume(frame('Proceed', { type: 'user_content', position: 'right' }));
+    store.consume(frame('Working on it', { msg_id: 'message-c' }));
+    store.consume(frame('', { type: 'finish' }));
+    store.replaceAll(pending);
     store.consume(frame(question, { replace: true }));
-    expect(store.getSnapshot().map((item) => item.conversationId)).toEqual(['conversation-b']);
+    expect(store.getSnapshot()).toEqual(pending);
   });
 
   it('keeps dismissed notifications hidden across snapshots and replay', () => {

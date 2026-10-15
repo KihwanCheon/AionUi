@@ -116,20 +116,21 @@ describe('in-app attention notification UI', () => {
     expect(state.navigate).not.toHaveBeenCalled();
   });
 
-  it('clears existing choices only when a visible user send is created', () => {
-    const store = setup(<ConversationChoiceBadge conversationId='conversation-a' />);
-    const callback = state.onUserCreated.mock.calls[0][0] as (message: {
-      conversation_id: string;
-      hidden: boolean;
-      source: 'user' | 'agent_turn';
-    }) => void;
+  it('keeps the notification after a visible user send until its dismiss button is clicked', async () => {
+    const store = setup();
+    const notice = store.getSnapshot()[0];
+    act(() => {
+      for (const [callback] of state.onUserCreated.mock.calls) {
+        callback({ conversation_id: 'conversation-a', hidden: false, source: 'user' });
+      }
+    });
 
-    act(() => callback({ conversation_id: 'conversation-a', hidden: false, source: 'agent_turn' }));
-    expect(store.getSnapshot()).toHaveLength(1);
-    act(() => callback({ conversation_id: 'conversation-a', hidden: true, source: 'user' }));
-    expect(store.getSnapshot()).toHaveLength(1);
-    act(() => callback({ conversation_id: 'conversation-a', hidden: false, source: 'user' }));
-    expect(store.getSnapshot()).toHaveLength(0);
+    expect(store.getSnapshot()).toEqual([notice]);
+    expect(state.dismissChoiceNotice).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'conversation.userChoiceNotifications.dismiss' }));
+    await waitFor(() => expect(state.dismissChoiceNotice).toHaveBeenCalledWith(notice));
+    expect(store.getSnapshot()).toEqual([]);
   });
 
   it('replaces the local list when another device changes the server snapshot', () => {
@@ -144,6 +145,10 @@ describe('in-app attention notification UI', () => {
     act(() => callback({ user_id: 'user-a', items: remote.getSnapshot() }));
     expect(store.getSnapshot().map((item) => item.conversationId)).toEqual(['conversation-b']);
     expect(screen.getByTestId('conversation-choice-conversation-b')).toBeInTheDocument();
+
+    act(() => callback({ user_id: 'user-a', items: [] }));
+    expect(store.getSnapshot()).toEqual([]);
+    expect(screen.queryByTestId('conversation-choice-conversation-b')).not.toBeInTheDocument();
   });
 
   it('loads the shared server snapshot when a device opens the app', async () => {
@@ -173,6 +178,26 @@ describe('in-app attention notification UI', () => {
     expect(state.registerChoiceNotice).not.toHaveBeenCalled();
     expect(state.dismissChoiceNotice).toHaveBeenCalledWith(notice);
     vi.useRealTimers();
+  });
+
+  it('keeps synchronizing a new question when the user replies before registration completes', async () => {
+    vi.useFakeTimers();
+    const store = setup(<ConversationChoiceBadge conversationId='conversation-a' />, false);
+    const callback = state.onStream.mock.calls[0][0] as (message: IResponseMessage) => void;
+    act(() => callback(frame()));
+    const notice = store.getSnapshot()[0];
+    state.registerChoiceNotice.mockResolvedValue([notice]);
+
+    act(() => {
+      for (const [onUserCreated] of state.onUserCreated.mock.calls) {
+        onUserCreated({ conversation_id: 'conversation-a', hidden: false, source: 'user' });
+      }
+    });
+    await act(async () => vi.runAllTimersAsync());
+
+    expect(state.registerChoiceNotice).toHaveBeenCalledWith(notice);
+    expect(store.getSnapshot()).toEqual([notice]);
+    expect(screen.getByTestId('conversation-choice-conversation-a')).toBeInTheDocument();
   });
 
   it('keeps the AI identity, running spinner and independent choice badge together', () => {
