@@ -113,6 +113,36 @@ describe('MindNProgress Runner MCP relay', () => {
     }
   });
 
+  it.each(['GET', 'POST'])('preserves the conversation and browser device for %s card navigation', async (method) => {
+    const forward = vi.fn(async () => new Response('{}'));
+    const { relay, descriptor } = await relayFixture(forward);
+    const pathname = `/api/integrations/aionui/conversations/conversation_1/mindnprogress${method === 'POST' ? '/select' : ''}`;
+    try {
+      const response = await fetch(`${relay.baseUrl}${pathname}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${descriptor.token}`,
+          'X-MnP-AI-Conversation-Id': 'conversation_1',
+          'X-MnP-Selection-Device-Address': '10.78.12.223',
+          'X-Forwarded-For': 'untrusted-address',
+        },
+      });
+      expect(response.status).toBe(200);
+      expect(forward).toHaveBeenCalledExactlyOnceWith({
+        pathname,
+        method,
+        headers: {
+          accept: '*/*',
+          'x-mnp-ai-conversation-id': 'conversation_1',
+          'x-mnp-selection-device-address': '10.78.12.223',
+        },
+        body: undefined,
+      });
+    } finally {
+      await relay.close();
+    }
+  });
+
   it('does not expose non-API paths through the loopback relay', async () => {
     const forward = vi.fn(async () => new Response('{}'));
     const { relay, descriptor } = await relayFixture(forward);

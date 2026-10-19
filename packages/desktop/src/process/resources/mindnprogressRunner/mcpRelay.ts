@@ -25,6 +25,7 @@ const FORWARDED_REQUEST_HEADERS = [
   'x-mnp-ai-card-id',
   'x-mnp-ai-conversation-id',
   'x-mnp-ai-request-attribution-continuation',
+  'x-mnp-selection-device-address',
 ] as const;
 
 export type RunnerMcpRelayRequest = {

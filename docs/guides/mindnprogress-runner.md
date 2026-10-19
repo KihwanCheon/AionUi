@@ -39,3 +39,11 @@ To restore the Runner automatically after a reboot, enable **Settings → System
 **Disconnect** removes the credential from this AionUi and stops its sidecar. To invalidate the server-side Runner permission as well, use **Revoke server permission** in MindNProgress Distributed Work settings. Pairing again also rotates the server token.
 
 Runner-only fixes require the updated AionUi sidecar to be loaded on each affected machine, but do not require an AionCore rebuild. Existing completion reports can be retried with their original operation IDs without rerunning the child AI work.
+
+## Linked-card navigation from sub-machines
+
+The chat input's MnP icon uses AionCore's conversation-link API. When local MnP is unavailable, AionCore discovers the Runner's user-local MCP relay descriptor and sends the lookup or card selection through that relay. An explicit `MNP_API_URL` retains its configured destination. The descriptor is read on each request so a Runner restart can rotate its port and token.
+
+The Runner forwards the conversation ID and the browser device address. MnP requires the requested conversation to match the authenticated Runner conversation and its recorded machine owner. Selection events still reach only MnP views opened by the same account on the same device.
+
+This navigation support requires the corresponding AionCore relay discovery, AionUi Runner header forwarding, and MnP navigation authorization updates. The sub-machine must load the updated Core and Runner, and the main machine must load the updated MnP server. A connected Runner alone does not establish that older navigation code supports remote MnP.
