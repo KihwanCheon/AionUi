@@ -45,6 +45,7 @@
     "rename": "重新命名",
     "createCronTask": "建立排程任務",
     "copyAll": "複製整個對話",
+    "copyConversationId": "複製對話 ID",
     "renameTitle": "重新命名對話",
     "renamePlaceholder": "請輸入新名稱",
     "renameSuccess": "重新命名成功",

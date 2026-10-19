@@ -41,6 +41,7 @@
     "rename": "Renombrar",
     "createCronTask": "Crear tarea programada",
     "copyAll": "Copiar toda la conversación",
+    "copyConversationId": "Copiar ID de la conversación",
     "renameTitle": "Renombrar chat",
     "renamePlaceholder": "Ingresa un nuevo nombre",
     "renameSuccess": "Renombrado correctamente",

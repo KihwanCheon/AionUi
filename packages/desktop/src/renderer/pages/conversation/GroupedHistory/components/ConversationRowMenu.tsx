@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Dropdown, Menu } from '@arco-design/web-react';
+import { copyText } from '@/renderer/utils/ui/clipboard';
+import { Dropdown, Menu, Message } from '@arco-design/web-react';
 import { Copy, CopyOne, DeleteOne, EditOne, Export, FolderClose, Inbox, MoreOne, Star, Timer } from '@icon-park/react';
 import classNames from 'classnames';
 import React from 'react';
@@ -61,11 +62,21 @@ const ConversationRowMenu: React.FC<ConversationRowMenuProps> = ({
     }
   }, [conversation, menuVisible]);
 
+  const handleCopyConversationId = async (id: string): Promise<void> => {
+    try {
+      await copyText(id);
+      Message.success(t('messages.copySuccess'));
+    } catch {
+      Message.error(t('messages.copyFailed'));
+    }
+  };
+
   const handleMenuItemClick = (key: string): void => {
     const actionConversation = actionConversationRef.current;
     const conversationActions: Partial<Record<string, () => void>> = {
       copy: onCopy ? () => onCopy(actionConversation) : undefined,
       copyAll: onCopyAll ? () => onCopyAll(actionConversation) : undefined,
+      copyId: () => void handleCopyConversationId(actionConversation.id),
       pin: () => onTogglePin(actionConversation),
       toggleManualUnread: () => onToggleManualUnread(actionConversation),
       rename: () => onEditStart(actionConversation),
@@ -97,6 +108,12 @@ const ConversationRowMenu: React.FC<ConversationRowMenuProps> = ({
               </div>
             </Menu.Item>
           )}
+          <Menu.Item key='copyId'>
+            <div className='flex items-center gap-8px'>
+              <Copy theme='outline' size='14' />
+              <span>{t('conversation.history.copyConversationId')}</span>
+            </div>
+          </Menu.Item>
           <Menu.Item key='pin'>
             <div className='flex items-center gap-8px'>
               <Star theme={isPinned ? 'filled' : 'outline'} size='14' fill='currentColor' />

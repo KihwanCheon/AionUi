@@ -41,6 +41,7 @@
     "rename": "Umbenennen",
     "createCronTask": "Geplante Aufgabe erstellen",
     "copyAll": "Gesamte Unterhaltung kopieren",
+    "copyConversationId": "Unterhaltungs-ID kopieren",
     "renameTitle": "Chat umbenennen",
     "renamePlaceholder": "Bitte neuen Namen eingeben",
     "renameSuccess": "Erfolgreich umbenannt",

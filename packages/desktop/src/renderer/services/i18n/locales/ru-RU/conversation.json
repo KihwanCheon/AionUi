@@ -41,6 +41,7 @@
     "rename": "Переименовать",
     "createCronTask": "Создать запланированную задачу",
     "copyAll": "Копировать весь диалог",
+    "copyConversationId": "Копировать ID диалога",
     "renameTitle": "Переименовать чат",
     "renamePlaceholder": "Введите новое имя",
     "renameSuccess": "Успешно переименовано",

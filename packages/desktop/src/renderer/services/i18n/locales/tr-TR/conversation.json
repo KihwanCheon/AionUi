@@ -45,6 +45,7 @@
     "rename": "Yeniden Adlandır",
     "createCronTask": "Zamanlanmış Görev Oluştur",
     "copyAll": "Tüm konuşmayı kopyala",
+    "copyConversationId": "Konuşma kimliğini kopyala",
     "renameTitle": "Sohbeti Yeniden Adlandır",
     "renamePlaceholder": "Lütfen yeni bir isim girin",
     "renameSuccess": "Başarıyla yeniden adlandırıldı",

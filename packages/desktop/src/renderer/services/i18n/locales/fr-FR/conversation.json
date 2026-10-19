@@ -41,6 +41,7 @@
     "rename": "Renommer",
     "createCronTask": "Créer une tâche planifiée",
     "copyAll": "Copier toute la conversation",
+    "copyConversationId": "Copier l’ID de la conversation",
     "renameTitle": "Renommer le chat",
     "renamePlaceholder": "Veuillez entrer un nouveau nom",
     "renameSuccess": "Renommé avec succès",

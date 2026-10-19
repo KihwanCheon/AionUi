@@ -726,6 +726,7 @@ export type I18nKey =
   | 'conversation.history.confirmDelete'
   | 'conversation.history.conversationsSection'
   | 'conversation.history.copyAll'
+  | 'conversation.history.copyConversationId'
   | 'conversation.history.createCronTask'
   | 'conversation.history.deleteConfirm'
   | 'conversation.history.deleteFailed'

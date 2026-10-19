@@ -41,6 +41,7 @@
     "rename": "Rename",
     "createCronTask": "Create scheduled task",
     "copyAll": "Copy Entire Conversation",
+    "copyConversationId": "Copy Conversation ID",
     "renameTitle": "Rename Chat",
     "renamePlaceholder": "Please enter a new name",
     "renameSuccess": "Renamed successfully",
