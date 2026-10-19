@@ -9,6 +9,7 @@ import { scopeToToken } from '@/common/adapter/sidebarMapper';
 import type { SidebarItem } from '@/common/types/sidebar';
 import { useAgentLogos } from '@/renderer/utils/model/agentLogo';
 import { emitter } from '@/renderer/utils/emitter';
+import { getParentAndCurrentDir } from '@/renderer/utils/workspace/projectPathLabel';
 import { Button, Checkbox, Empty, Message, Modal, Spin } from '@arco-design/web-react';
 import { DeleteOne, FolderClose, ListCheckbox, MessageOne, Peoples, Robot } from '@icon-park/react';
 import React from 'react';
@@ -190,7 +191,9 @@ const ArchivedSettings: React.FC = () => {
       if (scope.type === 'project' || scope.type === 'dir') {
         const key = scope.type === 'project' ? scope.project_id : scope.key;
         const projectId = scope.type === 'project' ? scope.project_id : undefined;
-        archivedBlocks.push({ key, name: scope.name, rows, projectId, scopeToken: token, hasMore, cursor });
+        const workspace = scope.type === 'project' ? scope.workspace : scope.path;
+        const name = workspace ? getParentAndCurrentDir(workspace) : scope.name;
+        archivedBlocks.push({ key, name, rows, projectId, scopeToken: token, hasMore, cursor });
       } else {
         // Ordinary archived chats are still grouped as a project-like block, named "No project".
         noProjectRows.push(...rows);

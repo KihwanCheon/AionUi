@@ -10,7 +10,13 @@ describe('project path labels', () => {
   it.each([
     ['D:\\Git\\AionUi', 'Git/AionUi'],
     ['/work/projects/AionUi/', 'projects/AionUi'],
+    ['file:///C:/Git/Holdem_Fork3/hdtf-client', 'Holdem_Fork3/hdtf-client'],
+    [`file:///C:/Git/${encodeURIComponent('한글 폴더')}/hdtf-client`, '한글 폴더/hdtf-client'],
+    ['file://server/shared/hdtf-client/', 'shared/hdtf-client'],
+    ['file:///C:/Git/Project%invalid/hdtf-client', 'Project%invalid/hdtf-client'],
+    ['C:\\Git\\Project%20Folder\\hdtf-client', 'Project%20Folder/hdtf-client'],
     ['AionUi', 'AionUi'],
+    ['', ''],
   ])('shows the parent and current directory for %s', (path, expected) => {
     expect(getParentAndCurrentDir(path)).toBe(expected);
   });

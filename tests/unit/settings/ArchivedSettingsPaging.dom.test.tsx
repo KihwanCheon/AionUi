@@ -74,9 +74,10 @@ const projectGroup = (
   name: string,
   items: ReturnType<typeof conv>[],
   hasMore: boolean,
-  nextCursor?: string
+  nextCursor?: string,
+  workspace?: string | null
 ) => ({
-  scope: { type: 'project' as const, project_id: projectId, name },
+  scope: { type: 'project' as const, project_id: projectId, name, workspace },
   items,
   has_more: hasMore,
   next_cursor: nextCursor,
@@ -119,6 +120,60 @@ describe('ArchivedSettings paging', () => {
     // A fully-loaded group (has_more false) shows no "load more" affordance.
     await screen.findByText('Chat One');
     expect(screen.queryByText('settings.archived.loadMore')).toBeNull();
+  });
+
+  it('distinguishes projects with the same name using their parent folders', async () => {
+    getMock.mockResolvedValue({
+      groups: [
+        projectGroup(
+          'P1',
+          'hdtf-client',
+          [conv('c1', 'Chat One')],
+          false,
+          undefined,
+          'file:///C:/Git/Holdem_Fork1/hdtf-client'
+        ),
+        projectGroup(
+          'P2',
+          'hdtf-client',
+          [conv('c2', 'Chat Two')],
+          false,
+          undefined,
+          'file:///C:/Git/Holdem_Fork3/hdtf-client'
+        ),
+      ],
+      has_more_groups: false,
+    });
+    renderPage();
+    const headings = await screen.findAllByRole('heading', { level: 2 });
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      'Holdem_Fork1/hdtf-client',
+      'Holdem_Fork3/hdtf-client',
+    ]);
+  });
+
+  it.each([undefined, null, ''])('keeps the project name when its workspace is %s', async (workspace) => {
+    getMock.mockResolvedValue({
+      groups: [projectGroup('P1', 'Alpha', [conv('c1', 'Chat One')], false, undefined, workspace)],
+      has_more_groups: false,
+    });
+    renderPage();
+    expect((await screen.findByRole('heading', { level: 2 })).textContent).toBe('Alpha');
+  });
+
+  it('includes the parent folder for directory groups without a project record', async () => {
+    getMock.mockResolvedValue({
+      groups: [
+        {
+          scope: { type: 'dir', key: 'dir1', name: 'hdtf-client', path: 'C:\\Git\\Holdem_Fork2\\hdtf-client' },
+          items: [conv('c1', 'Chat One')],
+          has_more: false,
+        },
+      ],
+      has_more_groups: false,
+    });
+    renderPage();
+    expect((await screen.findByRole('heading', { level: 2 })).textContent).toBe('Holdem_Fork2/hdtf-client');
   });
 
   it('renders a load-more button only for a group with more archived items', async () => {
