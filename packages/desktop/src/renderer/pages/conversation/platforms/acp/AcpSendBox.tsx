@@ -56,6 +56,7 @@ import { classifyConversationBusyError } from '../conversationBusyError';
 import { buildSendFailureError } from './buildSendFailureError';
 import { useAcpInitialMessage } from './useAcpInitialMessage';
 import type { UseAcpMessageReturn } from './useAcpMessage';
+import { useClaudeModeSelection } from './claudePermissions';
 
 const configErrorMessageKey = (error: unknown) => {
   const errorKind = classifyConfigSetError(error);
@@ -175,6 +176,21 @@ const AcpSendBox: React.FC<{
     enabled: true,
   });
   const runtimeMode = runtimeConfig.mode;
+  const claudeModeSelection = useClaudeModeSelection({
+    conversationId: conversation_id,
+    backend,
+    observedMode: runtimeMode?.currentValue ?? session_mode ?? 'default',
+    setting: runtimeConfig.setStatus.state === 'setting',
+    syncMode: async (mode) => {
+      const result = await runtimeConfig.setConfigOption(runtimeMode?.id ?? 'mode', mode);
+      if (isLeaderInTeam) teamPermission?.propagateMode?.(mode);
+      return result;
+    },
+    onSyncError: (error) => {
+      console.warn('[AcpSendBox] Claude permission mode sync failed', { conversation_id });
+      Message.error(t(configErrorMessageKey(error)));
+    },
+  });
   const runtimeThoughtLevel = runtimeConfig.thoughtLevel;
   const handleThoughtLevelSetOption = useCallback(
     async (optionId: string, value: string) => runtimeConfig.setConfigOption(optionId, value),
@@ -203,6 +219,10 @@ const AcpSendBox: React.FC<{
 
   const handleSheetModeChange = useCallback(
     async (mode: string) => {
+      if (claudeModeSelection) {
+        claudeModeSelection.onSelect(mode);
+        return;
+      }
       if (!runtimeMode || mode === runtimeMode.currentValue) return;
       try {
         await runtimeConfig.setConfigOption(runtimeMode.id, mode);
@@ -214,7 +234,7 @@ const AcpSendBox: React.FC<{
         Message.error(t(configErrorMessageKey(error)));
       }
     },
-    [isLeaderInTeam, runtimeConfig, runtimeMode, t, teamPermission]
+    [claudeModeSelection, isLeaderInTeam, runtimeConfig, runtimeMode, t, teamPermission]
   );
 
   const handleContentChange = useCallback(
@@ -555,7 +575,7 @@ Please check your local CLI tool authentication status`,
       key: mode.value,
       label: t(`agentMode.${mode.value}`, { defaultValue: mode.label }),
       description: mode.description,
-      active: (runtimeMode?.currentValue ?? currentMode) === mode.value,
+      active: (claudeModeSelection?.value ?? runtimeMode?.currentValue ?? currentMode) === mode.value,
     }));
 
     const modelOptions: MobileActionSheetOption[] = canSwitchModel
@@ -690,6 +710,7 @@ Please check your local CLI tool authentication status`,
     attachEntries,
     canSwitchModel,
     currentMode,
+    claudeModeSelection,
     handleSheetModeChange,
     handleThoughtLevelSetOption,
     isMobile,
@@ -876,6 +897,7 @@ Please check your local CLI tool authentication status`,
                 beforeRuntimeSync={prepareRuntimeConfig}
                 beforeRuntimeSet={teamPermission?.warmupSession}
                 configOptionsPort={teamPermission?.configOptionsPort}
+                selection={claudeModeSelection}
               />
             )}
           </div>

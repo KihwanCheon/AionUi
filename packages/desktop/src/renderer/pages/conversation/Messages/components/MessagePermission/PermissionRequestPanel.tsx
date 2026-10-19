@@ -30,6 +30,7 @@ type PermissionRequestPanelProps = {
   detailLabelKey?: string;
   options: PermissionPanelOption[];
   onConfirm: (optionValue: string) => Promise<void>;
+  responseState?: 'sending' | 'sent' | 'failed';
 };
 
 export const PermissionRequestPanel: React.FC<PermissionRequestPanelProps> = ({
@@ -42,6 +43,7 @@ export const PermissionRequestPanel: React.FC<PermissionRequestPanelProps> = ({
   detailLabelKey,
   options,
   onConfirm,
+  responseState,
 }) => {
   const { t } = useTranslation();
   const optionsIdentity = getPermissionOptionsIdentity(options);
@@ -53,6 +55,9 @@ export const PermissionRequestPanel: React.FC<PermissionRequestPanelProps> = ({
   const requestEpochRef = useRef(0);
   const optionsEpochRef = useRef(0);
   const optionsLabelId = useId();
+  const responding = isResponding || responseState === 'sending';
+  const responded = hasResponded || responseState === 'sent';
+  const failed = hasError || responseState === 'failed';
 
   useEffect(() => {
     requestEpochRef.current += 1;
@@ -76,7 +81,7 @@ export const PermissionRequestPanel: React.FC<PermissionRequestPanelProps> = ({
   // or the option set has changed underneath us.
   const submitOption = useCallback(
     async (option: PermissionPanelOption) => {
-      if (respondingRef.current || hasResponded || option.disabled) return;
+      if (respondingRef.current || responding || responded || option.disabled) return;
 
       const requestEpoch = requestEpochRef.current;
       const optionsEpoch = optionsEpochRef.current;
@@ -102,12 +107,12 @@ export const PermissionRequestPanel: React.FC<PermissionRequestPanelProps> = ({
         }
       }
     },
-    [hasResponded, onConfirm]
+    [responding, responded, onConfirm]
   );
 
   return (
     <Card className={styles.card} bordered={false} data-testid={`${testIdPrefix}-card`}>
-      <div className={styles.panel} aria-busy={isResponding}>
+      <div className={styles.panel} aria-busy={responding}>
         <div className={styles.heading}>
           <div className={styles.titleRow}>
             <Text className={styles.title}>{title}</Text>
@@ -125,9 +130,9 @@ export const PermissionRequestPanel: React.FC<PermissionRequestPanelProps> = ({
           </div>
         )}
 
-        {!hasResponded && (
+        {!responded && (
           <>
-            <fieldset className={styles.optionsFieldset} disabled={isResponding}>
+            <fieldset className={styles.optionsFieldset} disabled={responding}>
               <legend id={optionsLabelId} className={styles.optionsLegend}>
                 {t('messages.chooseAction')}
               </legend>
@@ -143,8 +148,8 @@ export const PermissionRequestPanel: React.FC<PermissionRequestPanelProps> = ({
                       key={option.id}
                       className={styles.optionButton}
                       data-testid={option.testId}
-                      data-disabled={Boolean(option.disabled || isResponding)}
-                      disabled={option.disabled || isResponding}
+                      data-disabled={Boolean(option.disabled || responding)}
+                      disabled={option.disabled || responding}
                       loading={submittingId === option.id}
                       onClick={() => void submitOption(option)}
                     >
@@ -157,7 +162,7 @@ export const PermissionRequestPanel: React.FC<PermissionRequestPanelProps> = ({
               )}
             </fieldset>
 
-            {hasError && (
+            {failed && (
               <div
                 className={classNames(styles.feedback, styles.error)}
                 role='alert'
@@ -171,7 +176,7 @@ export const PermissionRequestPanel: React.FC<PermissionRequestPanelProps> = ({
           </>
         )}
 
-        {hasResponded && (
+        {responded && (
           <div
             className={classNames(styles.feedback, styles.success)}
             role='status'

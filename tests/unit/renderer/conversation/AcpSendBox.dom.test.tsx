@@ -11,6 +11,10 @@ import { BackendHttpError } from '@/common/adapter/httpBridge';
 import AcpSendBox from '@/renderer/pages/conversation/platforms/acp/AcpSendBox';
 import type { UseAcpMessageReturn } from '@/renderer/pages/conversation/platforms/acp/useAcpMessage';
 import type { TeamSendBoxRuntime } from '@/renderer/pages/team/components/teamSendRuntime';
+import {
+  forgetClaudeConversation,
+  getClaudeMode,
+} from '@/renderer/pages/conversation/platforms/acp/claudePermissions/state';
 
 const {
   sendMessageInvokeMock,
@@ -704,6 +708,42 @@ describe('AcpSendBox', () => {
     await waitFor(() => {
       expect(setConfigOption).toHaveBeenCalledWith('reasoning_effort', 'high');
     });
+  });
+
+  it('uses the mobile Claude input choice even if the backend rejects the mode change', async () => {
+    isMobileMock.current = true;
+    const syncMode = vi.fn().mockRejectedValue(new Error('command_ack'));
+    useAcpConfigOptionsMock.mockReturnValue({
+      mode: {
+        id: 'mode',
+        currentValue: 'default',
+        options: [
+          { value: 'default', label: 'Default' },
+          { value: 'bypassPermissions', label: 'Full auto' },
+        ],
+      },
+      setStatus: { state: 'idle' },
+      setConfigOption: syncMode,
+      model: null,
+      thoughtLevel: null,
+      isLoading: false,
+    });
+    const { unmount } = render(
+      <AcpSendBox conversation_id='claude-mobile-auto' backend='claude' messageState={makeMessageState()} />
+    );
+    await act(async () =>
+      mobileActionSheetEntries.current
+        .find((entry) => entry.key === 'permission')
+        ?.submenu?.onSelect?.('bypassPermissions')
+    );
+    expect(getClaudeMode('claude-mobile-auto')).toBe('bypassPermissions');
+    await act(async () =>
+      mobileActionSheetEntries.current.find((entry) => entry.key === 'permission')?.submenu?.onSelect?.('default')
+    );
+    expect(getClaudeMode('claude-mobile-auto')).toBe('default');
+    expect(syncMode).toHaveBeenLastCalledWith('mode', 'default');
+    unmount();
+    forgetClaudeConversation('claude-mobile-auto');
   });
 
   it('does not apply runtime thought level when observed confirmation fails', async () => {

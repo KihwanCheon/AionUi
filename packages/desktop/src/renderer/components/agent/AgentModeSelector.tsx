@@ -69,6 +69,8 @@ export interface AgentModeSelectorProps {
   beforeRuntimeSet?: () => Promise<void>;
   /** Optional config option loader for runtime owners such as team sessions. */
   configOptionsPort?: AcpConfigOptionsPort;
+  /** Optional send-box policy selection, independent of the CLI's observed mode. */
+  selection?: { value: string; onSelect: (mode: string) => void };
 }
 
 /**
@@ -100,6 +102,7 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
   beforeRuntimeSync,
   beforeRuntimeSet,
   configOptionsPort,
+  selection,
 }) => {
   const { t } = useTranslation();
   const layout = useLayoutContext();
@@ -132,7 +135,8 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
   // Validate initialMode against available modes; fall back to backend's default
   // when the provided value doesn't match (e.g. opencode has 'build'/'plan', not 'default')
   const validInitialMode = initialMode && modes.some((m) => m.value === initialMode) ? initialMode : defaultMode;
-  const [current_mode, setCurrentMode] = useState<string>(validInitialMode);
+  const [observedMode, setCurrentMode] = useState<string>(validInitialMode);
+  const current_mode = selection?.value ?? observedMode;
   const [isLoading, setIsLoading] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const getDisplayModeLabel = useCallback(
@@ -143,7 +147,8 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
   // A mode the backend accepted but has not applied yet (codex always; claude/agy when
   // switched mid-turn). Kept apart from `current_mode` on purpose: `current_mode` must
   // keep answering "which permission is governing right now".
-  const pendingMode = conversation_id ? runtimeConfig.pendingValues?.[runtimeMode?.id ?? 'mode'] : undefined;
+  const pendingMode =
+    !selection && conversation_id ? runtimeConfig.pendingValues?.[runtimeMode?.id ?? 'mode'] : undefined;
   const pendingModeLabel = useMemo(() => {
     if (!pendingMode || pendingMode === current_mode) return undefined;
     const option = modes.find((mode) => mode.value === pendingMode);
@@ -151,7 +156,8 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
   }, [pendingMode, current_mode, modes, getDisplayModeLabel]);
 
   const can_switchMode = modes.length > 0 && Boolean(conversation_id || onModeSelect);
-  const runtimeModeBlocked = Boolean(runtimeMode && runtimeConfig.isConfigOptionBlocked?.(runtimeMode.id));
+  const runtimeModeBlocked =
+    !selection && Boolean(runtimeMode && runtimeConfig.isConfigOptionBlocked?.(runtimeMode.id));
   // Mobile conversation header agent pill is display-only by design.
   const canInteract = can_switchMode && !runtimeModeBlocked && !(compact && compactLabelType === 'agent');
 
@@ -176,6 +182,11 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
       setDropdownVisible(false);
 
       if (mode === current_mode) return;
+
+      if (selection) {
+        selection.onSelect(mode);
+        return;
+      }
 
       // Local mode (Guid page): update state and notify parent, no IPC needed
       if (!conversation_id && onModeSelect) {
@@ -217,7 +228,7 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
         setIsLoading(false);
       }
     },
-    [conversation_id, current_mode, onModeChanged, onModeSelect, runtimeConfig, runtimeMode, t]
+    [conversation_id, current_mode, onModeChanged, onModeSelect, runtimeConfig, runtimeMode, selection, t]
   );
 
   const renderLogo = () => (
@@ -273,7 +284,7 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
 
   // Compact mode: render only mode label chip in sendbox area
   if (compact) {
-    const isSetting = isLoading || runtimeConfig.setStatus.state === 'setting';
+    const isSetting = !selection && (isLoading || runtimeConfig.setStatus.state === 'setting');
     const legacyCompactBehavior = !showLogoInCompact && compactLabelType === 'mode';
     const baseCompactLabel =
       compactLabelType === 'agent'

@@ -7,6 +7,7 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConversationListSync } from '@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync';
+import { useClaudeAutoAllow } from '@/renderer/pages/conversation/platforms/acp/claudePermissions';
 import type { GroupedHistoryResult } from '@/renderer/pages/conversation/GroupedHistory/types';
 import type { ConversationHistoryView } from '@/renderer/pages/conversation/GroupedHistory/utils/bookmarkHelpers';
 import { buildGroupedHistory } from '@/renderer/pages/conversation/GroupedHistory/utils/groupingHelpers';
@@ -23,6 +24,7 @@ export const ConversationHistoryProvider: React.FC<React.PropsWithChildren> = ({
   const { t } = useTranslation();
   const [historyView, setHistoryView] = useState<ConversationHistoryView>('all');
   const conversationListSync = useConversationListSync();
+  useClaudeAutoAllow(conversationListSync.conversations);
 
   const groupedHistory = useMemo(() => {
     return buildGroupedHistory(conversationListSync.conversations, t);
