@@ -185,6 +185,36 @@ const SendBoxHarness = ({
 };
 
 describe('SendBox active-controlled focus', () => {
+  it('shows Stop independently of loading and still accepts a draft', async () => {
+    const onStop = vi.fn().mockResolvedValue(undefined);
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(<SendBox value='' loading={false} canStop={true} onStop={onStop} onSend={onSend} />);
+    fireEvent.click(screen.getByTestId('sendbox-stop-btn'));
+    expect(onStop).toHaveBeenCalledTimes(1);
+    rerender(
+      <SendBox
+        value='next message'
+        loading={false}
+        canStop={true}
+        allowSendWhileLoading
+        onStop={onStop}
+        onSend={onSend}
+      />
+    );
+    fireEvent.keyDown(screen.getByTestId('sendbox-input'), { key: 'Enter', code: 'Enter' });
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('next message'));
+  });
+
+  it('does not offer Stop without a target even while submission is loading', () => {
+    render(<SendBox value='' loading={true} canStop={false} onSend={vi.fn()} />);
+    expect(screen.queryByTestId('sendbox-stop-btn')).toBeNull();
+  });
+
+  it('preserves the loading-based Stop fallback for other send box callers', () => {
+    render(<SendBox value='' loading={true} onSend={vi.fn()} />);
+    expect(screen.getByTestId('sendbox-stop-btn')).toBeInTheDocument();
+  });
+
   it('keeps Enter mapped to Send while Draft box has its own icon action', async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const onAddToDraft = vi.fn();

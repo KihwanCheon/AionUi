@@ -529,6 +529,11 @@ export const conversation = {
     status: 'finish' | 'pending' | 'error';
   }>('message.statusChanged'),
   artifactStream: wsEmitter<IConversationArtifact>('conversation.artifact'),
+  runtimeChanged: wsEmitter<{
+    user_id: string;
+    conversation_id: string;
+    runtime: TConversationRuntimeSummary;
+  }>('conversation.runtimeChanged'),
   turnCompleted: wsMappedEmitter<IConversationTurnCompletedEvent>('turn.completed', (raw) => {
     const r = raw as Record<string, unknown>;
     const rawLast = (r.last_message ?? r.lastMessage) as Record<string, unknown> | undefined;
@@ -554,6 +559,10 @@ export const conversation = {
       is_processing: (rawRuntime.is_processing ?? rawRuntime.isProcessing ?? false) as boolean,
       pending_confirmations: (rawRuntime.pending_confirmations ?? rawRuntime.pendingConfirmations ?? 0) as number,
       turn_id: (rawRuntime.turn_id ?? rawRuntime.turnId ?? null) as string | null,
+      can_stop: rawRuntime.can_stop as boolean | undefined,
+      cancel_turn_id: rawRuntime.cancel_turn_id as string | null | undefined,
+      runtime_instance_id: rawRuntime.runtime_instance_id as string | undefined,
+      runtime_revision: rawRuntime.runtime_revision as number | undefined,
       supports_midturn_delivery: (rawRuntime.supports_midturn_delivery ??
         rawRuntime.supportsMidturnDelivery ??
         false) as boolean,
@@ -2127,6 +2136,10 @@ export interface IConversationTurnCompletedEvent {
      * the current turn to end. The ONLY capability bit the frontend may gate
      * mid-turn UI on. */
     supports_midturn_delivery: boolean;
+    can_stop?: boolean;
+    cancel_turn_id?: string | null;
+    runtime_instance_id?: string;
+    runtime_revision?: number;
   };
   workspace: string;
   model: {

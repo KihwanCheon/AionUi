@@ -752,7 +752,7 @@ Please check your local CLI tool authentication status`,
     // Cancelling is best-effort: swallow errors (e.g. backend WS not yet
     // connected → 409) so they don't bubble up as unhandled rejections.
     // UI state is still reset via finally.
-    const turnId = runtimeView.activeTurnId;
+    const turnId = runtimeView.cancelTurnId;
     if (!turnId) {
       resetState();
       resetActiveExecution('stop');
@@ -848,6 +848,7 @@ Please check your local CLI tool authentication status`,
         crossSessionEnabled={crossSessionEnabled}
         isTeamConversation={Boolean(teamRuntime)}
         loading={teamRuntime?.loading ?? isBusy}
+        canStop={teamRuntime ? undefined : runtimeView.canStop}
         active={teamRuntime?.isActive}
         onFocused={teamRuntime?.onFocus}
         disabled={false}

@@ -37,3 +37,13 @@ bun run test tests/unit/renderer/pages/GroupedHistory/conversationFailure.dom.te
 ```
 
 Renderer changes support development HMR. The failure persistence contract also requires a rebuilt AionCore and a later app restart; do not restart while other conversations are executing. The parent `run-aionui-dev-no-sentry.bat` compiles the UI sources on startup, so no UI package build is required.
+
+## Stop capability during CLI continuations
+
+The input's Stop action uses `runtime.can_stop` and `runtime.cancel_turn_id`, independently of `is_processing`, `can_send_message`, and the foreground `turn_id`. A CLI continuation can remain stoppable after its user turn releases the input. This shared Session behavior has no model-name condition. Callers without the new fields keep the foreground-turn fallback.
+
+AionCore registers the continuation's cancellation target without taking the message-admission claim. Finish, source closure, watcher teardown, or a foreground takeover releases it; silence alone is not completion. The cancel endpoint validates the target again before closing admission and calling the existing agent cancellation API. The existing cancel timeout also covers continuations. A stale stop must not interrupt a newer foreground turn.
+
+`conversation.runtimeChanged` carries the runtime snapshot when a continuation starts or ends. Completion snapshots are published after releasing the target. The UI orders snapshots by `runtime_instance_id` and `runtime_revision`, preserving newer realtime state against delayed HTTP responses. Opening a conversation, reconnecting, and returning window focus refresh the snapshot. Draft sending and team SendBox behavior retain their existing policies.
+
+Focused regression checks cover the runtime view store, runtime hook, `AcpSendBox`, and `SendBox` DOM behavior. Core checks cover `runtime_state`, `background_stream`, and cancellation service tests, including ten minutes without output and old-target rejection. Real CLI interruption still requires a rebuilt Core and a later live verification; do not infer it from DOM or mock-agent tests.

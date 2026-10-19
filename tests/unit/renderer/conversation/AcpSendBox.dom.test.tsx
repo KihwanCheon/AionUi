@@ -64,6 +64,8 @@ const {
     isProcessing: false,
     canSendMessage: true,
     activeTurnId: null as string | null,
+    cancelTurnId: null as string | null,
+    canStop: false,
     supportsMidturnDelivery: false,
     markSendStarted: vi.fn(),
     markSendAccepted: vi.fn(),
@@ -103,6 +105,9 @@ vi.mock('@/common', () => ({
 vi.mock('@/renderer/components/chat/SendBox', () => ({
   default: ({
     onSend,
+    onStop,
+    canStop,
+    loading,
     onChange,
     rightTools,
     sendButtonPrefix,
@@ -119,6 +124,9 @@ vi.mock('@/renderer/components/chat/SendBox', () => ({
     isTeamConversation,
   }: {
     onSend: (message: string) => Promise<void>;
+    onStop?: () => Promise<void>;
+    canStop?: boolean;
+    loading?: boolean;
     onChange?: (value: string) => void;
     rightTools?: React.ReactNode;
     sendButtonPrefix?: React.ReactNode;
@@ -135,6 +143,9 @@ vi.mock('@/renderer/components/chat/SendBox', () => ({
     isTeamConversation?: boolean;
   }) => {
     sendBoxPropsSpy({
+      onStop,
+      canStop,
+      loading,
       active,
       onFocused,
       disabled,
@@ -360,6 +371,8 @@ describe('AcpSendBox', () => {
     runtimeViewMock.isProcessing = false;
     runtimeViewMock.canSendMessage = true;
     runtimeViewMock.activeTurnId = null;
+    runtimeViewMock.cancelTurnId = null;
+    runtimeViewMock.canStop = false;
     runtimeViewMock.supportsMidturnDelivery = false;
     draftContentRef.current = '';
     useTeamPermissionMock.mockReturnValue(null);
@@ -405,6 +418,28 @@ describe('AcpSendBox', () => {
     await waitFor(() => {
       expect(resetStateMock).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('passes an independent stop capability and cancels the continuation without an active user turn', async () => {
+    runtimeViewMock.cancelTurnId = 'continuation-1';
+    runtimeViewMock.canStop = true;
+    const runtime = { state: 'idle', can_send_message: true, turn_id: null, can_stop: false, cancel_turn_id: null };
+    stopInvokeMock.mockResolvedValueOnce({ runtime });
+    render(
+      <AcpSendBox
+        conversation_id='conv-1'
+        backend='codex'
+        workspacePath='/tmp/workspace'
+        messageState={makeMessageState()}
+      />
+    );
+    const props = sendBoxPropsSpy.mock.lastCall?.[0];
+    expect(props).toMatchObject({ canStop: true, loading: false });
+    await act(async () => {
+      await props.onStop();
+    });
+    expect(stopInvokeMock).toHaveBeenCalledWith({ conversation_id: 'conv-1', turn_id: 'continuation-1' });
+    expect(runtimeViewMock.markStopAcknowledged).toHaveBeenCalledWith('continuation-1', runtime);
   });
 
   it('shows a progress ring with a window size, a hollow ring without one, and nothing without usage', () => {
@@ -999,6 +1034,7 @@ describe('AcpSendBox', () => {
     it('keeps the stop-then-prioritize path for a non-supporting agent', async () => {
       runtimeViewMock.supportsMidturnDelivery = false;
       runtimeViewMock.activeTurnId = 'turn-9';
+      runtimeViewMock.cancelTurnId = 'turn-9';
 
       render(
         <AcpSendBox

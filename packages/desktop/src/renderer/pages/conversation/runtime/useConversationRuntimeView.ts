@@ -29,6 +29,7 @@ import {
   resetLocalGate,
   subscribeConversationRuntimeView,
   turnCompleted,
+  runtimeChanged,
   type ConversationRuntimeView,
   type ConversationRuntimeViewLogEntry,
   type ConversationRuntimeSendFailure,
@@ -41,6 +42,8 @@ type UseConversationRuntimeViewReturn = {
   isProcessing: boolean;
   canSendMessage: boolean;
   activeTurnId: string | null;
+  cancelTurnId: string | null;
+  canStop: boolean;
   supportsMidturnDelivery: boolean;
   markSendStarted: () => void;
   markSendAccepted: (turn_id: string, runtime: TConversationRuntimeSummary, msg_id?: string) => void;
@@ -90,31 +93,39 @@ export const useConversationRuntimeView = (conversation_id: string): UseConversa
     let cancelled = false;
     flushRuntimeViewLogs(hydrateStarted(conversation_id));
 
-    void getConversationOrNull(conversation_id)
-      .then((conversation) => {
-        if (cancelled) {
-          return;
-        }
-        const runtime = getRuntimeOrNull(conversation?.runtime);
-        flushRuntimeViewLogs(hydrateSucceeded(conversation_id, runtime));
-        // Reconcile the sidebar spinner against authoritative runtime state:
-        // a missed WS frame (window reload/reconnect race) can otherwise
-        // leave the row dark even though the runtime is still processing.
-        if (runtime) {
-          reconcileGeneratingFromRuntime(conversation_id, runtime.is_processing === true);
-          reconcileWaitingConfirmationFromRuntime(conversation_id, runtime.pending_confirmations ?? 0);
-        }
-      })
-      .catch((error: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        const reason = error instanceof Error ? error.message : String(error);
-        flushRuntimeViewLogs(hydrateFailed(conversation_id, normalizeReason(reason)));
-      });
+    const refresh = () => {
+      void getConversationOrNull(conversation_id)
+        .then((conversation) => {
+          if (cancelled) {
+            return;
+          }
+          const runtime = getRuntimeOrNull(conversation?.runtime);
+          flushRuntimeViewLogs(hydrateSucceeded(conversation_id, runtime));
+          // Reconcile the sidebar spinner against authoritative runtime state:
+          // a missed WS frame (window reload/reconnect race) can otherwise
+          // leave the row dark even though the runtime is still processing.
+          if (runtime) {
+            const current = getConversationRuntimeViewSnapshot(conversation_id);
+            reconcileGeneratingFromRuntime(conversation_id, current.isProcessing);
+            reconcileWaitingConfirmationFromRuntime(conversation_id, current.pendingConfirmations);
+          }
+        })
+        .catch((error: unknown) => {
+          if (cancelled) {
+            return;
+          }
+          const reason = error instanceof Error ? error.message : String(error);
+          flushRuntimeViewLogs(hydrateFailed(conversation_id, normalizeReason(reason)));
+        });
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    const disposeReconnect = ipcBridge.realtime?.reconnected?.on(refresh);
 
     return () => {
       cancelled = true;
+      window.removeEventListener('focus', refresh);
+      disposeReconnect?.();
     };
   }, [conversation_id]);
 
@@ -136,6 +147,11 @@ export const useConversationRuntimeView = (conversation_id: string): UseConversa
       flushRuntimeViewLogs(turnCompleted(conversation_id, event.turn_id, event.runtime));
     });
 
+    const disposeRuntimeChanged = ipcBridge.conversation.runtimeChanged?.on((event) => {
+      if (event.conversation_id !== conversation_id) return;
+      flushRuntimeViewLogs(runtimeChanged(conversation_id, event.runtime));
+    });
+
     const disposeListChanged = listChangedEmitter.on((event) => {
       if (event.conversation_id !== conversation_id || event.action !== 'deleted') {
         return;
@@ -145,6 +161,7 @@ export const useConversationRuntimeView = (conversation_id: string): UseConversa
 
     return () => {
       disposeTurnCompleted();
+      disposeRuntimeChanged?.();
       disposeListChanged();
     };
   }, [conversation_id]);
@@ -219,6 +236,8 @@ export const useConversationRuntimeView = (conversation_id: string): UseConversa
     isProcessing: view.isProcessing,
     canSendMessage: view.canSendMessage,
     activeTurnId: view.activeTurnId,
+    cancelTurnId: view.cancelTurnId,
+    canStop: view.canStop,
     supportsMidturnDelivery: view.supportsMidturnDelivery,
     markSendStarted,
     markSendAccepted,

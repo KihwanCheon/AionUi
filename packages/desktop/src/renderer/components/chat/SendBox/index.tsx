@@ -247,6 +247,8 @@ const SendBox: React.FC<{
    */
   sendDisabled?: boolean;
   loading?: boolean;
+  /** Explicit cancellation capability, independent from message admission. */
+  canStop?: boolean;
   className?: string;
   tools?: React.ReactNode;
   rightTools?: React.ReactNode;
@@ -305,6 +307,7 @@ const SendBox: React.FC<{
   prefix,
   className,
   loading,
+  canStop,
   tools,
   rightTools,
   disabled,
@@ -1771,11 +1774,13 @@ const SendBox: React.FC<{
       className='bg-animate sendbox-stop-button'
       icon={<div className='mx-auto size-12px bg-6'></div>}
       onClick={stopHandler}
+      data-testid='sendbox-stop-btn'
     ></Button>
   );
 
   const renderActionButtons = () => {
-    if (allowSendWhileLoading && (isLoading || loading)) {
+    const showStop = canStop ?? (isLoading || loading);
+    if (allowSendWhileLoading && showStop) {
       // Keep a single action slot while processing: show stop when the draft is empty,
       // and only switch back to send once the user has prepared a queued message.
       if (compactActions || !hasDraftToSend || disabled || isUploading) {
@@ -1784,7 +1789,7 @@ const SendBox: React.FC<{
       return primaryActionButton;
     }
 
-    if (isLoading || loading) {
+    if (showStop) {
       return stopButton;
     }
 
