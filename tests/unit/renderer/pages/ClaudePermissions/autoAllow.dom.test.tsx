@@ -72,13 +72,14 @@ const settle = () =>
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
-describe('Claude automatic Allow outside the conversation page', () => {
+describe.each(['bypassPermissions', 'acceptEdits'])('Claude background automatic Allow (%s)', (mode) => {
+  const autoChat = (id = 'claude-1', backend = 'claude') => chat(id, backend, mode);
   beforeEach(() => {
     vi.clearAllMocks();
     list.mockResolvedValue([permission()]);
     confirm.mockResolvedValue(undefined);
     manualConfirm.mockResolvedValue(undefined);
-    get.mockResolvedValue(chat());
+    get.mockResolvedValue(autoChat());
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
   afterEach(() => {
@@ -88,7 +89,7 @@ describe('Claude automatic Allow outside the conversation page', () => {
   });
 
   it('approves a background pending request without mounting a chat or card', async () => {
-    renderHook(() => useClaudeAutoAllow([chat()]));
+    renderHook(() => useClaudeAutoAllow([autoChat()]));
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
     expect(confirm).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -104,20 +105,20 @@ describe('Claude automatic Allow outside the conversation page', () => {
     const chats = [chat('claude-1', 'claude', 'default')];
     renderHook(() => useClaudeAutoAllow(chats));
     expect(confirm).not.toHaveBeenCalled();
-    act(() => selectClaudeMode('claude-1', 'bypassPermissions'));
+    act(() => selectClaudeMode('claude-1', mode));
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
   });
 
   it('does not replace the input mode with an outdated sidebar snapshot', async () => {
     observeClaudeMode('claude-1', 'default');
-    renderHook(() => useClaudeAutoAllow([chat()]));
+    renderHook(() => useClaudeAutoAllow([autoChat()]));
     await settle();
     expect(confirm).not.toHaveBeenCalled();
   });
 
   it('handles a new background permission after the initial pending list was empty', async () => {
     list.mockResolvedValueOnce([]);
-    renderHook(() => useClaudeAutoAllow([chat()]));
+    renderHook(() => useClaudeAutoAllow([autoChat()]));
     await settle();
     emit();
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
@@ -130,9 +131,9 @@ describe('Claude automatic Allow outside the conversation page', () => {
     expect(get).toHaveBeenCalledWith({ id: 'claude-1' });
   });
 
-  it('never approves Codex, including an unseen conversation reporting full auto', async () => {
-    get.mockResolvedValue(chat('codex-1', 'codex'));
-    renderHook(() => useClaudeAutoAllow([chat('codex-1', 'codex')]));
+  it('never approves Codex, including an unseen conversation reporting an automatic mode', async () => {
+    get.mockResolvedValue(autoChat('codex-1', 'codex'));
+    renderHook(() => useClaudeAutoAllow([autoChat('codex-1', 'codex')]));
     emit('codex-1');
     await settle();
     expect(list).not.toHaveBeenCalled();
@@ -146,7 +147,7 @@ describe('Claude automatic Allow outside the conversation page', () => {
       { ...permission('unknown'), options: [{ label: 'Allow', value: 'unknown' }] },
       { ...permission('always-only'), options: [{ label: 'Always', value: 'allow_always' }] },
     ]);
-    renderHook(() => useClaudeAutoAllow([chat()]));
+    renderHook(() => useClaudeAutoAllow([autoChat()]));
     await settle();
     expect(confirm).not.toHaveBeenCalled();
   });
@@ -154,7 +155,7 @@ describe('Claude automatic Allow outside the conversation page', () => {
   it('rechecks selection after an outstanding pending-list request returns', async () => {
     const pending = Promise.withResolvers<IConfirmation<unknown>[]>();
     list.mockReturnValue(pending.promise);
-    renderHook(() => useClaudeAutoAllow([chat()]));
+    renderHook(() => useClaudeAutoAllow([autoChat()]));
     act(() => selectClaudeMode('claude-1', 'default'));
     await act(async () => pending.resolve([permission()]));
     expect(confirm).not.toHaveBeenCalled();
@@ -164,9 +165,9 @@ describe('Claude automatic Allow outside the conversation page', () => {
     const reply = Promise.withResolvers<void>();
     confirm.mockReturnValueOnce(reply.promise);
     list.mockResolvedValue([permission(), permission('request-2')]);
-    renderHook(() => useClaudeAutoAllow([chat()]));
+    renderHook(() => useClaudeAutoAllow([autoChat()]));
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
-    act(() => selectClaudeMode('claude-1', 'default'));
+    act(() => selectClaudeMode('claude-1', 'plan'));
     await act(async () => reply.resolve());
     expect(confirm).toHaveBeenCalledTimes(1);
   });
@@ -174,7 +175,7 @@ describe('Claude automatic Allow outside the conversation page', () => {
   it('coalesces duplicate events and a simultaneous manual answer', async () => {
     const reply = Promise.withResolvers<void>();
     confirm.mockReturnValue(reply.promise);
-    renderHook(() => useClaudeAutoAllow([chat()]));
+    renderHook(() => useClaudeAutoAllow([autoChat()]));
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
     emit();
     const click = vi.fn();
@@ -189,7 +190,7 @@ describe('Claude automatic Allow outside the conversation page', () => {
 
   it('shows auto failure on a later opened card and allows a manual retry', async () => {
     confirm.mockRejectedValue(new Error('offline'));
-    renderHook(() => useClaudeAutoAllow([chat()]));
+    renderHook(() => useClaudeAutoAllow([autoChat()]));
     await settle();
     emit();
     await settle();
@@ -214,7 +215,7 @@ describe('Claude automatic Allow outside the conversation page', () => {
 
   it('can recover a lookup failure on focus without reopening the conversation', async () => {
     list.mockRejectedValueOnce(new Error('offline'));
-    renderHook(() => useClaudeAutoAllow([chat()]));
+    renderHook(() => useClaudeAutoAllow([autoChat()]));
     await settle();
     act(() => window.dispatchEvent(new Event('focus')));
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
@@ -223,7 +224,7 @@ describe('Claude automatic Allow outside the conversation page', () => {
   it('ignores late lookup results after app unmount or conversation deletion', async () => {
     const pending = Promise.withResolvers<IConfirmation<unknown>[]>();
     list.mockReturnValue(pending.promise);
-    const { unmount } = renderHook(() => useClaudeAutoAllow([chat()]));
+    const { unmount } = renderHook(() => useClaudeAutoAllow([autoChat()]));
     act(() => changes.forEach((fn) => fn({ conversation_id: 'claude-1', action: 'deleted' })));
     unmount();
     await act(async () => pending.resolve([permission()]));

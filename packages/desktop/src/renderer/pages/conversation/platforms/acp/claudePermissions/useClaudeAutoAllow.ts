@@ -6,6 +6,7 @@ import {
   claudeConversationIds,
   forgetClaudeConversation,
   getClaudeMode,
+  isClaudeAutoAllowMode,
   observeClaudeMode,
   submitClaudePermission,
   subscribeClaudeModes,
@@ -37,7 +38,7 @@ export function useClaudeAutoAllow(conversations: TChatConversation[]): void {
     let disposed = false;
     const fetching = new Set<string>();
     const dirty = new Set<string>();
-    const active = (id: string) => !disposed && getClaudeMode(id) === 'bypassPermissions';
+    const active = (id: string) => !disposed && isClaudeAutoAllowMode(getClaudeMode(id));
 
     const refresh = async (conversationId: string) => {
       dirty.add(conversationId);

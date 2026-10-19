@@ -47,6 +47,10 @@ export const getClaudeMode = (id: string): string | undefined => {
   return state?.selected ?? state?.observed;
 };
 
+/** Input modes that opt Claude tool permission requests into one-shot automatic Allow. */
+export const isClaudeAutoAllowMode = (mode: string | undefined): boolean =>
+  mode === 'bypassPermissions' || mode === 'acceptEdits';
+
 export function observeClaudeMode(id: string, mode: string): void {
   const state = entry(id);
   if (state.observed === mode) return;
@@ -90,7 +94,7 @@ export function submitClaudePermission(
   const previous = state.responses.get(callId);
   if (previous?.state === 'sending' || previous?.state === 'sent') return previous.promise;
   if (automatic) {
-    if (getClaudeMode(id) !== 'bypassPermissions' || state.autoAttempted.has(callId)) return Promise.resolve();
+    if (!isClaudeAutoAllowMode(getClaudeMode(id)) || state.autoAttempted.has(callId)) return Promise.resolve();
     state.autoAttempted.add(callId);
   }
   const response: Response = { state: 'sending', promise: Promise.resolve() };
