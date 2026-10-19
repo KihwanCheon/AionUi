@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
@@ -51,6 +52,8 @@ import {
 } from '@/renderer/hooks/context/UserChoiceNotifications';
 import { createChoiceNoticeStore } from '@/renderer/hooks/context/UserChoiceNotifications/store';
 import { USER_CHOICE_MARKER } from '@/renderer/hooks/context/UserChoiceNotifications/protocol';
+import { remarkChoiceQuestions } from '@/renderer/hooks/context/UserChoiceNotifications/remarkChoiceQuestions';
+import { MARKDOWN_REMARK_PLUGINS } from '@/renderer/components/Markdown/markdownComponents';
 import ProjectGroupHeader from '@/renderer/pages/conversation/GroupedHistory/components/ProjectGroupHeader';
 import ConversationLeadingStatus from '@/renderer/pages/conversation/GroupedHistory/components/ConversationLeadingStatus';
 
@@ -87,6 +90,73 @@ beforeEach(() => {
   state.lookupName.mockReturnValue('Conversation A');
   state.getConversation.mockResolvedValue({ name: 'Conversation A' });
   state.failures = new Map();
+});
+
+describe('prose question boxes', () => {
+  const markdown = (text: string) => (
+    <ReactMarkdown remarkPlugins={[[remarkChoiceQuestions, { label: '답변 요청' }], ...MARKDOWN_REMARK_PLUGINS]}>
+      {text}
+    </ReactMarkdown>
+  );
+
+  it('keeps introductory prose outside the question box even without a blank line', () => {
+    const { container } = render(markdown(`먼저 설명합니다.\n${USER_CHOICE_MARKER}\n이 범위로 진행할까요?`));
+    const box = screen.getByRole('group', { name: '답변 요청' });
+
+    expect(box).toHaveTextContent('이 범위로 진행할까요?');
+    expect(box).not.toHaveTextContent('먼저 설명합니다.');
+    expect(container).not.toHaveTextContent(USER_CHOICE_MARKER);
+  });
+
+  it('preserves Markdown links, emphasis and lists across question boundaries', () => {
+    render(
+      markdown(
+        `앞의 [문서][ref]\n\n${USER_CHOICE_MARKER}\n**어떤 경로인가요?**\n\n- CPU\n- Vulkan\n\n[ref]: https://example.com/spec`
+      )
+    );
+    const box = screen.getByRole('group', { name: '답변 요청' });
+
+    expect(screen.getByRole('link', { name: '문서' })).toHaveAttribute('href', 'https://example.com/spec');
+    expect(box.querySelector('strong')).toHaveTextContent('어떤 경로인가요?');
+    expect(box.querySelectorAll('li')).toHaveLength(2);
+  });
+
+  it('keeps each marker index attached to its own question including all following blocks', () => {
+    render(markdown(`${USER_CHOICE_MARKER}\n첫 질문?\n\n첫 설명.\n\n${USER_CHOICE_MARKER}\n둘째 질문?\n\n둘째 설명.`));
+    const boxes = screen.getAllByRole('group', { name: '답변 요청' });
+
+    expect(boxes.map((box) => box.getAttribute('data-choice-marker-index'))).toEqual(['0', '1']);
+    expect(boxes.map((box) => box.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      '답변 요청 첫 질문? 첫 설명.',
+      '답변 요청 둘째 질문? 둘째 설명.',
+    ]);
+  });
+
+  it.each([
+    `> ${USER_CHOICE_MARKER}\n> 인용 예시`,
+    `\`\`\`text\n${USER_CHOICE_MARKER}\n코드 예시\n\`\`\``,
+    `    ${USER_CHOICE_MARKER}\n    코드 예시`,
+    `인라인 \`${USER_CHOICE_MARKER}\` 예시`,
+    `문장 안의 ${USER_CHOICE_MARKER}\n일반 설명`,
+    `\\[\\[AIONUI_USER_CHOICE_REQUIRED\\]\\]\n이스케이프 예시`,
+  ])('leaves quoted and code examples unboxed: %s', (text) => {
+    render(markdown(text));
+
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+    expect(screen.getByText(USER_CHOICE_MARKER, { exact: false })).toBeInTheDocument();
+  });
+
+  it('adds one box only after the streamed marker line is complete', () => {
+    const { rerender } = render(markdown(USER_CHOICE_MARKER.slice(0, 15)));
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+
+    rerender(markdown(USER_CHOICE_MARKER));
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+
+    rerender(markdown(`${USER_CHOICE_MARKER}\n첫 질문?`));
+    rerender(markdown(`${USER_CHOICE_MARKER}\n첫 질문?\n\n- 선택지`));
+    expect(screen.getAllByRole('group', { name: '답변 요청' })).toHaveLength(1);
+  });
 });
 
 afterEach(() => {

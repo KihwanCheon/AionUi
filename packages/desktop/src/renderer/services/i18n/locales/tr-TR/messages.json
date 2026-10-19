@@ -1,5 +1,6 @@
 {
   "userQuestion": {
+    "prose": "Yanıt isteniyor",
     "choice": "Yanıt isteniyor · Seçenekler",
     "freeText": "Yanıt isteniyor · Serbest metin"
   },

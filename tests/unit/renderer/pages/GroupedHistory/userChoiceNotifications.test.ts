@@ -15,6 +15,18 @@ const question = `${USER_CHOICE_MARKER}\n재시작해도 될까요?\n`;
 afterEach(() => vi.restoreAllMocks());
 
 describe('explicit prose question signal', () => {
+  it('reports stable marker lines and indices across fragmented CRLF input', () => {
+    const onMarker = vi.fn();
+    const parser = new ChoiceSignalParser(onMarker);
+    const text = `설명\r\n\r\n${USER_CHOICE_MARKER}\r\n첫 질문?\r\n\r\n${USER_CHOICE_MARKER}\r\n둘째 질문?`;
+    for (const character of text) parser.feed(character);
+
+    expect(onMarker.mock.calls).toEqual([
+      [0, 3],
+      [1, 6],
+    ]);
+  });
+
   it('recognizes a marker fragmented at every possible stream boundary', () => {
     for (let split = 0; split <= question.length; split++) {
       const parser = new ChoiceSignalParser();

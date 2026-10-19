@@ -9,11 +9,12 @@ import { USER_CHOICE_MARKER } from '@/renderer/hooks/context/UserChoiceNotificat
 
 type ElementRef = { readonly current: HTMLElement | null };
 
-/** Locate the selected prose marker, including Markdown rendered inside open shadow roots. */
-function findMarkerRange(root: HTMLElement, markerIndex: number): Range | undefined {
+/** Locate a question box or legacy prose marker, including open Markdown shadow roots. */
+function findMarkerTarget(root: HTMLElement, markerIndex: number): Element | Range | undefined {
   let index = 0;
-  const visit = (node: Node): Range | undefined => {
+  const visit = (node: Node): Element | Range | undefined => {
     if (node instanceof Element && node.matches('pre, code, blockquote')) return;
+    if (node instanceof Element && node.getAttribute('data-choice-marker-index') === String(markerIndex)) return node;
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent ?? '';
       let offset = 0;
@@ -78,11 +79,11 @@ export function useMessageTargetScroll({
             mutations.observe(host.shadowRoot, { childList: true, subtree: true, characterData: true });
           }
         }
-        const marker = markerIndex === undefined ? undefined : findMarkerRange(target, markerIndex);
+        const marker = markerIndex === undefined ? undefined : findMarkerTarget(target, markerIndex);
         const targetRect = marker?.getBoundingClientRect() ?? target.getBoundingClientRect();
-        // Structured questions own a message without a prose marker. Keep its
-        // heading visible even when the choices extend beyond the viewport.
-        const targetHeight = markerIndex !== undefined && !marker ? 0 : targetRect.height;
+        // Keep the question heading visible even when its body exceeds the viewport.
+        const targetHeight =
+          markerIndex !== undefined && (!marker || marker instanceof Element) ? 0 : targetRect.height;
         const viewport = scroller.getBoundingClientRect();
         const top = Math.max(
           0,

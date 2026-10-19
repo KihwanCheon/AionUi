@@ -1,0 +1,24 @@
+.question {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--warning);
+  border-radius: 8px;
+  background: var(--color-warning-light-1);
+}
+
+.question > .label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.question > p:nth-child(2) {
+  margin-top: 0;
+}
+
+.question > :last-child {
+  margin-bottom: 0;
+}

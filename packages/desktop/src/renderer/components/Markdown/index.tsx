@@ -26,6 +26,8 @@ import ShadowView from './ShadowView';
 import { MARKDOWN_REMARK_PLUGINS, MarkdownTable, MarkdownTd } from './markdownComponents';
 import { resolveLocalFileLinkPath, resolveLocalFileLinkReference } from './markdownUtils';
 import type { LocalFileLinkReference } from './markdownUtils';
+import { remarkChoiceQuestions } from '@/renderer/hooks/context/UserChoiceNotifications/remarkChoiceQuestions';
+import proseQuestionStyles from '@/renderer/hooks/context/UserChoiceNotifications/proseQuestions.module.css?inline';
 
 export { selectionToMarkdown } from './selectionMarkdown';
 
@@ -44,10 +46,21 @@ type MarkdownViewProps = {
   onLocalFileLink?: (path: string, reference?: LocalFileLinkReference) => void | Promise<void>;
   /** Enable raw HTML rendering in markdown content. Use with caution — only for trusted sources. */
   allowHtml?: boolean;
+  /** Opt in only for assistant prose; preview documents and user messages stay unchanged. */
+  highlightUserQuestions?: boolean;
 };
 
 const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
-  ({ hiddenCodeCopyButton, codeStyle, className, onRef, onLocalFileLink, allowHtml, children: childrenProp }) => {
+  ({
+    hiddenCodeCopyButton,
+    codeStyle,
+    className,
+    onRef,
+    onLocalFileLink,
+    allowHtml,
+    highlightUserQuestions,
+    children: childrenProp,
+  }) => {
     const { t } = useTranslation();
     const preview = useOptionalPreviewContext();
 
@@ -128,13 +141,21 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
     );
 
     const rehypePlugins = useMemo(() => (allowHtml ? [rehypeRaw, rehypeKatex] : [rehypeKatex]), [allowHtml]);
+    const remarkPlugins = useMemo<React.ComponentProps<typeof ReactMarkdown>['remarkPlugins']>(
+      () =>
+        highlightUserQuestions
+          ? [[remarkChoiceQuestions, { label: t('messages.userQuestion.prose') }], ...MARKDOWN_REMARK_PLUGINS]
+          : MARKDOWN_REMARK_PLUGINS,
+      [highlightUserQuestions, t]
+    );
 
     return (
       <div className={classNames('relative w-full', className)}>
         <ShadowView>
+          {highlightUserQuestions && <style>{proseQuestionStyles}</style>}
           <div ref={onRef} className='markdown-shadow-body'>
             <ReactMarkdown
-              remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+              remarkPlugins={remarkPlugins}
               rehypePlugins={rehypePlugins}
               components={components}
               urlTransform={(url) => (resolveLocalFileLinkPath(url) ? url : defaultUrlTransform(url))}

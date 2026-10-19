@@ -91,8 +91,10 @@ vi.mock('@/renderer/components/Markdown', () => ({
   default: ({
     children,
     onLocalFileLink,
+    highlightUserQuestions,
   }: {
     children?: React.ReactNode;
+    highlightUserQuestions?: boolean;
     onLocalFileLink?: (
       path: string,
       reference?: {
@@ -104,7 +106,7 @@ vi.mock('@/renderer/components/Markdown', () => ({
       }
     ) => void | Promise<void>;
   }) => (
-    <div>
+    <div data-highlight-user-questions={highlightUserQuestions}>
       {children}
       {onLocalFileLink && (
         <button
@@ -750,7 +752,6 @@ describe('MessageText structured questions', () => {
 
   it.each([
     { content: 'Can you share the path?' },
-    { content: '[[AIONUI_USER_CHOICE_REQUIRED]]\nCan you share the path?' },
     { content: 'Can you share the path?', user_choice: { title: 'Question?', options: 'Invalid' } },
   ])('leaves text without valid structured metadata unchanged: %j', (content) => {
     renderQuestion(content);
@@ -764,6 +765,27 @@ describe('MessageText structured questions', () => {
 
     expect(screen.queryByRole('group')).not.toBeInTheDocument();
     expect(screen.getByTestId('message-text-content')).toHaveTextContent('CPU');
+  });
+
+  it('enables prose question rendering for assistant text only', () => {
+    renderQuestion({ content: '[[AIONUI_USER_CHOICE_REQUIRED]]\nCan you share the path?' });
+
+    expect(screen.getByTestId('message-text-content').firstChild).toHaveAttribute(
+      'data-highlight-user-questions',
+      'true'
+    );
+  });
+
+  it('keeps structured questions on the existing blue-card rendering path', () => {
+    renderQuestion({
+      content: 'Where is the runtime?',
+      user_choice: { title: 'Where is the runtime?', options: null },
+    });
+
+    expect(screen.getByTestId('message-text-content').firstChild).toHaveAttribute(
+      'data-highlight-user-questions',
+      'false'
+    );
   });
 });
 

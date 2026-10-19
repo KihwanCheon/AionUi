@@ -418,7 +418,11 @@ const MessageText: React.FC<{
             </CollapsibleContent>
           ) : (
             <div data-testid='message-text-content'>
-              <MarkdownView codeStyle={CODE_STYLE} onLocalFileLink={handleLocalFileLink}>
+              <MarkdownView
+                codeStyle={CODE_STYLE}
+                onLocalFileLink={handleLocalFileLink}
+                highlightUserQuestions={message.position === 'left' && !userQuestion}
+              >
                 {data}
               </MarkdownView>
             </div>

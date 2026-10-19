@@ -13,6 +13,9 @@ export class ChoiceSignalParser {
   private signals: ChoiceSignal[] = [];
   private committedPreview = '';
   private capturing = false;
+  private lineNumber = 1;
+
+  constructor(private readonly onMarker?: (index: number, line: number) => void) {}
 
   feed(text: string): ChoiceSignal[] {
     for (const part of text.split(/(?<=\n)/)) {
@@ -25,6 +28,7 @@ export class ChoiceSignalParser {
       }
       if (part.endsWith('\n')) {
         if (!this.overflow) this.commitLine(this.line.replace(/\r?\n$/, ''));
+        this.lineNumber += 1;
         this.line = '';
         this.overflow = false;
       }
@@ -47,6 +51,7 @@ export class ChoiceSignalParser {
     }
     if (/^ {0,3}\[\[AIONUI_USER_CHOICE_REQUIRED\]\]\s*$/.test(line)) {
       this.signals.push({ index: this.signals.length, preview: '' });
+      this.onMarker?.(this.signals.length - 1, this.lineNumber);
       this.committedPreview = '';
       this.capturing = true;
       return;

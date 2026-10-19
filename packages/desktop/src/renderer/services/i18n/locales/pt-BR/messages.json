@@ -1,5 +1,6 @@
 {
   "userQuestion": {
+    "prose": "Resposta solicitada",
     "choice": "Resposta solicitada · Opções",
     "freeText": "Resposta solicitada · Texto livre"
   },

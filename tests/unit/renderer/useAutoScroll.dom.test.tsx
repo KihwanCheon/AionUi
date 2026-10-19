@@ -9,6 +9,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TMessage } from '@/common/chat/chatLib';
 import { useAutoScroll } from '@/renderer/pages/conversation/Messages/useAutoScroll';
+import { useMessageTargetScroll } from '@/renderer/pages/conversation/hooks/useMessageTargetScroll';
 
 let resizeObserverCallback: ResizeObserverCallback | null = null;
 
@@ -90,6 +91,77 @@ function createScroller({
 function createContent(): HTMLDivElement {
   return document.createElement('div');
 }
+
+describe('question target scrolling', () => {
+  let scroller: HTMLDivElement;
+  let content: HTMLDivElement;
+  let message: HTMLDivElement;
+
+  beforeEach(() => {
+    scroller = createScroller({ scrollTop: 0, scrollHeight: 5000, clientHeight: 400 });
+    content = createContent();
+    message = document.createElement('div');
+    message.id = 'target-question-message';
+    scroller.appendChild(content);
+    content.appendChild(message);
+    document.body.appendChild(scroller);
+    scroller.getBoundingClientRect = () => new DOMRect(0, 0, 400, 400);
+    message.getBoundingClientRect = () => new DOMRect(0, 100 - scroller.scrollTop, 400, 3000);
+  });
+
+  afterEach(() => {
+    scroller.remove();
+    vi.restoreAllMocks();
+  });
+
+  const useTarget = () =>
+    useMessageTargetScroll({
+      scrollerRef: { current: scroller },
+      contentRef: { current: content },
+      navigationKey: 'question-target',
+    });
+
+  it.each([false, true])('centers the requested box heading, including tall boxes (shadow: %s)', (shadow) => {
+    const root = shadow ? message.attachShadow({ mode: 'open' }) : message;
+    for (const index of [0, 1]) {
+      const box = document.createElement('section');
+      box.setAttribute('data-choice-marker-index', String(index));
+      box.getBoundingClientRect = () => new DOMRect(0, 600 + index * 800 - scroller.scrollTop, 300, 1600);
+      root.appendChild(box);
+    }
+    const { result } = renderHook(useTarget);
+    act(() => {
+      result.current.start(message, 1);
+    });
+
+    expect(scroller.scrollTo).toHaveBeenCalledWith({ top: 1200, behavior: 'instant' });
+    expect(result.current.isActive()).toBe(true);
+  });
+
+  it('retains the legacy marker target while excluding quoted examples', () => {
+    const quote = document.createElement('blockquote');
+    quote.textContent = '[[AIONUI_USER_CHOICE_REQUIRED]]';
+    const prose = document.createElement('p');
+    prose.textContent = '[[AIONUI_USER_CHOICE_REQUIRED]]\nQuestion?';
+    message.append(quote, prose);
+    const range = document.createRange();
+    range.getBoundingClientRect = () => new DOMRect(0, 700 - scroller.scrollTop, 150, 16);
+    vi.spyOn(document, 'createRange').mockReturnValue(range);
+    const { result } = renderHook(useTarget);
+    act(() => {
+      result.current.start(message, 0);
+    });
+
+    expect(scroller.scrollTo).toHaveBeenCalledWith({ top: 508, behavior: 'instant' });
+    expect(range.startContainer.parentElement).toBe(prose);
+  });
+
+  it('does not start scrolling to a message outside the conversation', () => {
+    const { result } = renderHook(useTarget);
+    expect(result.current.start(document.createElement('div'), 0)).toBe(false);
+    expect(scroller.scrollTo).not.toHaveBeenCalled();
+  });
+});
 
 function attachElements(
   result: ReturnType<typeof renderHook<typeof useAutoScroll>>['result'],
