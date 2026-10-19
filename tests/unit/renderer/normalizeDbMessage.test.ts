@@ -9,6 +9,24 @@ import { normalizeDbMessage } from '@/renderer/pages/conversation/Messages/hooks
 import type { IMessageText, IMessageTips } from '@/common/chat/chatLib';
 
 describe('normalizeDbMessage', () => {
+  it.each([false, true])('restores a structured question from history (JSON string: %s)', (asJson) => {
+    const content = {
+      content: 'Where is the runtime?',
+      user_choice: { title: 'Where is the runtime?', options: null },
+    };
+    const message = {
+      id: 'question-1',
+      msg_id: 'question-1',
+      type: 'text',
+      conversation_id: 'conversation-1',
+      position: 'left',
+      status: 'finish',
+      content: asJson ? JSON.stringify(content) : content,
+    } as IMessageText;
+
+    expect(normalizeDbMessage(message)).toEqual({ ...message, content });
+  });
+
   it('keeps persisted info tip localization metadata from db content', () => {
     const normalized = normalizeDbMessage({
       id: 'tip-info',

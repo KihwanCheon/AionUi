@@ -131,6 +131,14 @@ const MessageText: React.FC<{
   const { t } = useTranslation();
   const [showCopyAlert, setShowCopyAlert] = useState(false);
   const isUserMessage = message.position === 'right';
+  const userQuestion = message.position === 'left' ? message.content.user_choice : undefined;
+  const userQuestionLabel = userQuestion
+    ? t(
+        userQuestion.options?.some((option) => option.trim())
+          ? 'messages.userQuestion.choice'
+          : 'messages.userQuestion.freeText'
+      )
+    : undefined;
   // Delivered-but-not-yet-consumed marker for messages sent mid-turn to a
   // supporting backend (claude/codex). The message already reached the
   // server (it's rendered); this only answers "has the agent picked it up
@@ -374,10 +382,13 @@ const MessageText: React.FC<{
           </div>
         )}
         <div
+          role={userQuestion ? 'group' : undefined}
+          aria-label={userQuestionLabel}
           className={classNames('min-w-0 [&>p:first-child]:mt-0px [&>p:last-child]:mb-0px', {
             'bg-aou-2 p-6px md:p-8px': isUserMessage || cronMeta,
             'bg-3 p-6px md:p-8px': isTeammateMessage,
             'w-full': !(isUserMessage || cronMeta || isTeammateMessage),
+            'box-border bg-primary-light-1 border border-primary-3 rounded-8px p-12px': Boolean(userQuestion),
           })}
           style={{
             ...(isUserMessage || cronMeta
@@ -390,6 +401,7 @@ const MessageText: React.FC<{
                 : undefined),
           }}
         >
+          {userQuestionLabel && <div className='mb-8px text-13px font-semibold text-primary'>{userQuestionLabel}</div>}
           {/* JSON 内容使用折叠组件 Use CollapsibleContent for JSON content */}
           {shouldRenderPlainText ? (
             <div className='whitespace-pre-wrap [overflow-wrap:anywhere]' data-testid='message-text-content'>

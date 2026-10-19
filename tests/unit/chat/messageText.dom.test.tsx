@@ -8,6 +8,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageText } from '@/common/chat/chatLib';
+import { normalizeTextMessageContent } from '@/common/chat/chatLib';
 import { ipcBridge } from '@/common';
 import { ConversationProvider } from '@/renderer/hooks/context/ConversationContext';
 import { LayoutContext } from '@/renderer/hooks/context/LayoutContext';
@@ -705,6 +706,64 @@ describe('MessageText attachment paths', () => {
     });
     // The whole point: the content endpoint is never hit for an oversized file.
     expect(ipcBridge.fs.readContent.invoke).not.toHaveBeenCalled();
+  });
+});
+
+describe('MessageText structured questions', () => {
+  const renderQuestion = (raw: unknown, position: IMessageText['position'] = 'left') =>
+    render(
+      <MessageText
+        showCopyRow={false}
+        message={{
+          id: 'question-1',
+          msg_id: 'question-1',
+          conversation_id: 'conv-1',
+          type: 'text',
+          position,
+          status: 'finish',
+          content: normalizeTextMessageContent(raw),
+        }}
+      />
+    );
+
+  it.each([{ options: undefined }, { options: null }, { options: [] }])(
+    'labels a free response request with options $options',
+    ({ options }) => {
+      renderQuestion({ content: 'Where is the runtime?', user_choice: { title: 'Where is the runtime?', options } });
+
+      expect(screen.getByRole('group', { name: 'messages.userQuestion.freeText' })).toHaveTextContent(
+        'Where is the runtime?'
+      );
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    }
+  );
+
+  it('labels a choice request while displaying the original question and options once', () => {
+    const content = 'Which runtime?\n- CPU\n- Vulkan';
+    renderQuestion({ content, user_choice: { title: 'Which runtime?', options: ['CPU', 'Vulkan'] } });
+
+    expect(screen.getByRole('group', { name: 'messages.userQuestion.choice' })).toBeInTheDocument();
+    expect(screen.getByTestId('message-text-content').textContent).toContain(content);
+    expect(screen.getAllByTestId('message-text-content')).toHaveLength(1);
+  });
+
+  it.each([
+    { content: 'Can you share the path?' },
+    { content: '[[AIONUI_USER_CHOICE_REQUIRED]]\nCan you share the path?' },
+    { content: 'Can you share the path?', user_choice: { title: 'Question?', options: 'Invalid' } },
+  ])('leaves text without valid structured metadata unchanged: %j', (content) => {
+    renderQuestion(content);
+
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+    expect(screen.getByTestId('message-text-content').textContent).toContain(content.content);
+  });
+
+  it('does not label user messages as assistant questions', () => {
+    renderQuestion({ content: 'CPU', user_choice: { title: 'Which runtime?', options: ['CPU', 'Vulkan'] } }, 'right');
+
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+    expect(screen.getByTestId('message-text-content')).toHaveTextContent('CPU');
   });
 });
 

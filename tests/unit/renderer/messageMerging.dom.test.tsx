@@ -9,6 +9,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ipcBridge } from '@/common';
 import type { IMessageAcpToolCall, IMessageText, IMessageThinking } from '@/common/chat/chatLib';
+import { transformMessage } from '@/common/chat/chatLib';
 import {
   MessageListLoadingProvider,
   MessageListProvider,
@@ -17,6 +18,7 @@ import {
   useMessageLstCache,
   useMessageList,
   useReplaceWithAnchorWindow,
+  normalizeDbMessage,
 } from '@/renderer/pages/conversation/Messages/hooks';
 
 vi.mock('@/common', () => ({
@@ -149,6 +151,40 @@ describe('message merging', () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
+  });
+
+  it('keeps one question and its metadata through replay and history hydration', async () => {
+    const { result } = renderHook(() => useAnchorMessageHarness(), { wrapper: TestWrapper });
+    const content = {
+      content: 'Which runtime?\n- CPU\n- Vulkan',
+      user_choice: { title: 'Which runtime?', options: ['CPU', 'Vulkan'] },
+    };
+    const frame = {
+      type: 'content',
+      conversation_id: CONVERSATION_ID,
+      msg_id: 'question-1',
+      position: 'left' as const,
+      status: 'finish' as const,
+      replace: true,
+      data: content,
+    };
+    act(() => {
+      result.current.addOrUpdateMessage(transformMessage(frame)!);
+      result.current.addOrUpdateMessage(transformMessage(frame)!);
+    });
+    await flushMessageQueue();
+    act(() => {
+      result.current.replaceWithAnchorWindow(CONVERSATION_ID, [
+        normalizeDbMessage({
+          ...createTextMessage('question-1', content.content),
+          id: 'question-1',
+          content,
+        }),
+      ]);
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].content).toMatchObject(content);
   });
 
   it('keeps text segments split when tool calls interrupt the same msg_id stream', async () => {

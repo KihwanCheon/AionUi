@@ -123,6 +123,11 @@ export type CronMessageMeta = {
   triggered_at: number;
 };
 
+export type UserQuestionMeta = {
+  title: string;
+  options?: string[] | null;
+};
+
 export type IMessageText = IMessage<
   'text',
   {
@@ -130,6 +135,8 @@ export type IMessageText = IMessage<
     /** Backend explicitly replaced the accumulated text for this msg_id. */
     replace?: boolean;
     cronMeta?: CronMessageMeta;
+    /** Structured question metadata; does not imply a blocked turn or pending approval. */
+    user_choice?: UserQuestionMeta;
     teammateMessage?: boolean;
     senderName?: string;
     senderAgentType?: string;
@@ -461,6 +468,7 @@ type RawTextMessageContent = {
   content?: unknown;
   replace?: unknown;
   cronMeta?: unknown;
+  user_choice?: unknown;
   teammateMessage?: unknown;
   teammate_message?: unknown;
   senderName?: unknown;
@@ -484,6 +492,13 @@ const isCronMessageMeta = (value: unknown): value is CronMessageMeta =>
   typeof value.cron_job_id === 'string' &&
   typeof value.cron_job_name === 'string' &&
   typeof value.triggered_at === 'number';
+
+const isUserQuestionMeta = (value: unknown): value is UserQuestionMeta =>
+  isObject(value) &&
+  typeof value.title === 'string' &&
+  value.title.trim().length > 0 &&
+  (value.options == null ||
+    (Array.isArray(value.options) && value.options.every((option) => typeof option === 'string')));
 
 const firstStringField = (
   data: RawTextMessageContent,
@@ -511,6 +526,7 @@ const normalizeTextMessageContentObject = (
     'senderConversationID',
   ]);
   const cronMeta = isCronMessageMeta(data.cronMeta) ? data.cronMeta : undefined;
+  const userQuestion = isUserQuestionMeta(data.user_choice) ? data.user_choice : undefined;
   const replace = options?.replace === true || data.replace === true;
   const teammateMessage = Boolean(data.teammateMessage) || Boolean(data.teammate_message);
 
@@ -518,6 +534,7 @@ const normalizeTextMessageContentObject = (
     content,
     ...(replace ? { replace: true } : {}),
     ...(cronMeta ? { cronMeta } : {}),
+    ...(userQuestion ? { user_choice: userQuestion } : {}),
     ...(teammateMessage ? { teammateMessage: true } : {}),
     ...(senderName ? { senderName } : {}),
     ...(senderAgentType ? { senderAgentType } : {}),

@@ -1,4 +1,8 @@
 {
+  "userQuestion": {
+    "choice": "Response requested · Choice",
+    "freeText": "Response requested · Free text"
+  },
   "fileChanges": "File Changes",
   "fileChangesCount": "{{count}} File Changes",
   "fileChangesCount_one": "{{count}} File Change",

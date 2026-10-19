@@ -1,4 +1,8 @@
 {
+  "userQuestion": {
+    "choice": "回答リクエスト · 選択式",
+    "freeText": "回答リクエスト · 自由入力"
+  },
   "fileChanges": "ファイル変更",
   "fileChangesCount": "{{count}} 件のファイル変更",
   "fileChangesCount_one": "{{count}} 件のファイル変更",

@@ -1,4 +1,8 @@
 {
+  "userQuestion": {
+    "choice": "Запрос ответа · Выбор варианта",
+    "freeText": "Запрос ответа · Свободный ввод"
+  },
   "fileChanges": "Изменения файлов",
   "fileChangesCount": "{{count}} изменений файлов",
   "fileChangesCount_one": "{{count}} изменение файлов",

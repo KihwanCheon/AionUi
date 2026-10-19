@@ -1,4 +1,8 @@
 {
+  "userQuestion": {
+    "choice": "Antwort erbeten · Auswahl",
+    "freeText": "Antwort erbeten · Freitext"
+  },
   "fileChanges": "Dateiänderungen",
   "fileChangesCount": "{{count}} Dateiänderungen",
   "fileChangesCount_one": "{{count}} Dateiänderung",

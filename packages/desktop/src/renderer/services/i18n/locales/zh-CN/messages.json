@@ -1,4 +1,8 @@
 {
+  "userQuestion": {
+    "choice": "回答请求 · 选项",
+    "freeText": "回答请求 · 自由输入"
+  },
   "fileChanges": "文件变更",
   "fileChangesCount": "{{count}} 个文件变更",
   "fileChangesCount_one": "{{count}} 个文件变更",

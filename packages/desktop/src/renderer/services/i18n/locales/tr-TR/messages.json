@@ -1,4 +1,8 @@
 {
+  "userQuestion": {
+    "choice": "Yanıt isteniyor · Seçenekler",
+    "freeText": "Yanıt isteniyor · Serbest metin"
+  },
   "fileChanges": "Dosya Değişiklikleri",
   "fileChangesCount": "{{count}} Dosya Değişikliği",
   "fileChangesCount_one": "{{count}} Dosya Değişikliği",

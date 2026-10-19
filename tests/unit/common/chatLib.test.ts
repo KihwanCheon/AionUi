@@ -300,6 +300,29 @@ describe('normalizeAgentStreamError', () => {
 });
 
 describe('normalizeTextMessageContent', () => {
+  it.each([{ options: undefined }, { options: null }, { options: [] }, { options: ['First', 'Second'] }])(
+    'preserves structured questions in object and JSON payloads with options $options',
+    ({ options }) => {
+      const content = { content: 'Where is the runtime?', user_choice: { title: 'Where is the runtime?', options } };
+
+      expect(normalizeTextMessageContent(content)).toEqual(content);
+      expect(normalizeTextMessageContent(JSON.stringify(content))).toEqual(content);
+    }
+  );
+
+  it.each([
+    null,
+    'Question?',
+    {},
+    { title: ' ' },
+    { title: 'Question?', options: 'First' },
+    { title: 'Question?', options: [1] },
+  ])('does not treat malformed metadata %j as a structured question', (userChoice) => {
+    expect(normalizeTextMessageContent({ content: 'ordinary text', user_choice: userChoice })).toEqual({
+      content: 'ordinary text',
+    });
+  });
+
   it('normalizes snake_case team metadata from an object payload', () => {
     expect(
       normalizeTextMessageContent({
@@ -373,6 +396,28 @@ describe('normalizeTextMessageContent', () => {
 });
 
 describe('transformMessage', () => {
+  it('preserves the question metadata and message target from a finished realtime question frame', () => {
+    const data = { content: 'Where is the runtime?', user_choice: { title: 'Where is the runtime?', options: null } };
+    const message = transformMessage({
+      type: 'content',
+      conversation_id: CONVERSATION_ID,
+      msg_id: 'question-1',
+      position: 'left',
+      status: 'finish',
+      replace: true,
+      data,
+    });
+
+    expect(message).toMatchObject({
+      type: 'text',
+      msg_id: 'question-1',
+      conversation_id: CONVERSATION_ID,
+      position: 'left',
+      status: 'finish',
+      content: { ...data, replace: true },
+    });
+  });
+
   it('keeps one stable error message identity through stream replay and history hydration', () => {
     const frame = {
       type: 'error',
