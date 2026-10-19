@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createWaitingConfirmationSync } from '@/renderer/pages/conversation/GroupedHistory/utils/waitingConfirmationSync';
 import {
   applyWaitingConfirmationTransition,
   extractConfirmationId,
@@ -96,5 +97,66 @@ describe('shouldReconcileMarkWaiting', () => {
 
   it('does not mark when there are no pending confirmations', () => {
     expect(shouldReconcileMarkWaiting(0)).toBe(false);
+  });
+});
+
+describe('pending confirmation reconciliation', () => {
+  it('clears a stale waiting mark when the server has no pending requests', async () => {
+    const replace = vi.fn();
+    const sync = createWaitingConfirmationSync({ load: async () => [], replace });
+    await sync.refresh('claude');
+    expect(replace).toHaveBeenCalledWith('claude', []);
+  });
+
+  it('does not revive a request whose resolution arrived before its stream frame', async () => {
+    const replace = vi.fn();
+    const sync = createWaitingConfirmationSync({ load: async () => ['resolved', 'waiting'], replace });
+    sync.resolve('claude', 'resolved');
+    await sync.refresh('claude');
+    expect(sync.mark('claude', 'resolved')).toBe(false);
+    expect(replace).toHaveBeenLastCalledWith('claude', ['waiting']);
+  });
+
+  it('discards an old empty snapshot when a new request arrives during the lookup', async () => {
+    const first = Promise.withResolvers<string[]>();
+    const second = Promise.withResolvers<string[]>();
+    const load = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const replace = vi.fn();
+    const sync = createWaitingConfirmationSync({ load, replace });
+    const refresh = sync.refresh('claude');
+    sync.mark('claude', 'new');
+    first.resolve([]);
+    await Promise.resolve();
+    expect(replace).not.toHaveBeenCalled();
+    second.resolve(['new']);
+    await refresh;
+    expect(replace).toHaveBeenCalledExactlyOnceWith('claude', ['new']);
+  });
+
+  it('preserves the badge after lookup failure and can recover on a later refresh', async () => {
+    const load = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([]);
+    const replace = vi.fn();
+    const sync = createWaitingConfirmationSync({ load, replace });
+    await sync.refresh('claude');
+    expect(replace).not.toHaveBeenCalled();
+    await sync.refresh('claude');
+    expect(replace).toHaveBeenCalledWith('claude', []);
+  });
+
+  it('ignores an outstanding lookup after a turn ends or a conversation is deleted', async () => {
+    const pending = Promise.withResolvers<string[]>();
+    const replace = vi.fn();
+    const sync = createWaitingConfirmationSync({ load: () => pending.promise, replace });
+    const refresh = sync.refresh('claude');
+    sync.forget('claude');
+    pending.resolve(['old']);
+    await refresh;
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('does not suppress a pending request in another conversation with the same id', () => {
+    const sync = createWaitingConfirmationSync({ load: async () => [], replace: vi.fn() });
+    sync.resolve('first', 'request');
+    expect(sync.mark('second', 'request')).toBe(true);
   });
 });

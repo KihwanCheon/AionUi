@@ -11,6 +11,7 @@ import { addEventListener } from '@/renderer/utils/emitter';
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { countVisibleCompletionUnread, isConversationWindowFocused } from '../utils/completionUnread';
 import { createDoorayCompletionReadPolicy } from '../utils/doorayCompletionRead';
+import { createWaitingConfirmationSync } from '../utils/waitingConfirmationSync';
 import {
   createConversationFailureTracker,
   getConversationErrorMessage,
@@ -194,6 +195,7 @@ export const RUNTIME_PENDING_CONFIRMATION_ID = '__runtime_pending__';
 export type WaitingConfirmationTransition =
   | { kind: 'mark'; confirmationId: string }
   | { kind: 'unmark'; confirmationId: string }
+  | { kind: 'replace'; confirmationIds: string[] }
   | { kind: 'clear' };
 
 /**
@@ -209,6 +211,9 @@ export const applyWaitingConfirmationTransition = (
   if (transition.kind === 'clear') {
     return new Set();
   }
+  if (transition.kind === 'replace') {
+    return new Set(transition.confirmationIds);
+  }
   const next = new Set(current);
   if (transition.kind === 'mark') {
     next.add(transition.confirmationId);
@@ -222,7 +227,7 @@ export const applyWaitingConfirmationTransition = (
 /**
  * Pure decision helper mirroring `shouldReconcileMarkGenerating`: a runtime
  * summary lights the sidebar "waiting" icon only when it reports pending
- * confirmations. Clearing is never done via reconcile.
+ * confirmations. A separate pending-list reconciliation can clear stale marks.
  */
 export const shouldReconcileMarkWaiting = (pendingConfirmations: number): boolean => pendingConfirmations > 0;
 
@@ -495,25 +500,37 @@ const applyWaitingConfirmation = (conversation_id: string, transition: WaitingCo
   emitStoreChange();
 };
 
+const waitingConfirmationSync = createWaitingConfirmationSync({
+  load: async (conversation_id) => {
+    const pending = await ipcBridge.conversation.confirmation.list.invoke({ conversation_id });
+    return (pending ?? []).map((item) => item.call_id || item.id);
+  },
+  replace: (conversation_id, confirmationIds) => {
+    applyWaitingConfirmation(conversation_id, { kind: 'replace', confirmationIds });
+  },
+});
+
 const markWaitingConfirmation = (conversation_id: string, confirmationId: string) => {
+  if (!waitingConfirmationSync.mark(conversation_id, confirmationId)) return;
   applyWaitingConfirmation(conversation_id, { kind: 'mark', confirmationId });
 };
 
 const clearWaitingConfirmationById = (conversation_id: string, confirmationId: string) => {
+  waitingConfirmationSync.resolve(conversation_id, confirmationId);
   applyWaitingConfirmation(conversation_id, { kind: 'unmark', confirmationId });
 };
 
 const clearAllWaitingConfirmation = (conversation_id: string) => {
+  waitingConfirmationSync.forget(conversation_id);
   applyWaitingConfirmation(conversation_id, { kind: 'clear' });
 };
 
 /**
  * Reconciles the sidebar "waiting" icon with authoritative runtime state on a
  * per-conversation hydrate/send-accepted response. Mirrors
- * `reconcileGeneratingFromRuntime`: it only ever marks (using a sentinel id, as
- * the runtime summary reports a count, not ids) so a stale idle summary can't
- * fight a live stream; clearing stays with `confirmation.remove` / terminal
- * frames. Covers the window-reload case where the mark stream frame was missed.
+ * `reconcileGeneratingFromRuntime`: a count only marks a provisional sentinel.
+ * The pending-list query then replaces it with concrete ids (or clears it),
+ * guarded against stream events that arrive while that query is in flight.
  */
 export const reconcileWaitingConfirmationFromRuntime = (
   conversation_id: string,
@@ -524,6 +541,8 @@ export const reconcileWaitingConfirmationFromRuntime = (
   }
   if (shouldReconcileMarkWaiting(pendingConfirmations)) {
     markWaitingConfirmation(conversation_id, RUNTIME_PENDING_CONFIRMATION_ID);
+  } else if (waitingConfirmationConversationIdsState.has(conversation_id)) {
+    void waitingConfirmationSync.refresh(conversation_id);
   }
 };
 
@@ -626,6 +645,7 @@ const initializeConversationListSyncStore = () => {
   // again — clear its completion dot (which may have been set while backgrounded).
   if (typeof window !== 'undefined') {
     window.addEventListener('focus', () => {
+      waitingConfirmationConversationIdsState.forEach((id) => void waitingConfirmationSync.refresh(id));
       if (activeConversationIdState) {
         clearCompletionUnreadState(activeConversationIdState);
         failureTracker.read(activeConversationIdState);
@@ -684,17 +704,6 @@ const initializeConversationListSyncStore = () => {
       return;
     }
 
-    // A permission/acp_permission/ask frame pauses the turn on the user — light
-    // the distinct "waiting" icon. This is independent of the generating guard
-    // (an `ask` frame is not in the generating whitelist, and waiting takes
-    // display precedence over the spinner regardless).
-    if (isWaitingConfirmationStreamMessage(message.type)) {
-      const confirmationId = extractConfirmationId(message);
-      if (confirmationId) {
-        markWaitingConfirmation(conversation_id, confirmationId);
-      }
-    }
-
     const decision = getSidebarStreamGuardDecision({
       type: message.type,
       completed: completedConversationIdsState.has(conversation_id),
@@ -707,6 +716,14 @@ const initializeConversationListSyncStore = () => {
     if (decision.lateIgnored) {
       logLateStreamIgnored(conversation_id, message.type);
       return;
+    }
+    // Resolved or late permission frames must not relight the waiting badge.
+    // The server's pending list also repairs missed resolution events.
+    if (isWaitingConfirmationStreamMessage(message.type)) {
+      const confirmationId = extractConfirmationId(message);
+      if (confirmationId) {
+        markWaitingConfirmation(conversation_id, confirmationId);
+      }
     }
     if (decision.markGenerating) {
       if (message.turn_id) activeStreamTurnIds.set(conversation_id, message.turn_id);
@@ -729,6 +746,7 @@ const initializeConversationListSyncStore = () => {
     }
     markCompleted(event.session_id, event.turn_id);
     clearGenerating(event.session_id, 'turnCompleted');
+    clearAllWaitingConfirmation(event.session_id);
     refreshConversations();
   });
 };
