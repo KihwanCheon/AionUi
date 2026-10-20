@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import type { TChatConversation } from '@/common/config/storage';
 import type { IMessageSearchItem } from '@/common/types/team/database';
 import AionModal from '@/renderer/components/base/AionModal';
 import { AionSearchInput } from '@/renderer/components/base';
@@ -13,12 +14,13 @@ import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistan
 import { useAgentLogos } from '@/renderer/utils/model/agentLogo';
 import ThemedLogo from '@/renderer/components/agent/ThemedLogo';
 import { resolveConversationLeadingMark } from '@/renderer/pages/conversation/utils/conversationAssistantIdentity';
+import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import { blockMobileInputFocus, blurActiveElement } from '@/renderer/utils/ui/focus';
 import { isPrimaryApplicationShortcut } from '@/renderer/utils/ui/keyboardShortcuts';
-import { Empty, Spin, Typography } from '@arco-design/web-react';
+import { Button, Empty, Spin, Typography } from '@arco-design/web-react';
 import { Close, MessageOne, Robot, Search } from '@icon-park/react';
 import classNames from 'classnames';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -30,6 +32,8 @@ const RECENT_SEARCH_STORAGE_KEY = 'conversation.historySearch.recentKeywords';
 const SNIPPET_MAX_LENGTH = 110;
 const SNIPPET_PREFIX_CONTEXT_LENGTH = 34;
 const SNIPPET_SUFFIX_CONTEXT_LENGTH = 58;
+
+type ConversationSearchResult = Omit<IMessageSearchItem, 'message_id' | 'message_type'> & { message_id?: string };
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -145,6 +149,9 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
   const [keyword, setKeyword] = useState('');
   const [debouncedKeyword, setDebouncedKeyword] = useState('');
   const [items, setItems] = useState<IMessageSearchItem[]>([]);
+  const [idMatch, setIdMatch] = useState<TChatConversation | null>(null);
+  const [idLoading, setIdLoading] = useState(false);
+  const searchGeneration = useRef(0);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -173,8 +180,34 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
     return () => window.clearTimeout(timer);
   }, [keyword]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setIdMatch(null);
+    // Current IDs are eight hex characters; also allow legacy safe ID tokens.
+    // Do not pass free text, slashes or query delimiters into the detail route.
+    const candidate = /^[a-z\d][a-z\d_-]{7,127}$/i.test(debouncedKeyword) ? debouncedKeyword : null;
+    setIdLoading(candidate !== null);
+    if (candidate) {
+      const id = /^[a-f\d]{8}$/i.test(candidate) ? candidate.toLowerCase() : candidate;
+      void getConversationOrNull(id)
+        .then((conversation) => {
+          if (!cancelled) setIdMatch(conversation);
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) console.error('[ConversationSearchPopover] ID lookup failed:', error);
+        })
+        .finally(() => {
+          if (!cancelled) setIdLoading(false);
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedKeyword]);
+
   const runSearch = useCallback(
     async (pageToLoad: number, append: boolean) => {
+      const generation = ++searchGeneration.current;
       if (!debouncedKeyword) {
         setItems([]);
         setPage(0);
@@ -186,6 +219,8 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
         setLoadingMore(true);
       } else {
         setLoading(true);
+        setItems([]);
+        setHasMore(false);
       }
 
       try {
@@ -195,10 +230,12 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
           page_size: PAGE_SIZE,
         });
 
+        if (generation !== searchGeneration.current) return;
         setItems((prev) => (append ? [...prev, ...result.items] : result.items));
         setPage(pageToLoad);
         setHasMore(result.has_more);
       } catch (error) {
+        if (generation !== searchGeneration.current) return;
         console.error('[ConversationSearchPopover] Search failed:', error);
         if (!append) {
           setItems([]);
@@ -206,15 +243,20 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
           setHasMore(false);
         }
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (generation === searchGeneration.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
     [debouncedKeyword]
   );
 
   useEffect(() => {
-    void runSearch(0, false);
+    void runSearch(1, false);
+    return () => {
+      searchGeneration.current += 1;
+    };
   }, [runSearch]);
 
   useEffect(() => {
@@ -241,10 +283,12 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
   }, [debouncedKeyword]);
 
   const resetSearchState = useCallback(() => {
+    searchGeneration.current += 1;
     setVisible(false);
     setKeyword('');
     setDebouncedKeyword('');
     setItems([]);
+    setIdMatch(null);
     setPage(0);
     setHasMore(false);
     setLoading(false);
@@ -260,7 +304,7 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
   }, [debouncedKeyword, hasMore, loading, loadingMore, page, runSearch, visible]);
 
   const handleResultClick = useCallback(
-    async (item: IMessageSearchItem) => {
+    async (item: ConversationSearchResult) => {
       blockMobileInputFocus();
       blurActiveElement();
 
@@ -273,7 +317,7 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
       await Promise.resolve(
         navigate(`/conversation/${item.conversation.id}`, {
           state: {
-            targetMessageId: item.message_id,
+            ...(item.message_id ? { targetMessageId: item.message_id } : {}),
             fromConversationSearch: true,
           },
         })
@@ -288,9 +332,11 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
   }, [resetSearchState]);
 
   const handleClearKeyword = useCallback(() => {
+    searchGeneration.current += 1;
     setKeyword('');
     setDebouncedKeyword('');
     setItems([]);
+    setIdMatch(null);
     setPage(0);
     setHasMore(false);
     setLoading(false);
@@ -329,6 +375,21 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
 
   const triggerAriaLabel = t('conversation.historySearch.tooltip');
 
+  const results = useMemo<ConversationSearchResult[]>(
+    () =>
+      idMatch
+        ? [
+            {
+              conversation: idMatch,
+              message_created_at: idMatch.modified_at,
+              preview_text: t('conversation.historySearch.conversationIdMatch', { id: idMatch.id }),
+            },
+            ...items,
+          ]
+        : items,
+    [idMatch, items, t]
+  );
+
   const resultContent = useMemo(() => {
     if (!debouncedKeyword) {
       return (
@@ -354,7 +415,7 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
       );
     }
 
-    if (loading && items.length === 0) {
+    if ((loading || idLoading) && results.length === 0) {
       return (
         <div className='h-120px flex items-center justify-center'>
           <Spin size={20} />
@@ -362,7 +423,7 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
       );
     }
 
-    if (items.length === 0) {
+    if (results.length === 0) {
       return (
         <div className='conversation-search-modal__state'>
           <Empty className='py-2px' description={t('conversation.historySearch.empty')} />
@@ -381,14 +442,14 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
         }}
       >
         <div className='conversation-search-modal__results flex flex-col'>
-          {items.map((item) => {
+          {results.map((item) => {
             const snippet = buildSnippet(item.preview_text, debouncedKeyword);
             return (
-              <button
-                key={`${item.message_id}-${item.message_created_at}`}
-                type='button'
+              <Button
+                key={item.message_id ? `message:${item.message_id}` : `conversation:${item.conversation.id}`}
+                type='text'
                 className={classNames(
-                  'conversation-search-modal__result w-full text-start cursor-pointer transition-all duration-150',
+                  'conversation-search-modal__result w-full !h-auto !block !whitespace-normal !text-start !rounded-none cursor-pointer transition-all duration-150',
                   'focus:outline-none'
                 )}
                 onClick={() => {
@@ -411,7 +472,7 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
                 <div className='conversation-search-modal__snippet text-13px leading-22px text-t-primary/92 break-words'>
                   {renderHighlightedText(snippet, debouncedKeyword)}
                 </div>
-              </button>
+              </Button>
             );
           })}
 
@@ -424,10 +485,21 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
         </div>
       </div>
     );
-  }, [debouncedKeyword, handleLoadMore, handleResultClick, items, loading, loadingMore, recentKeywords, t]);
+  }, [
+    debouncedKeyword,
+    handleLoadMore,
+    handleResultClick,
+    results,
+    loading,
+    idLoading,
+    loadingMore,
+    recentKeywords,
+    t,
+    i18n.language,
+  ]);
 
-  const hasSearchResults = items.length > 0;
-  const useCompactHeight = !debouncedKeyword || (!loading && !hasSearchResults);
+  const hasSearchResults = results.length > 0;
+  const useCompactHeight = !debouncedKeyword || (!loading && !idLoading && !hasSearchResults);
   const triggerClassName = fullWidth
     ? 'conversation-search-trigger-full h-34px w-full p-0 bg-transparent border-none outline-none flex items-center justify-start gap-8px ps-10px pe-8px rd-0.5rem cursor-pointer shrink-0 transition-all group text-t-primary focus:outline-none focus-visible:outline-none'
     : 'h-34px w-34px p-0 bg-transparent rd-0.5rem flex items-center justify-center cursor-pointer shrink-0 transition-all border border-solid border-transparent text-t-secondary hover:text-t-primary';

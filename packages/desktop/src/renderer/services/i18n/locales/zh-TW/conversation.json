@@ -127,12 +127,13 @@
     "tooltip": "搜尋訊息",
     "title": "搜尋對話內容",
     "shortTitle": "搜尋",
-    "description": "透過關鍵字搜尋歷史訊息，滾動載入更多，點擊跳轉到匹配的訊息。",
-    "placeholder": "搜尋訊息內容...",
-    "idle": "輸入關鍵字搜尋訊息",
-    "empty": "沒有找到匹配的訊息",
+    "description": "搜尋訊息內容或輸入對話 ID。點擊結果可開啟對應對話或訊息。",
+    "placeholder": "訊息內容或對話 ID...",
+    "idle": "輸入關鍵字或對話 ID",
+    "empty": "找不到相符的對話或訊息",
     "loadingMore": "載入更多...",
-    "untitled": "未命名對話"
+    "untitled": "未命名對話",
+    "conversationIdMatch": "對話 ID：{{id}}"
   },
   "dropdown": {
     "cliAgents": "CLI Agents",

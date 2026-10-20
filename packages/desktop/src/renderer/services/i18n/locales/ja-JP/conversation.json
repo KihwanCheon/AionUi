@@ -127,12 +127,13 @@
     "tooltip": "メッセージを検索",
     "title": "会話内容を検索",
     "shortTitle": "検索",
-    "description": "キーワードで履歴メッセージを検索し、スクロールでさらに読み込み、クリックで該当メッセージにジャンプします。",
-    "placeholder": "メッセージ内容を検索...",
-    "idle": "キーワードを入力してメッセージを検索",
-    "empty": "一致するメッセージが見つかりません",
+    "description": "メッセージ内容または会話 ID で検索できます。結果をクリックすると、該当する会話やメッセージに移動します。",
+    "placeholder": "メッセージ内容または会話 ID...",
+    "idle": "キーワードまたは会話 ID を入力してください",
+    "empty": "一致する会話やメッセージが見つかりません",
     "loadingMore": "さらに読み込み中...",
-    "untitled": "無題の会話"
+    "untitled": "無題の会話",
+    "conversationIdMatch": "会話 ID: {{id}}"
   },
   "dropdown": {
     "cliAgents": "CLI Agents",

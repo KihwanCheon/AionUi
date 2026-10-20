@@ -127,12 +127,13 @@
     "tooltip": "Mesajları ara",
     "title": "Sohbet içeriğini ara",
     "shortTitle": "Ara",
-    "description": "Anahtar kelimeyle geçmiş mesajları arayın, kaydırarak daha fazla yükleyin ve eşleşen mesaja tıklayarak gidin.",
-    "placeholder": "Mesaj içeriğini ara...",
-    "idle": "Mesajları aramak için anahtar kelime girin",
-    "empty": "Eşleşen mesaj bulunamadı",
+    "description": "Mesaj içeriğini arayın veya bir sohbet kimliği girin. Sohbeti ya da eşleşen mesajı açmak için sonuca tıklayın.",
+    "placeholder": "Mesaj içeriği veya sohbet kimliği...",
+    "idle": "Anahtar kelime veya sohbet kimliği girin",
+    "empty": "Eşleşen sohbet veya mesaj bulunamadı",
     "loadingMore": "Daha fazla yükleniyor...",
-    "untitled": "Adsız sohbet"
+    "untitled": "Adsız sohbet",
+    "conversationIdMatch": "Sohbet kimliği: {{id}}"
   },
   "agentError": {
     "fallbackTitle": "Ajan yanıt veremedi",

@@ -786,6 +786,7 @@ export type I18nKey =
   | 'conversation.history.updatedPeriod'
   | 'conversation.history.viewTabsLabel'
   | 'conversation.history.yesterday'
+  | 'conversation.historySearch.conversationIdMatch'
   | 'conversation.historySearch.description'
   | 'conversation.historySearch.empty'
   | 'conversation.historySearch.idle'

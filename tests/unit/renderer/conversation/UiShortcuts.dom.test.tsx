@@ -1,5 +1,7 @@
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { TMessage } from '@/common/chat/chatLib';
+import type { TChatConversation } from '@/common/config/storage';
+import type { IMessageSearchItem } from '@/common/types/team/database';
 import type { NavigateFunction } from 'react-router-dom';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +15,8 @@ const testState = vi.hoisted(() => ({
 const serviceMocks = vi.hoisted(() => ({
   loadMessages: vi.fn(() => new Promise<never>(() => {})),
   searchMessages: vi.fn().mockResolvedValue({ items: [], has_more: false }),
+  getConversation: vi.fn().mockResolvedValue(null),
+  navigate: vi.fn(),
 }));
 
 const clipboardMocks = vi.hoisted(() => ({
@@ -21,11 +25,14 @@ const clipboardMocks = vi.hoisted(() => ({
 
 vi.mock('react-router-dom', () => ({
   useLocation: () => ({ pathname: testState.pathname, search: '', hash: '' }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => serviceMocks.navigate,
 }));
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, params?: { id?: string }) => (params?.id ? `Conversation ID: ${params.id}` : key),
+    i18n: { language: 'en-US' },
+  }),
 }));
 
 vi.mock('@/renderer/pages/conversation/GroupedHistory/hooks/useVisibleConversationIds', () => ({
@@ -59,11 +66,24 @@ vi.mock('@/common', () => ({
 }));
 
 vi.mock('@/renderer/components/base/AionModal', () => ({
-  default: () => null,
+  default: ({ visible, children }: { visible: boolean; children: React.ReactNode }) =>
+    visible ? <div role='dialog'>{children}</div> : null,
 }));
 
 vi.mock('@/renderer/components/base', () => ({
-  AionSearchInput: () => null,
+  AionSearchInput: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
+    <input aria-label='global-search-input' value={value} onChange={(event) => onChange(event.target.value)} />
+  ),
+}));
+
+vi.mock('@/renderer/pages/conversation/utils/conversationCache', () => ({
+  getConversationOrNull: serviceMocks.getConversation,
+}));
+vi.mock('@/renderer/hooks/agent/usePresetAssistantInfo', () => ({ usePresetAssistantInfo: () => ({ info: null }) }));
+vi.mock('@/renderer/components/agent/ThemedLogo', () => ({ default: () => null }));
+vi.mock('@/renderer/utils/model/agentLogo', () => ({
+  useAgentLogos: () => ({}),
+  resolveAgentLogo: () => null,
 }));
 
 import { useConversationShortcuts } from '@/renderer/hooks/ui/useConversationShortcuts';
@@ -73,6 +93,165 @@ import { useMinimapPanel } from '@/renderer/pages/conversation/components/Conver
 import { useWorkspaceCollapse } from '@/renderer/pages/conversation/hooks/useWorkspaceCollapse';
 import { isShortcutBlockedByTarget } from '@/renderer/utils/ui/keyboardShortcuts';
 import { dispatchWorkspaceToggleEvent } from '@/renderer/utils/workspace/workspaceEvents';
+
+const idConversation: TChatConversation = {
+  id: '9e36690f',
+  name: 'Target conversation',
+  type: 'acp',
+  extra: { backend: 'codex' },
+  created_at: 1000,
+  modified_at: 2000,
+};
+
+const searchMessage = (id = 'message-1', name = 'Target conversation'): IMessageSearchItem => ({
+  conversation: { ...idConversation, name },
+  message_id: id,
+  message_type: 'text',
+  message_created_at: 2000,
+  preview_text: 'Matched message content',
+});
+
+describe('global conversation ID search', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    serviceMocks.getConversation.mockReset().mockResolvedValue(null);
+    serviceMocks.searchMessages.mockReset().mockResolvedValue({ items: [], has_more: false });
+    serviceMocks.navigate.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  const openSearch = (keyword: string, onConversationSelect = vi.fn(), onSessionClick = vi.fn()) => {
+    render(<ConversationSearchPopover onConversationSelect={onConversationSelect} onSessionClick={onSessionClick} />);
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.historySearch.tooltip' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: keyword } });
+  };
+
+  it('finds a conversation with no messages by its ID and navigates without a message anchor', async () => {
+    serviceMocks.getConversation.mockResolvedValue(idConversation);
+    const onSelect = vi.fn();
+    const onSessionClick = vi.fn();
+    openSearch('  9E36690F  ', onSelect, onSessionClick);
+    const result = await screen.findByRole('button', { name: /Target conversation/ });
+    expect(serviceMocks.getConversation).toHaveBeenCalledWith('9e36690f');
+    await act(async () => {
+      fireEvent.click(result);
+    });
+    expect(serviceMocks.navigate).toHaveBeenCalledWith('/conversation/9e36690f', {
+      state: { fromConversationSearch: true },
+    });
+    expect([
+      onSelect.mock.calls.length,
+      onSessionClick.mock.calls.length,
+      screen.queryAllByRole('dialog').length,
+    ]).toEqual([1, 1, 0]);
+  });
+
+  it('keeps message hits below the ID hit and preserves navigation to a matched message', async () => {
+    serviceMocks.getConversation.mockResolvedValue(idConversation);
+    serviceMocks.searchMessages.mockResolvedValue({ items: [searchMessage()], has_more: false });
+    openSearch('9e36690f');
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /Target conversation/ })).toHaveLength(2));
+    const results = screen.getAllByRole('button', { name: /Target conversation/ });
+    expect(results[0]).toHaveTextContent('Conversation ID: 9e36690f');
+    await act(async () => {
+      fireEvent.click(results[1]);
+    });
+    expect(serviceMocks.navigate).toHaveBeenCalledWith('/conversation/9e36690f', {
+      state: { targetMessageId: 'message-1', fromConversationSearch: true },
+    });
+  });
+
+  it('keeps the ID hit when message search fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    serviceMocks.getConversation.mockResolvedValue(idConversation);
+    serviceMocks.searchMessages.mockRejectedValue(new Error('message search unavailable'));
+    openSearch('9e36690f');
+    expect(await screen.findByRole('button', { name: /Target conversation/ })).toBeInTheDocument();
+  });
+
+  it('keeps message results when the ID does not exist or is not visible to the user', async () => {
+    serviceMocks.searchMessages.mockResolvedValue({ items: [searchMessage()], has_more: false });
+    openSearch('9e36690f');
+    expect(await screen.findByRole('button', { name: /Target conversation/ })).toHaveTextContent(
+      'Matched message content'
+    );
+    expect(screen.queryByText(/Conversation ID:/)).not.toBeInTheDocument();
+  });
+
+  it('keeps message results when the ID lookup fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    serviceMocks.getConversation.mockRejectedValue(new Error('lookup unavailable'));
+    serviceMocks.searchMessages.mockResolvedValue({ items: [searchMessage()], has_more: false });
+    openSearch('9e36690f');
+    expect(await screen.findByRole('button', { name: /Target conversation/ })).toHaveTextContent(
+      'Matched message content'
+    );
+  });
+
+  it('ignores an ID lookup that completes after a newer search', async () => {
+    let resolveOld!: (conversation: TChatConversation) => void;
+    serviceMocks.getConversation.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      })
+    );
+    serviceMocks.getConversation.mockResolvedValue({ ...idConversation, id: '12345678', name: 'New conversation' });
+    openSearch('9e36690f');
+    await waitFor(() => expect(serviceMocks.getConversation).toHaveBeenCalledWith('9e36690f'));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '12345678' } });
+    await screen.findByRole('button', { name: /New conversation/ });
+    await act(async () => {
+      resolveOld(idConversation);
+    });
+    expect(screen.queryByRole('button', { name: /Target conversation/ })).not.toBeInTheDocument();
+  });
+
+  it('ignores a message search that finishes after the ID query has changed', async () => {
+    let resolveOld!: (result: { items: IMessageSearchItem[]; has_more: boolean }) => void;
+    serviceMocks.searchMessages.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      })
+    );
+    openSearch('previous query');
+    await waitFor(() => expect(serviceMocks.searchMessages).toHaveBeenCalled());
+    serviceMocks.getConversation.mockResolvedValue(idConversation);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '9e36690f' } });
+    await screen.findByRole('button', { name: /Target conversation/ });
+    await act(async () => {
+      resolveOld({ items: [searchMessage('old-message', 'Old conversation')], has_more: false });
+    });
+    expect(screen.queryByRole('button', { name: /Old conversation/ })).not.toBeInTheDocument();
+  });
+
+  it.each(['한국어 검색', '9e36', 'conversations/9e36690f', '9e36690f?query=value'])(
+    'keeps %s as a content query without treating it as an ID',
+    async (keyword) => {
+      openSearch(keyword);
+      await waitFor(() =>
+        expect(serviceMocks.searchMessages).toHaveBeenCalledWith({ keyword, page: 1, page_size: 20 })
+      );
+      expect(serviceMocks.getConversation).not.toHaveBeenCalled();
+    }
+  );
+
+  it('loads the next message page without duplicating the conversation result', async () => {
+    serviceMocks.getConversation.mockResolvedValue(idConversation);
+    serviceMocks.searchMessages.mockResolvedValueOnce({ items: [searchMessage()], has_more: true });
+    serviceMocks.searchMessages.mockResolvedValueOnce({ items: [searchMessage('message-2')], has_more: false });
+    openSearch('9e36690f');
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /Target conversation/ })).toHaveLength(2));
+    const result = screen.getAllByRole('button', { name: /Target conversation/ })[0];
+    fireEvent.scroll(result.parentElement!.parentElement!);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /Target conversation/ })).toHaveLength(3));
+    expect(serviceMocks.searchMessages).toHaveBeenLastCalledWith({ keyword: '9e36690f', page: 2, page_size: 20 });
+    expect(serviceMocks.getConversation).toHaveBeenCalledTimes(1);
+  });
+});
 
 const dispatchShortcut = (target: EventTarget, init: KeyboardEventInit): KeyboardEvent => {
   const event = new KeyboardEvent('keydown', {

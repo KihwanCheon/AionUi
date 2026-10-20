@@ -127,12 +127,13 @@
     "tooltip": "Pesquisar mensagens",
     "title": "Pesquisar conteúdo da conversa",
     "shortTitle": "Pesquisar",
-    "description": "Pesquise mensagens históricas por palavra-chave, carregue mais ao rolar, e pule para a mensagem correspondente.",
-    "placeholder": "Pesquisar conteúdo da mensagem...",
-    "idle": "Digite palavras-chave para pesquisar mensagens",
-    "empty": "Nenhuma mensagem correspondente encontrada",
+    "description": "Pesquise o conteúdo das mensagens ou digite um ID de conversa. Clique no resultado para abrir a conversa ou a mensagem encontrada.",
+    "placeholder": "Conteúdo da mensagem ou ID da conversa...",
+    "idle": "Digite uma palavra-chave ou ID de conversa",
+    "empty": "Nenhuma conversa ou mensagem correspondente encontrada",
     "loadingMore": "Carregando mais...",
-    "untitled": "Conversa sem título"
+    "untitled": "Conversa sem título",
+    "conversationIdMatch": "ID da conversa: {{id}}"
   },
   "dropdown": {
     "cliAgents": "Agentes CLI",

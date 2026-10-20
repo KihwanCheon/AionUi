@@ -127,12 +127,13 @@
     "tooltip": "Search messages",
     "title": "Search conversation content",
     "shortTitle": "Search",
-    "description": "Search historical messages by keyword, load more on scroll, and jump to the matched message.",
-    "placeholder": "Search message content...",
-    "idle": "Enter keywords to search messages",
-    "empty": "No matching messages found",
+    "description": "Search message content or enter a conversation ID. Click a result to open the conversation or matched message.",
+    "placeholder": "Message content or conversation ID...",
+    "idle": "Enter a keyword or conversation ID",
+    "empty": "No matching conversations or messages found",
     "loadingMore": "Loading more...",
-    "untitled": "Untitled conversation"
+    "untitled": "Untitled conversation",
+    "conversationIdMatch": "Conversation ID: {{id}}"
   },
   "dropdown": {
     "cliAgents": "CLI Agents",

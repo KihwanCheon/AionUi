@@ -127,12 +127,13 @@
     "tooltip": "Nachrichten durchsuchen",
     "title": "Gesprächsinhalt durchsuchen",
     "shortTitle": "Suche",
-    "description": "Verlaufsnachrichten nach Stichwort durchsuchen, beim Scrollen mehr laden und zur gefundenen Nachricht springen.",
-    "placeholder": "Nachrichteninhalt suchen...",
-    "idle": "Stichwörter eingeben, um Nachrichten zu suchen",
-    "empty": "Keine übereinstimmenden Nachrichten gefunden",
+    "description": "Nach Nachrichteninhalten suchen oder eine Unterhaltungs-ID eingeben. Ein Klick auf ein Ergebnis öffnet die Unterhaltung oder die passende Nachricht.",
+    "placeholder": "Nachrichteninhalt oder Unterhaltungs-ID...",
+    "idle": "Suchbegriff oder Unterhaltungs-ID eingeben",
+    "empty": "Keine passenden Unterhaltungen oder Nachrichten gefunden",
     "loadingMore": "Weitere werden geladen...",
-    "untitled": "Unbenanntes Gespräch"
+    "untitled": "Unbenanntes Gespräch",
+    "conversationIdMatch": "Unterhaltungs-ID: {{id}}"
   },
   "dropdown": {
     "cliAgents": "CLI-Agenten",
