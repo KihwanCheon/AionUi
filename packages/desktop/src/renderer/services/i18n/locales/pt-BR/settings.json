@@ -1477,5 +1477,52 @@
       "error": "Erro",
       "stopped": "Parado"
     }
+  },
+  "databaseMaintenance": {
+    "title": "Gerenciamento do banco de dados",
+    "description": "Inspecione o armazenamento e recupere espaço de dados excluídos permanentemente.",
+    "inspect": "Inspecionar",
+    "compact": "Limpar",
+    "confirmTitle": "Recuperar espaço do banco de dados?",
+    "confirmBody": "As conversas e os registros de ferramentas serão preservados. O backend será interrompido temporariamente e reiniciado ao final. Isso pode levar vários minutos. Mantenha o aplicativo aberto até terminar.",
+    "restart": "Reiniciar backend",
+    "desktopOnly": "Disponível no aplicativo de desktop.",
+    "retentionNote": "A limpeza recupera apenas espaço não utilizado. Para remover dados, primeiro exclua permanentemente as conversas arquivadas.",
+    "elapsed": "{{seconds}} s decorridos",
+    "result": "{{before}} → {{after}} · {{reclaimed}} recuperados",
+    "empty": "Clique em Inspecionar. Abrir esta página não inicia a inspeção nem a limpeza.",
+    "databaseSize": "Arquivo do banco de dados",
+    "walSize": "Log de gravação antecipada (WAL)",
+    "reclaimable": "Espaço recuperável estimado",
+    "conversations": "Conversas",
+    "available": "Espaço de trabalho disponível em disco",
+    "required": "Espaço de trabalho necessário",
+    "estimateNote": "As estimativas podem mudar. É exibido o menor espaço livre dos discos do banco e dos arquivos temporários. A limpeza requer até o dobro do tamanho atual do banco e do WAL.",
+    "breakdown": "Armazenamento por tipo de mensagem",
+    "logicalNote": "Tamanhos lógicos do conteúdo, sem índices e páginas livres; a soma difere do arquivo. Os registros de ferramentas são preservados.",
+    "messageType": "Tipo de mensagem",
+    "count": "Mensagens",
+    "contentSize": "Tamanho do conteúdo",
+    "inspectedAt": "Última inspeção: {{time}}",
+    "phases": {
+      "idle": "Pronto",
+      "inspecting": "Inspecionando armazenamento…",
+      "preparing": "Verificando tarefas ativas…",
+      "stopping": "Interrompendo backend…",
+      "compacting": "Recuperando espaço (VACUUM)…",
+      "restarting": "Reiniciando backend…",
+      "done": "Concluído",
+      "error": "Falha"
+    },
+    "errors": {
+      "busy": "Há conversas ou tarefas ativas, ou outro processo usa o banco. Aguarde a conclusão e tente novamente.",
+      "space": "Espaço insuficiente. Libere espaço nos discos do banco e dos arquivos temporários e inspecione novamente.",
+      "missing": "Arquivo do banco de dados não encontrado.",
+      "update": "Atualize o AionCore para uma versão com manutenção do banco e reinicie o aplicativo.",
+      "unavailable": "O backend está indisponível. Verifique se iniciou corretamente.",
+      "restart": "Falha ao reiniciar o backend. Clique em Reiniciar backend.",
+      "nothing": "Não há páginas não utilizadas para recuperar.",
+      "generic": "A operação falhou. Consulte o log do aplicativo e tente novamente."
+    }
   }
 }

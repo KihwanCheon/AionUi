@@ -15,6 +15,7 @@
 import type { IConfirmation } from '@/common/chat/chatLib';
 import type { AcpSlashCommandApiItem } from '@/common/chat/slash/types';
 import { bridge } from '@/common/platform/bridge';
+import type { DatabaseMaintenanceAction, DatabaseMaintenanceStatus } from '@/common/types/platform/databaseMaintenance';
 import { buildListTasksPath } from './teamTaskPath';
 import type { OpenDialogOptions } from 'electron';
 import type {
@@ -780,6 +781,10 @@ export interface IRendererLogEntry {
 // ---------------------------------------------------------------------------
 
 export const application = {
+  databaseMaintenanceStatus: bridge.buildProvider<DatabaseMaintenanceStatus, void>('app.database-maintenance.status'),
+  databaseMaintenanceStart: bridge.buildProvider<DatabaseMaintenanceStatus, { action: DatabaseMaintenanceAction }>(
+    'app.database-maintenance.start'
+  ),
   restart: bridge.buildProvider<IAppRestartResult, void>('restart-app'),
   openDevTools: bridge.buildProvider<boolean, void>('open-dev-tools'),
   isDevToolsOpened: bridge.buildProvider<boolean, void>('is-dev-tools-opened'),

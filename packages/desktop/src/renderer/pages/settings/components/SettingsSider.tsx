@@ -35,6 +35,7 @@ export const BUILTIN_TAB_IDS = [
   'webui',
   'pet',
   'system',
+  'database',
   'archived',
   'about',
 ] as const;
@@ -121,6 +122,12 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
       },
       pet: { id: 'pet', label: t('pet.desktopPet'), icon: <Cat />, path: 'pet' },
       system: { id: 'system', label: t('settings.system'), icon: <System />, path: 'system' },
+      database: {
+        id: 'database',
+        label: t('settings.databaseMaintenance.title'),
+        icon: <Inbox />,
+        path: 'database',
+      },
       archived: {
         id: 'archived',
         label: t('settings.archived.navLabel'),
@@ -132,7 +139,7 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
 
     // Start with ordered builtin IDs, hiding desktop-only tabs in browser mode
     const result: SiderItem[] = BUILTIN_TAB_IDS.filter(
-      (id) => isDesktop || (id !== 'pet' && id !== 'mindnprogress')
+      (id) => isDesktop || (id !== 'pet' && id !== 'mindnprogress' && id !== 'database')
     ).map((id) => builtinMap[id]);
 
     // Extension tabs with position anchoring

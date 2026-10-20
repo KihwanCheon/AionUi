@@ -19,8 +19,15 @@ import { initApplicationBridgeCore } from './applicationBridgeCore';
 import type { IStartOnBootStatus } from '@/common/adapter/ipcBridge';
 import { restartApplication } from './restartApplication';
 import { mindNProgressRunnerManager } from '@process/startup/bootstrap/mindnprogressRunner';
+import type { MaintenanceController } from '@process/services/database/maintenance/MaintenanceController';
 
 let mainWindowRef: BrowserWindow | null = null;
+
+/** Keeps progress available over native IPC while the backend is stopped. */
+export function registerDatabaseMaintenanceBridge(controller: MaintenanceController): void {
+  ipcBridge.application.databaseMaintenanceStatus.provider(() => controller.getStatus());
+  ipcBridge.application.databaseMaintenanceStart.provider((request) => controller.start(request?.action));
+}
 
 const START_ON_BOOT_UNSUPPORTED_MESSAGE = 'Start on boot is only available in packaged macOS and Windows apps.';
 export const START_ON_BOOT_WINDOWS_ARG = '--start-on-boot';

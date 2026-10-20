@@ -1474,5 +1474,52 @@
       "error": "Fehler",
       "stopped": "Gestoppt"
     }
+  },
+  "databaseMaintenance": {
+    "title": "Datenbankverwaltung",
+    "description": "Speicherbelegung prüfen und nach endgültigem Löschen freien Platz zurückgewinnen.",
+    "inspect": "Prüfen",
+    "compact": "Bereinigen",
+    "confirmTitle": "Datenbankplatz zurückgewinnen?",
+    "confirmBody": "Vorhandene Gespräche und Werkzeugprotokolle bleiben erhalten. Das Backend wird kurz gestoppt und danach neu gestartet. Dies kann mehrere Minuten dauern. Lassen Sie die App bis zum Abschluss geöffnet.",
+    "restart": "Backend neu starten",
+    "desktopOnly": "In der Desktop-App verfügbar.",
+    "retentionNote": "Die Bereinigung gibt nur ungenutzten Platz frei. Zum Entfernen von Gesprächsdaten nutzen Sie zuerst „Endgültig löschen“ bei archivierten Gesprächen.",
+    "elapsed": "{{seconds}} s vergangen",
+    "result": "{{before}} → {{after}} · {{reclaimed}} freigegeben",
+    "empty": "Klicken Sie auf Prüfen. Das Öffnen dieser Seite startet keine Prüfung oder Bereinigung.",
+    "databaseSize": "Datenbankdatei",
+    "walSize": "Write-Ahead-Log (WAL)",
+    "reclaimable": "Geschätzt freigebbarer Platz",
+    "conversations": "Gespräche",
+    "available": "Verfügbarer Arbeitsspeicherplatz auf Datenträgern",
+    "required": "Benötigter Arbeitsspeicherplatz auf Datenträgern",
+    "estimateNote": "Schätzwerte können sich ändern. Angezeigt wird der kleinere freie Platz der Datenträger für DB und temporäre Dateien. Benötigt wird bis zum Doppelten der aktuellen Größe von DB und WAL.",
+    "breakdown": "Speicher nach Nachrichtentyp",
+    "logicalNote": "Logische Inhaltsgrößen ohne Indizes und freie Seiten; die Summe entspricht daher nicht der Dateigröße. Werkzeugprotokolle bleiben erhalten.",
+    "messageType": "Nachrichtentyp",
+    "count": "Nachrichten",
+    "contentSize": "Inhaltsgröße",
+    "inspectedAt": "Zuletzt geprüft: {{time}}",
+    "phases": {
+      "idle": "Bereit",
+      "inspecting": "Speicher wird geprüft…",
+      "preparing": "Aktive Aufgaben werden geprüft…",
+      "stopping": "Backend wird gestoppt…",
+      "compacting": "Platz wird freigegeben (VACUUM)…",
+      "restarting": "Backend wird neu gestartet…",
+      "done": "Abgeschlossen",
+      "error": "Fehlgeschlagen"
+    },
+    "errors": {
+      "busy": "Gespräche oder Hintergrundaufgaben laufen noch oder ein anderer Prozess belegt die DB. Warten Sie und versuchen Sie es erneut.",
+      "space": "Zu wenig freier Platz. Geben Sie Platz auf den Datenträgern für DB und temporäre Dateien frei und prüfen Sie erneut.",
+      "missing": "Die Datenbankdatei wurde nicht gefunden.",
+      "update": "Aktualisieren Sie AionCore auf eine Version mit Datenbankwartung und starten Sie die App neu.",
+      "unavailable": "Das Backend ist nicht verfügbar. Prüfen Sie, ob es gestartet wurde.",
+      "restart": "Backend-Neustart fehlgeschlagen. Klicken Sie auf Backend neu starten.",
+      "nothing": "Keine ungenutzten Seiten zum Freigeben gefunden.",
+      "generic": "Der Vorgang ist fehlgeschlagen. Prüfen Sie das App-Protokoll und versuchen Sie es erneut."
+    }
   }
 }

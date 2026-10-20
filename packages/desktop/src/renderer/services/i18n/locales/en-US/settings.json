@@ -1474,5 +1474,52 @@
       "error": "Error",
       "stopped": "Stopped"
     }
+  },
+  "databaseMaintenance": {
+    "title": "Database management",
+    "description": "Inspect storage usage and reclaim space left by permanently deleted data.",
+    "inspect": "Inspect",
+    "compact": "Clean up",
+    "confirmTitle": "Reclaim database space?",
+    "confirmBody": "Existing conversations and tool history are preserved. The backend will stop temporarily and restart afterward. This may take several minutes. Keep the app open until it finishes.",
+    "restart": "Restart backend",
+    "desktopOnly": "Available in the desktop app.",
+    "retentionNote": "Cleanup only reclaims unused space. To remove conversation data, use Permanent delete in archived conversations first.",
+    "elapsed": "{{seconds}} s elapsed",
+    "result": "{{before}} → {{after}} · {{reclaimed}} reclaimed",
+    "empty": "Click Inspect to check current usage. Opening this page does not run an inspection or cleanup.",
+    "databaseSize": "Database file",
+    "walSize": "Write-ahead log (WAL)",
+    "reclaimable": "Estimated reclaimable space",
+    "conversations": "Conversations",
+    "available": "Available working disk space",
+    "required": "Required working disk space",
+    "estimateNote": "Estimates may change. Available space is the lower value for the database and temporary-file volumes. Cleanup requires up to twice the current database and WAL size.",
+    "breakdown": "Message storage breakdown",
+    "logicalNote": "Content sizes are logical totals by message type. They exclude indexes and unused pages, so they do not add up to the database file size. Tool records remain after cleanup.",
+    "messageType": "Message type",
+    "count": "Messages",
+    "contentSize": "Content size",
+    "inspectedAt": "Last inspected: {{time}}",
+    "phases": {
+      "idle": "Ready",
+      "inspecting": "Inspecting storage…",
+      "preparing": "Checking active work…",
+      "stopping": "Stopping backend…",
+      "compacting": "Reclaiming space (VACUUM)…",
+      "restarting": "Restarting backend…",
+      "done": "Finished",
+      "error": "Failed"
+    },
+    "errors": {
+      "busy": "Conversations or background tasks are active, or another process owns the database. Wait for them to finish and try again.",
+      "space": "Insufficient disk space for cleanup. Free space on the database and temporary-file volumes, then inspect again.",
+      "missing": "The database file was not found.",
+      "update": "Update AionCore to a version that supports database maintenance, then restart the app.",
+      "unavailable": "The backend is unavailable. Check that it has started successfully.",
+      "restart": "Backend restart failed. Click Restart backend to restore service.",
+      "nothing": "No unused pages were found to reclaim.",
+      "generic": "The operation failed. Check the application log, then try again."
+    }
   }
 }

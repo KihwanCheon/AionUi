@@ -1474,5 +1474,52 @@
       "error": "Error",
       "stopped": "Detenido"
     }
+  },
+  "databaseMaintenance": {
+    "title": "Gestión de la base de datos",
+    "description": "Examina el almacenamiento y recupera el espacio de datos eliminados permanentemente.",
+    "inspect": "Examinar",
+    "compact": "Limpiar",
+    "confirmTitle": "¿Recuperar espacio de la base de datos?",
+    "confirmBody": "Se conservan las conversaciones y los registros de herramientas. El backend se detendrá temporalmente y se reiniciará al terminar. Puede tardar varios minutos. Mantén la aplicación abierta hasta que finalice.",
+    "restart": "Reiniciar backend",
+    "desktopOnly": "Disponible en la aplicación de escritorio.",
+    "retentionNote": "La limpieza solo recupera espacio sin usar. Para borrar datos, usa primero la eliminación permanente de conversaciones archivadas.",
+    "elapsed": "{{seconds}} s transcurridos",
+    "result": "{{before}} → {{after}} · {{reclaimed}} recuperados",
+    "empty": "Pulsa Examinar. Abrir esta página no inicia el examen ni la limpieza.",
+    "databaseSize": "Archivo de base de datos",
+    "walSize": "Registro de escritura anticipada (WAL)",
+    "reclaimable": "Espacio recuperable estimado",
+    "conversations": "Conversaciones",
+    "available": "Espacio de trabajo disponible en disco",
+    "required": "Espacio de trabajo necesario",
+    "estimateNote": "Las estimaciones pueden cambiar. Se muestra el menor espacio libre de los discos de la base y los temporales. Se necesita hasta el doble del tamaño actual de la base y el WAL.",
+    "breakdown": "Almacenamiento por tipo de mensaje",
+    "logicalNote": "Tamaños lógicos del contenido, sin índices ni páginas libres; su suma no coincide con el archivo. Los registros de herramientas se conservan.",
+    "messageType": "Tipo de mensaje",
+    "count": "Mensajes",
+    "contentSize": "Tamaño del contenido",
+    "inspectedAt": "Último examen: {{time}}",
+    "phases": {
+      "idle": "Listo",
+      "inspecting": "Examinando almacenamiento…",
+      "preparing": "Comprobando tareas activas…",
+      "stopping": "Deteniendo backend…",
+      "compacting": "Recuperando espacio (VACUUM)…",
+      "restarting": "Reiniciando backend…",
+      "done": "Finalizado",
+      "error": "Error"
+    },
+    "errors": {
+      "busy": "Hay conversaciones o tareas activas, u otro proceso usa la base. Espera a que terminen y vuelve a intentarlo.",
+      "space": "Espacio insuficiente. Libera espacio en los discos de la base y los temporales, y vuelve a examinar.",
+      "missing": "No se encontró el archivo de la base de datos.",
+      "update": "Actualiza AionCore a una versión compatible con el mantenimiento y reinicia la aplicación.",
+      "unavailable": "El backend no está disponible. Comprueba que haya iniciado correctamente.",
+      "restart": "No se pudo reiniciar el backend. Pulsa Reiniciar backend.",
+      "nothing": "No hay páginas sin usar que recuperar.",
+      "generic": "La operación falló. Consulta el registro de la aplicación y vuelve a intentarlo."
+    }
   }
 }

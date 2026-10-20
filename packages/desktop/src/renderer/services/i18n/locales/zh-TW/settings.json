@@ -1476,5 +1476,52 @@
       "error": "錯誤",
       "stopped": "已停止"
     }
+  },
+  "databaseMaintenance": {
+    "title": "資料庫管理",
+    "description": "檢查儲存用量並回收永久刪除資料後留下的可用空間。",
+    "inspect": "檢查",
+    "compact": "清理",
+    "confirmTitle": "回收資料庫空間？",
+    "confirmBody": "現有對話和工具紀錄會保留。後端將暫時停止並在完成後重新啟動。操作可能需要數分鐘，請保持應用程式開啟直到完成。",
+    "restart": "重新啟動後端",
+    "desktopOnly": "僅桌面應用程式可用。",
+    "retentionNote": "清理僅回收未使用的空間。如需刪除對話資料，請先在封存對話中使用「永久刪除」。",
+    "elapsed": "已過 {{seconds}} 秒",
+    "result": "{{before}} → {{after}} · 已回收 {{reclaimed}}",
+    "empty": "點選「檢查」查看目前用量。開啟此頁面不會自動檢查或清理。",
+    "databaseSize": "資料庫檔案",
+    "walSize": "預寫日誌（WAL）",
+    "reclaimable": "預計可回收空間",
+    "conversations": "對話數",
+    "available": "可用工作磁碟空間",
+    "required": "所需工作空間",
+    "estimateNote": "估算值可能變動。可用空間取資料庫與暫存檔磁碟中的較小值。清理最多需要目前資料庫與 WAL 總大小兩倍的可用空間。",
+    "breakdown": "依訊息類型統計",
+    "logicalNote": "內容大小為邏輯合計，不含索引和未使用頁面，因此與資料庫檔案大小不同。工具紀錄在清理後仍會保留。",
+    "messageType": "訊息類型",
+    "count": "訊息數",
+    "contentSize": "內容大小",
+    "inspectedAt": "上次檢查：{{time}}",
+    "phases": {
+      "idle": "就緒",
+      "inspecting": "正在檢查用量…",
+      "preparing": "正在檢查執行中的工作…",
+      "stopping": "正在停止後端…",
+      "compacting": "正在回收空間（VACUUM）…",
+      "restarting": "正在重新啟動後端…",
+      "done": "已完成",
+      "error": "失敗"
+    },
+    "errors": {
+      "busy": "仍有對話或背景工作執行中，或其他處理程序占用資料庫。請等待結束後重試。",
+      "space": "清理所需磁碟空間不足。請釋放資料庫和暫存檔磁碟空間後重新檢查。",
+      "missing": "找不到資料庫檔案。",
+      "update": "請更新至支援資料庫維護的 AionCore 版本並重新啟動應用程式。",
+      "unavailable": "後端無法使用。請確認已正常啟動。",
+      "restart": "後端重新啟動失敗。請點選「重新啟動後端」恢復服務。",
+      "nothing": "沒有可回收的未使用頁面。",
+      "generic": "操作失敗。請檢查應用程式日誌後重試。"
+    }
   }
 }

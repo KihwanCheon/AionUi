@@ -1474,5 +1474,52 @@
       "error": "Erreur",
       "stopped": "Arrêté"
     }
+  },
+  "databaseMaintenance": {
+    "title": "Gestion de la base de données",
+    "description": "Examinez le stockage et récupérez l’espace laissé par les données supprimées définitivement.",
+    "inspect": "Examiner",
+    "compact": "Nettoyer",
+    "confirmTitle": "Récupérer l’espace de la base ?",
+    "confirmBody": "Les conversations et historiques d’outils sont conservés. Le serveur sera arrêté temporairement puis redémarré. Cela peut prendre plusieurs minutes. Gardez l’application ouverte jusqu’à la fin.",
+    "restart": "Redémarrer le serveur",
+    "desktopOnly": "Disponible dans l’application de bureau.",
+    "retentionNote": "Le nettoyage récupère uniquement l’espace inutilisé. Pour retirer des données, utilisez d’abord la suppression définitive des conversations archivées.",
+    "elapsed": "{{seconds}} s écoulées",
+    "result": "{{before}} → {{after}} · {{reclaimed}} récupérés",
+    "empty": "Cliquez sur Examiner. L’ouverture de cette page ne lance ni examen ni nettoyage.",
+    "databaseSize": "Fichier de base de données",
+    "walSize": "Journal d’écriture anticipée (WAL)",
+    "reclaimable": "Espace récupérable estimé",
+    "conversations": "Conversations",
+    "available": "Espace disque de travail disponible",
+    "required": "Espace de travail nécessaire",
+    "estimateNote": "Les estimations peuvent varier. L’espace disponible est le minimum des volumes de la base et des fichiers temporaires. Le nettoyage nécessite jusqu’au double de la taille actuelle de la base et du WAL.",
+    "breakdown": "Stockage par type de message",
+    "logicalNote": "Tailles logiques des contenus, sans index ni pages libres : leur somme diffère de la taille du fichier. Les historiques d’outils sont conservés.",
+    "messageType": "Type de message",
+    "count": "Messages",
+    "contentSize": "Taille du contenu",
+    "inspectedAt": "Dernier examen : {{time}}",
+    "phases": {
+      "idle": "Prêt",
+      "inspecting": "Examen du stockage…",
+      "preparing": "Vérification des tâches actives…",
+      "stopping": "Arrêt du serveur…",
+      "compacting": "Récupération de l’espace (VACUUM)…",
+      "restarting": "Redémarrage du serveur…",
+      "done": "Terminé",
+      "error": "Échec"
+    },
+    "errors": {
+      "busy": "Des conversations ou tâches sont actives, ou un autre processus utilise la base. Attendez leur fin puis réessayez.",
+      "space": "Espace disque insuffisant. Libérez de l’espace sur les volumes de la base et des fichiers temporaires, puis relancez l’examen.",
+      "missing": "Fichier de base de données introuvable.",
+      "update": "Mettez AionCore à jour vers une version prenant en charge la maintenance, puis redémarrez l’application.",
+      "unavailable": "Le serveur est indisponible. Vérifiez son démarrage.",
+      "restart": "Le redémarrage a échoué. Cliquez sur Redémarrer le serveur.",
+      "nothing": "Aucune page inutilisée à récupérer.",
+      "generic": "L’opération a échoué. Consultez les journaux de l’application puis réessayez."
+    }
   }
 }

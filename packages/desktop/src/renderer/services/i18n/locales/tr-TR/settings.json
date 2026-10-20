@@ -1474,5 +1474,52 @@
       "error": "Hata",
       "stopped": "Durduruldu"
     }
+  },
+  "databaseMaintenance": {
+    "title": "Veritabanı yönetimi",
+    "description": "Depolama kullanımını inceleyin ve kalıcı olarak silinen verilerin boş alanını geri kazanın.",
+    "inspect": "İncele",
+    "compact": "Temizle",
+    "confirmTitle": "Veritabanı alanı geri kazanılsın mı?",
+    "confirmBody": "Mevcut konuşmalar ve araç geçmişi korunur. Arka uç geçici olarak durdurulup işlem sonunda yeniden başlatılır. Bu işlem birkaç dakika sürebilir. Tamamlanana kadar uygulamayı açık tutun.",
+    "restart": "Arka ucu yeniden başlat",
+    "desktopOnly": "Masaüstü uygulamasında kullanılabilir.",
+    "retentionNote": "Temizlik yalnızca kullanılmayan alanı geri kazanır. Konuşma verilerini kaldırmak için önce arşivlenmiş konuşmalarda kalıcı silmeyi kullanın.",
+    "elapsed": "{{seconds}} sn geçti",
+    "result": "{{before}} → {{after}} · {{reclaimed}} geri kazanıldı",
+    "empty": "İncele düğmesine basın. Bu sayfanın açılması inceleme veya temizlik başlatmaz.",
+    "databaseSize": "Veritabanı dosyası",
+    "walSize": "Ön yazma günlüğü (WAL)",
+    "reclaimable": "Tahmini geri kazanılabilir alan",
+    "conversations": "Konuşmalar",
+    "available": "Kullanılabilir çalışma diski alanı",
+    "required": "Gereken çalışma alanı",
+    "estimateNote": "Tahminler değişebilir. Veritabanı ve geçici dosya disklerindeki boş alanın küçük olanı gösterilir. İşlem, mevcut veritabanı ve WAL toplamının iki katına kadar boş alan gerektirir.",
+    "breakdown": "Mesaj türüne göre depolama",
+    "logicalNote": "Mantıksal içerik boyutları dizinleri ve boş sayfaları içermez; toplam dosya boyutundan farklıdır. Araç geçmişi korunur.",
+    "messageType": "Mesaj türü",
+    "count": "Mesajlar",
+    "contentSize": "İçerik boyutu",
+    "inspectedAt": "Son inceleme: {{time}}",
+    "phases": {
+      "idle": "Hazır",
+      "inspecting": "Depolama inceleniyor…",
+      "preparing": "Etkin işler kontrol ediliyor…",
+      "stopping": "Arka uç durduruluyor…",
+      "compacting": "Alan geri kazanılıyor (VACUUM)…",
+      "restarting": "Arka uç yeniden başlatılıyor…",
+      "done": "Tamamlandı",
+      "error": "Başarısız"
+    },
+    "errors": {
+      "busy": "Etkin konuşmalar veya arka plan işleri var ya da veritabanını başka bir işlem kullanıyor. Bitmelerini bekleyip tekrar deneyin.",
+      "space": "Disk alanı yetersiz. Veritabanı ve geçici dosya disklerinde yer açıp tekrar inceleyin.",
+      "missing": "Veritabanı dosyası bulunamadı.",
+      "update": "AionCore'u veritabanı bakımını destekleyen bir sürüme güncelleyip uygulamayı yeniden başlatın.",
+      "unavailable": "Arka uca erişilemiyor. Başarıyla başlatıldığını kontrol edin.",
+      "restart": "Arka uç yeniden başlatılamadı. Arka ucu yeniden başlat düğmesine basın.",
+      "nothing": "Geri kazanılabilecek kullanılmayan sayfa yok.",
+      "generic": "İşlem başarısız oldu. Uygulama günlüğünü kontrol edip tekrar deneyin."
+    }
   }
 }

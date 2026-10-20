@@ -1475,5 +1475,52 @@
       "error": "错误",
       "stopped": "已停止"
     }
+  },
+  "databaseMaintenance": {
+    "title": "数据库管理",
+    "description": "检查存储用量并回收永久删除数据后留下的空闲空间。",
+    "inspect": "检查",
+    "compact": "清理",
+    "confirmTitle": "回收数据库空间？",
+    "confirmBody": "现有对话和工具记录会保留。后端将暂时停止并在完成后重启。操作可能需要数分钟，请保持应用开启直至完成。",
+    "restart": "重启后端",
+    "desktopOnly": "仅桌面应用可用。",
+    "retentionNote": "清理仅回收空闲空间。如需删除对话数据，请先在归档对话中使用“永久删除”。",
+    "elapsed": "已用 {{seconds}} 秒",
+    "result": "{{before}} → {{after}} · 已回收 {{reclaimed}}",
+    "empty": "点击“检查”查看当前用量。打开此页面不会自动检查或清理。",
+    "databaseSize": "数据库文件",
+    "walSize": "预写日志（WAL）",
+    "reclaimable": "预计可回收空间",
+    "conversations": "对话数",
+    "available": "可用工作磁盘空间",
+    "required": "所需工作空间",
+    "estimateNote": "估算值可能变化。可用空间取数据库与临时文件磁盘中的较小值。清理最多需要当前数据库与 WAL 总大小两倍的可用空间。",
+    "breakdown": "按消息类型统计",
+    "logicalNote": "内容大小为逻辑合计，不含索引和空闲页，因此与数据库文件大小不同。工具记录在清理后仍会保留。",
+    "messageType": "消息类型",
+    "count": "消息数",
+    "contentSize": "内容大小",
+    "inspectedAt": "上次检查：{{time}}",
+    "phases": {
+      "idle": "就绪",
+      "inspecting": "正在检查用量…",
+      "preparing": "正在检查运行任务…",
+      "stopping": "正在停止后端…",
+      "compacting": "正在回收空间（VACUUM）…",
+      "restarting": "正在重启后端…",
+      "done": "已完成",
+      "error": "失败"
+    },
+    "errors": {
+      "busy": "仍有对话或后台任务在运行，或其他进程占用数据库。请等待结束后重试。",
+      "space": "清理所需磁盘空间不足。请释放数据库和临时文件磁盘空间后重新检查。",
+      "missing": "未找到数据库文件。",
+      "update": "请更新至支持数据库维护的 AionCore 版本并重启应用。",
+      "unavailable": "后端不可用。请确认已正常启动。",
+      "restart": "后端重启失败。请点击“重启后端”恢复服务。",
+      "nothing": "没有可回收的空闲页。",
+      "generic": "操作失败。请检查应用日志后重试。"
+    }
   }
 }

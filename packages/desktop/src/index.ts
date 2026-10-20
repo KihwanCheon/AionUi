@@ -35,8 +35,9 @@ import type { BackendStartupFailureInfo } from './common/types/platform/electron
 import { registerWindowMaximizeListeners } from '@process/bridge';
 import { BackendLifecycleManager } from '@aionui/web-host';
 import { resolveBinaryPath } from '@process/backend';
+import { createDatabaseMaintenance } from '@process/services/database/maintenance';
 import './process/bridge/feedbackBridge';
-import { wasLaunchedAtLogin } from '@process/bridge/applicationBridge';
+import { registerDatabaseMaintenanceBridge, wasLaunchedAtLogin } from '@process/bridge/applicationBridge';
 import { onLanguageChanged } from './process/bridge/systemSettingsBridge';
 import { setInitialLanguage } from '@process/services/i18n';
 import { setupApplicationMenu } from './process/utils/appMenu';
@@ -198,6 +199,26 @@ const backendManager = new BackendLifecycleManager(
   },
   resolveBinaryPath
 );
+const databaseMaintenance = createDatabaseMaintenance({
+  binary: resolveBinaryPath,
+  port: () => backendManager.port,
+  running: () => backendManager.status === 'running',
+  stop: () => backendManager.stop(),
+  restart: async () => {
+    const { getDataPath } = await import('./process/utils/utils');
+    const { getSystemDir } = await import('./process/utils/initStorage');
+    const sysDir = getSystemDir();
+    const port = await backendManager.start(
+      getDataPath(),
+      sysDir.logDir,
+      { cacheDir: sysDir.cacheDir, workDir: sysDir.workDir, logDir: sysDir.logDir },
+      { allowPendingOnHealthTimeout: false },
+      backendManager.port
+    );
+    markBackendReady(port, 'databaseMaintenance');
+  },
+});
+registerDatabaseMaintenanceBridge(databaseMaintenance);
 let disposeCronResumeListener: (() => void) | null = null;
 
 // Flag tracking whether the backend subprocess started successfully. Read by
@@ -1158,7 +1179,15 @@ app.on('activate', () => {
 });
 
 installQuitCleanup({
-  onBeforeQuit: (handler) => app.on('before-quit', (event) => handler(event)),
+  onBeforeQuit: (handler) =>
+    app.on('before-quit', (event) => {
+      if (databaseMaintenance.getStatus().busy) {
+        event.preventDefault();
+        console.info('[DatabaseMaintenance] Waiting for maintenance before allowing exit');
+        return;
+      }
+      handler(event);
+    }),
   quitApp: () => app.quit(),
   setIsQuitting,
   markExplicitQuit: () => {

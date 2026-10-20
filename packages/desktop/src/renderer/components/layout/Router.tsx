@@ -17,6 +17,9 @@ const ToolsSettings = React.lazy(() => import('@renderer/pages/settings/ToolsSet
 const AppearanceSettings = React.lazy(() => import('@renderer/pages/settings/AppearanceSettings'));
 const ModeSettings = React.lazy(() => import('@renderer/pages/settings/ModeSettings'));
 const SystemSettings = React.lazy(() => import('@renderer/pages/settings/SystemSettings'));
+const DatabaseMaintenance = React.lazy(
+  () => import('@renderer/pages/settings/IntegrationsSettings/DatabaseMaintenance')
+);
 const WebuiSettings = React.lazy(() => import('@renderer/pages/settings/IntegrationsSettings/WebuiSettings'));
 const MindNProgressRunnerSettings = React.lazy(
   () => import('@renderer/pages/settings/IntegrationsSettings/MindNProgressRunnerSettings')
@@ -112,6 +115,7 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/settings/pet' element={withRouteFallback(PetSettings)} />
           <Route path='/settings/archived' element={withRouteFallback(ArchivedSettings)} />
           <Route path='/settings/system' element={withRouteFallback(SystemSettings)} />
+          <Route path='/settings/database' element={withRouteFallback(DatabaseMaintenance)} />
           <Route path='/settings/about' element={withRouteFallback(SystemSettings)} />
           <Route path='/settings/ext/:tabId' element={withRouteFallback(ExtensionSettingsPage)} />
           <Route path='/settings' element={<Navigate to='/settings/agent' replace />} />
