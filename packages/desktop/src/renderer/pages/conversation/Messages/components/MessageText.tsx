@@ -17,6 +17,7 @@ import { Copy, MoreOne } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { copyText } from '@/renderer/utils/ui/clipboard';
 import CollapsibleContent from '@renderer/components/chat/CollapsibleContent';
 import FilePreview from '@renderer/components/media/FilePreview';
@@ -129,6 +130,7 @@ const MessageText: React.FC<{
   }, [message.content.content]);
 
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [showCopyAlert, setShowCopyAlert] = useState(false);
   const isUserMessage = message.position === 'right';
   const userQuestion = message.position === 'left' ? message.content.user_choice : undefined;
@@ -333,14 +335,17 @@ const MessageText: React.FC<{
               'self-end': isUserMessage,
             })}
           >
-            <SessionMentionAction
-              id={deliverySource.fromId}
-              name={deliverySource.fromName || deliverySource.fromId}
-              label={t('conversation.crossSession.fromBadge', {
+            <Button
+              type='text'
+              size='mini'
+              className='!h-auto !p-0 !text-12px !text-t-secondary'
+              onClick={() => void navigate(`/conversation/${encodeURIComponent(deliverySource.fromId)}`)}
+            >
+              {t('conversation.crossSession.fromBadge', {
                 name: deliverySource.fromName || deliverySource.fromId,
                 defaultValue: 'From conversation {{name}}',
               })}
-            />
+            </Button>
             {deliverySource.workspace && deliverySource.workspace !== 'same' && (
               <span
                 className='px-4px rounded-4px'

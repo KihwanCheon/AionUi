@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageText } from '@/common/chat/chatLib';
 import { normalizeTextMessageContent } from '@/common/chat/chatLib';
@@ -41,6 +42,19 @@ const forkMocks = vi.hoisted(() => ({
   fork: vi.fn(),
   ensureRuntime: vi.fn().mockResolvedValue(undefined),
   navigate: vi.fn(),
+}));
+
+const sessionMentionMocks = vi.hoisted(() => ({
+  available: true,
+  mention: vi.fn(),
+}));
+
+vi.mock('@/renderer/hooks/chat/useMentionSessionFromMessage', () => ({
+  useMentionSessionFromMessage: () => ({
+    available: sessionMentionMocks.available,
+    pending: false,
+    mention: sessionMentionMocks.mention,
+  }),
 }));
 
 vi.mock('@/common', () => ({
@@ -193,7 +207,8 @@ vi.mock('@icon-park/react', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+    t: (key: string, options?: { defaultValue?: string; name?: string }) =>
+      (options?.defaultValue ?? key).replace('{{name}}', options?.name ?? '{{name}}'),
   }),
 }));
 
@@ -708,6 +723,108 @@ describe('MessageText attachment paths', () => {
     });
     // The whole point: the content endpoint is never hit for an oversized file.
     expect(ipcBridge.fs.readContent.invoke).not.toHaveBeenCalled();
+  });
+});
+
+describe('MessageText session message navigation', () => {
+  beforeEach(() => {
+    forkMocks.navigate.mockReset();
+    sessionMentionMocks.mention.mockReset();
+    sessionMentionMocks.available = true;
+  });
+
+  const renderSessionMessage = (content: string) =>
+    render(
+      <ConversationProvider value={{ conversation_id: 'recipient', workspace: '/workspace/demo', type: 'acp' }}>
+        <MessageText
+          showCopyRow={false}
+          message={{
+            id: 'received-message',
+            conversation_id: 'recipient',
+            type: 'text',
+            position: 'right',
+            content: { content },
+          }}
+        />
+      </ConversationProvider>
+    );
+
+  const deliveryContent = (id = 'sender-123', name = 'Sender conversation', workspace = 'same') =>
+    [
+      '[[AION_SESSION_MESSAGE]]',
+      `from: ${name}\t${id}`,
+      `workspace: ${workspace}`,
+      `reply_to: ${id}`,
+      '[[/AION_SESSION_MESSAGE]]',
+      'The delegated work is complete.',
+    ].join('\n');
+
+  it('opens the sending conversation by ID without adding a mention to the draft', () => {
+    renderSessionMessage(deliveryContent());
+
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation Sender conversation' }));
+
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/sender-123');
+    expect(sessionMentionMocks.mention).not.toHaveBeenCalled();
+  });
+
+  it.each(['{Enter}', ' '])('opens the sending conversation with the %s key', async (key) => {
+    const user = userEvent.setup();
+    renderSessionMessage(deliveryContent());
+
+    screen.getByRole('button', { name: 'From conversation Sender conversation' }).focus();
+    await user.keyboard(key);
+
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/sender-123');
+    expect(sessionMentionMocks.mention).not.toHaveBeenCalled();
+  });
+
+  it('can open an earlier sender even when cross-session messaging is disabled', () => {
+    sessionMentionMocks.available = false;
+    renderSessionMessage(deliveryContent());
+
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation Sender conversation' }));
+
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/sender-123');
+  });
+
+  it('uses the sender ID across workspaces and when its name is absent', () => {
+    renderSessionMessage(deliveryContent('sender-456', '', '/another/workspace'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation sender-456' }));
+
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/sender-456');
+    expect(screen.getByText('different workspace')).toBeInTheDocument();
+  });
+
+  it('keeps a sender ID containing URL delimiters within the conversation route', () => {
+    renderSessionMessage(deliveryContent('sender/part?query#fragment'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation Sender conversation' }));
+
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/sender%2Fpart%3Fquery%23fragment');
+  });
+
+  it('keeps a malformed delivery without a sender ID as ordinary text', () => {
+    const content = deliveryContent('');
+    renderSessionMessage(content);
+
+    expect(screen.queryByRole('button', { name: /From conversation/ })).not.toBeInTheDocument();
+    expect(screen.getByTestId('message-text-content')).toHaveTextContent('[[AION_SESSION_MESSAGE]]');
+    expect(forkMocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('preserves mention insertion for sender-side recipient chips', () => {
+    renderSessionMessage(
+      'Please review.\n[[AION_SESSIONS]]\nTarget conversation\tconv-target\tworkspace: same\n[[/AION_SESSIONS]]'
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mention conversation Target conversation in the message box' })
+    );
+
+    expect(sessionMentionMocks.mention).toHaveBeenCalledWith({ id: 'conv-target', name: 'Target conversation' });
+    expect(forkMocks.navigate).not.toHaveBeenCalled();
   });
 });
 
