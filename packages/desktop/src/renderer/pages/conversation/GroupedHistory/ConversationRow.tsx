@@ -24,6 +24,7 @@ import type { ConversationRowProps } from './types';
 import { isConversationPinned } from './utils/groupingHelpers';
 import ConversationBookmarkButton from './components/ConversationBookmarkButton';
 import ConversationLeadingStatus from './components/ConversationLeadingStatus';
+import MindNProgressTitle from './components/MindNProgressTitle';
 import { ConversationChoiceBadge, useUserChoiceNotifications } from '@renderer/hooks/context/UserChoiceNotifications';
 
 const getConversationTitlePopupContainer = (_node: HTMLElement): HTMLElement => document.body;
@@ -290,7 +291,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
               ref={titleRef}
               className='conversation-title-text block overflow-hidden text-ellipsis whitespace-nowrap min-w-0'
             >
-              {conversation.name}
+              <MindNProgressTitle>{conversation.name}</MindNProgressTitle>
             </span>
             {forkLineage && (
               <Tooltip

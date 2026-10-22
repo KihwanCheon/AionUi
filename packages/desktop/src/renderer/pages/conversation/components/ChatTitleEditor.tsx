@@ -1,4 +1,5 @@
 import ConversationTitleMinimap from '@/renderer/pages/conversation/components/ConversationTitleMinimap';
+import MindNProgressTitle from '@/renderer/pages/conversation/GroupedHistory/components/MindNProgressTitle';
 import { Input } from '@arco-design/web-react';
 import classNames from 'classnames';
 import React from 'react';
@@ -130,7 +131,7 @@ const ChatTitleEditor: React.FC<ChatTitleEditorProps> = ({
               titleClassName
             )}
           >
-            {displayTitle}
+            <MindNProgressTitle disabled={Boolean(titleClassName)}>{displayTitle}</MindNProgressTitle>
           </span>
         </div>
       )}

@@ -24,6 +24,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import MindNProgressTitle from './components/MindNProgressTitle';
 import './ConversationSearchPopover.css';
 
 const PAGE_SIZE = 20;
@@ -461,7 +462,9 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
                     <div className='conversation-search-modal__result-title-row'>
                       <ConversationAgentMark conversation={item.conversation} />
                       <div className='conversation-search-modal__result-title text-15px font-600 text-t-primary truncate'>
-                        {item.conversation.name || t('conversation.historySearch.untitled')}
+                        <MindNProgressTitle>
+                          {item.conversation.name || t('conversation.historySearch.untitled')}
+                        </MindNProgressTitle>
                       </div>
                     </div>
                   </div>
