@@ -13,13 +13,14 @@ const MindNProgressTitle: React.FC<{ children: React.ReactNode; disabled?: boole
   const prefix = /^(\[(상위|그룹 총괄)\])(?=\s|$)/.exec(children);
   if (!prefix) return <>{children}</>;
 
+  // Arco RGB tokens use commas; a raw color property avoids UnoCSS adding slash opacity.
   return (
     <>
       <span
         className={
           prefix[2] === '그룹 총괄'
             ? 'text-[color:color-mix(in_srgb,var(--primary)_75%,var(--text-primary))]'
-            : 'text-[color:color-mix(in_srgb,var(--brand)_80%,var(--text-primary))]'
+            : 'text-[color:color-mix(in_srgb,var(--brand)_80%,var(--text-primary))] [html[data-theme=dark]_&]:[color:rgb(var(--purple-7))]'
         }
       >
         {prefix[1]}
