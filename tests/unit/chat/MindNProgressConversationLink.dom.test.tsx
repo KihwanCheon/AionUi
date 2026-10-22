@@ -155,6 +155,35 @@ describe('MindNProgressConversationLink', () => {
     ).toBe('[그룹 총괄] JP-프로토콜·연동 · 통합 관리: JP 프로토콜·클라이언트 연동 · 통합 관리');
   });
 
+  it('adds the document root prefix from MnP to an existing conversation', () => {
+    const target = { ...linkResponse('conversation-1').target!, titlePrefix: '[상위] ' };
+    expect(buildMindNProgressConversationTitle(target, 'Document: Card')).toBe('[상위] Document: Card');
+    expect(buildMindNProgressConversationTitle(target, '[상위] Old: Card')).toBe('[상위] Document: Card');
+  });
+
+  it('updates role prefixes when a card changes between root, coordinator and child', () => {
+    const target = linkResponse('conversation-1').target!;
+    expect(buildMindNProgressConversationTitle({ ...target, titlePrefix: '' }, '[상위] Document: Card')).toBe(
+      'Document: Card'
+    );
+    expect(buildMindNProgressConversationTitle({ ...target, titlePrefix: '[그룹 총괄] ' }, '[상위] Old: Card')).toBe(
+      '[그룹 총괄] Document: Card'
+    );
+    expect(buildMindNProgressConversationTitle({ ...target, titlePrefix: '[상위] ' }, '[그룹 총괄] Old: Card')).toBe(
+      '[상위] Document: Card'
+    );
+  });
+
+  it('preserves special workflow prefixes and supports an older MnP server', () => {
+    const target = linkResponse('conversation-1').target!;
+    for (const prefix of ['[지식정리]', '[문서 정리]', '[배치 제안]', '[Dooray 승인]']) {
+      expect(buildMindNProgressConversationTitle({ ...target, titlePrefix: '[상위] ' }, `${prefix} Old: Card`)).toBe(
+        `${prefix} Document: Card`
+      );
+    }
+    expect(buildMindNProgressConversationTitle(target, '[상위] Old: Card')).toBe('[상위] Document: Card');
+  });
+
   it('updates the Aion title and refreshes both conversation caches', async () => {
     vi.mocked(ipcBridge.conversation.update.invoke).mockResolvedValue(true);
     vi.mocked(refreshConversationCache).mockResolvedValue(undefined);
@@ -166,6 +195,30 @@ describe('MindNProgressConversationLink', () => {
     });
     expect(refreshConversationCache).toHaveBeenCalledWith('conversation-1');
     expect(emitter.emit).toHaveBeenCalledWith('chat.history.refresh');
+  });
+
+  it('saves the document root prefix when the user synchronizes an existing title', async () => {
+    const successMessage = vi.spyOn(Message, 'success').mockImplementation(() => undefined);
+    const response = linkResponse('root-conversation');
+    response.target!.titlePrefix = '[상위] ';
+    const api: MindNProgressConversationApi = {
+      lookup: vi.fn().mockResolvedValue(response),
+      select: vi.fn(),
+    };
+    const renameConversation = vi.fn().mockResolvedValue(true);
+    const user = userEvent.setup();
+    render(
+      <MindNProgressConversationTitleSync
+        api={api}
+        conversationId='root-conversation'
+        currentTitle='Document: Card'
+        renameConversation={renameConversation}
+      />
+    );
+    await user.click(await screen.findByTestId('mindnprogress-title-sync'));
+    await waitFor(() => expect(renameConversation).toHaveBeenCalledWith('root-conversation', '[상위] Document: Card'));
+    expect(successMessage).toHaveBeenCalledWith('messages.mindnprogress.titleSyncSuccess');
+    successMessage.mockRestore();
   });
 
   it('does not refresh conversation caches when the Aion rename is rejected', async () => {

@@ -10,6 +10,7 @@ export type MindNProgressTarget = {
   cardId: string;
   cardTitle: string;
   archived: boolean;
+  titlePrefix?: string;
   group?: {
     id: string;
     title: string;

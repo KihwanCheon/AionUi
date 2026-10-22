@@ -12,11 +12,15 @@ import { Refresh } from '@icon-park/react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-const MINDNPROGRESS_WORKFLOW_TITLE_PREFIX = /^\[(?:배치 제안|Dooray 승인|문서 정리|그룹 총괄|지식정리)\]\s*/;
+const MINDNPROGRESS_WORKFLOW_TITLE_PREFIX = /^\[(?:배치 제안|Dooray 승인|문서 정리|지식정리)\]\s*/;
+const MINDNPROGRESS_ROLE_TITLE_PREFIX = /^\[(?:그룹 총괄|상위)\]\s*/;
 const GROUP_COORDINATOR_DOCUMENT_SUFFIX = ' · 통합 관리';
 
 export function buildMindNProgressConversationTitle(target: MindNProgressTarget, currentTitle = ''): string {
-  const workflowPrefix = currentTitle.match(MINDNPROGRESS_WORKFLOW_TITLE_PREFIX)?.[0] ?? '';
+  // MnP supplies persisted title data, independent of the UI language. Older
+  // servers omit titlePrefix, so preserve their existing role prefix.
+  const rolePrefix = target.titlePrefix ?? currentTitle.match(MINDNPROGRESS_ROLE_TITLE_PREFIX)?.[0] ?? '';
+  const workflowPrefix = currentTitle.match(MINDNPROGRESS_WORKFLOW_TITLE_PREFIX)?.[0] ?? rolePrefix;
   const documentTitle = target.documentTitle.trim();
   const groupTitle = target.group?.title.trim() ?? '';
   const synchronizedDocumentTitle =
