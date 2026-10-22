@@ -23,7 +23,7 @@ import GuidInputCard from './components/GuidInputCard';
 import GuidModelSelector from './components/GuidModelSelector';
 import QuickActionButtons from './components/QuickActionButtons';
 import FeedbackReportModal from '@/renderer/components/settings/SettingsModal/contents/FeedbackReportModal';
-import { useGuidAssistantSelection } from './hooks/useGuidAssistantSelection';
+import { resolveAssistantSelectionKey, useGuidAssistantSelection } from './hooks/useGuidAssistantSelection';
 import { useGuidInput } from './hooks/useGuidInput';
 import { useGuidModelSelection } from './hooks/useGuidModelSelection';
 import { useGuidSend } from './hooks/useGuidSend';
@@ -623,8 +623,22 @@ const GuidPage: React.FC = () => {
   // the dev server (which has no SPA fallback) and 404.
   useEffect(() => {
     if (!resetAssistantRequested && !preselectAssistantId) return;
+    // External launch tickets can arrive before the assistant catalog. Keep the
+    // requested selection until the hook can resolve and apply it.
+    if (agentSelection.assistants.length === 0) return;
+    const requestedAssistantId = resolveAssistantSelectionKey(preselectAssistantId, agentSelection.assistants);
+    if (requestedAssistantId && selectedAssistantId !== requestedAssistantId) return;
     navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: null });
-  }, [resetAssistantRequested, preselectAssistantId, location.pathname, location.search, location.hash, navigate]);
+  }, [
+    resetAssistantRequested,
+    preselectAssistantId,
+    agentSelection.assistants,
+    selectedAssistantId,
+    location.pathname,
+    location.search,
+    location.hash,
+    navigate,
+  ]);
 
   // Agents that use configured model providers instead of ACP probe-based models.
   // Only aionrs now — Gemini runs as a regular ACP backend with ACP-cached models.
