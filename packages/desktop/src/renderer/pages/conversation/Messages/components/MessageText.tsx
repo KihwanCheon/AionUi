@@ -414,7 +414,9 @@ const MessageText: React.FC<{
           aria-label={userQuestionLabel}
           data-notification-highlight={(Boolean(userQuestion) && highlightedQuestionIndex === 0) || undefined}
           className={classNames('min-w-0 [&>p:first-child]:mt-0px [&>p:last-child]:mb-0px', {
-            'bg-aou-2 p-6px md:p-8px': isUserMessage || cronMeta,
+            'p-6px md:p-8px': isUserMessage || cronMeta,
+            'bg-aou-2': (isUserMessage || cronMeta) && !deliverySource,
+            'bg-[color:color-mix(in_srgb,var(--aou-2)_88%,var(--brand)_12%)]': Boolean(deliverySource),
             'bg-3 p-6px md:p-8px': isTeammateMessage,
             'w-full': !(isUserMessage || cronMeta || isTeammateMessage),
             'box-border bg-primary-light-1 border border-primary-3 rounded-8px p-12px': Boolean(userQuestion),
