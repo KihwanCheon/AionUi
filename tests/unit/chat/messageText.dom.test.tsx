@@ -19,6 +19,10 @@ import MessageText, {
 } from '@/renderer/pages/conversation/Messages/components/MessageText';
 import { copyText } from '@/renderer/utils/ui/clipboard';
 import { openExternalUrl } from '@/renderer/utils/platform';
+import {
+  NotificationHighlightProvider,
+  useNotificationHighlight,
+} from '@/renderer/hooks/context/UserChoiceNotifications/NotificationHighlight';
 
 const mnpContent = (source: Record<string, unknown>, body = '# MindNProgress 업무 전문') =>
   `[[MNP_CONVERSATION_SOURCE]]\n${JSON.stringify(source)}\n[[/MNP_CONVERSATION_SOURCE]]\n\n${body}`;
@@ -110,9 +114,11 @@ vi.mock('@/renderer/components/Markdown', () => ({
     children,
     onLocalFileLink,
     highlightUserQuestions,
+    highlightedQuestionIndex,
   }: {
     children?: React.ReactNode;
     highlightUserQuestions?: boolean;
+    highlightedQuestionIndex?: number;
     onLocalFileLink?: (
       path: string,
       reference?: {
@@ -124,7 +130,10 @@ vi.mock('@/renderer/components/Markdown', () => ({
       }
     ) => void | Promise<void>;
   }) => (
-    <div data-highlight-user-questions={highlightUserQuestions}>
+    <div
+      data-highlight-user-questions={highlightUserQuestions}
+      data-highlighted-question-index={highlightedQuestionIndex}
+    >
       {children}
       {onLocalFileLink && (
         <button
@@ -895,6 +904,58 @@ describe('MessageText session message navigation', () => {
 });
 
 describe('MessageText structured questions', () => {
+  const Preview = ({ messageId, markerIndex = 0 }: { messageId: string; markerIndex?: number }) => {
+    const { highlight, clear } = useNotificationHighlight();
+    React.useEffect(() => {
+      highlight({ key: 'preview', conversationId: 'conv-1', messageId, markerIndex });
+      return () => clear('preview');
+    }, [messageId, markerIndex, highlight, clear]);
+    return null;
+  };
+
+  it('highlights the exact structured question and clears it when preview ends', () => {
+    const message: IMessageText = {
+      id: 'question-1',
+      msg_id: 'stream-question',
+      conversation_id: 'conv-1',
+      type: 'text',
+      position: 'left',
+      content: { content: 'Which runtime?', user_choice: { title: 'Which runtime?', options: ['CPU', 'Vulkan'] } },
+    };
+    const view = (preview: boolean) => (
+      <NotificationHighlightProvider>
+        {preview && <Preview messageId='stream-question' />}
+        <MessageText message={message} showCopyRow={false} />
+        <MessageText message={{ ...message, id: 'question-2', msg_id: 'other-question' }} showCopyRow={false} />
+      </NotificationHighlightProvider>
+    );
+    const { rerender } = render(view(true));
+    const boxes = screen.getAllByRole('group', { name: 'messages.userQuestion.choice' });
+    expect(boxes.map((box) => box.hasAttribute('data-notification-highlight'))).toEqual([true, false]);
+    rerender(view(false));
+    expect(boxes[0]).not.toHaveAttribute('data-notification-highlight');
+  });
+
+  it('passes the matching marker index to prose rendering without changing another message', () => {
+    const message: IMessageText = {
+      id: 'message-1',
+      conversation_id: 'conv-1',
+      type: 'text',
+      position: 'left',
+      content: { content: 'Prose question' },
+    };
+    render(
+      <NotificationHighlightProvider>
+        <Preview messageId='message-1' markerIndex={1} />
+        <MessageText message={message} showCopyRow={false} />
+        <MessageText message={{ ...message, conversation_id: 'conv-2' }} showCopyRow={false} />
+      </NotificationHighlightProvider>
+    );
+    const bodies = screen.getAllByTestId('message-text-content');
+    expect(bodies[0].firstChild).toHaveAttribute('data-highlighted-question-index', '1');
+    expect(bodies[1].firstChild).not.toHaveAttribute('data-highlighted-question-index');
+  });
+
   const renderQuestion = (raw: unknown, position: IMessageText['position'] = 'left') =>
     render(
       <MessageText

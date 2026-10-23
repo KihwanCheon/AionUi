@@ -9,7 +9,7 @@ type PhrasingContent = Extract<RootContent, { type: 'paragraph' }>['children'][n
 
 /** Decorate explicit prose questions without reparsing or splitting Markdown documents. */
 export const remarkChoiceQuestions =
-  ({ label }: { label: string }) =>
+  ({ label, highlightedQuestionIndex }: { label: string; highlightedQuestionIndex?: number }) =>
   (tree: MarkdownRoot, file: { toString(): string }) => {
     const markers = new Map<number, number>();
     new ChoiceSignalParser((index, line) => markers.set(line, index)).feed(String(file));
@@ -57,6 +57,7 @@ export const remarkChoiceQuestions =
                   role: 'group',
                   'aria-label': label,
                   'data-choice-marker-index': index,
+                  ...(index === highlightedQuestionIndex ? { 'data-notification-highlight': 'true' } : {}),
                 },
               },
               children: [

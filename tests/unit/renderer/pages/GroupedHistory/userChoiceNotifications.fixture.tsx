@@ -9,6 +9,7 @@ import '@/renderer/styles/themes/index.css';
 import '@/renderer/styles/arco-override.css';
 import 'virtual:uno.css';
 import koConversation from '@/renderer/services/i18n/locales/ko-KR/conversation.json';
+import koMessages from '@/renderer/services/i18n/locales/ko-KR/messages.json';
 import { ipcBridge } from '@/common';
 import type { TChatConversation } from '@/common/config/storage';
 import { LayoutContext } from '@/renderer/hooks/context/LayoutContext';
@@ -16,8 +17,9 @@ import {
   UserChoiceNotificationsProvider,
   UserChoiceNotificationButton,
   useUserChoiceNotifications,
+  useMessageNotificationHighlight,
 } from '@/renderer/hooks/context/UserChoiceNotifications';
-import { createChoiceNoticeStore } from '@/renderer/hooks/context/UserChoiceNotifications/store';
+import { createChoiceNoticeStore, type ChoiceNotice } from '@/renderer/hooks/context/UserChoiceNotifications/store';
 import { USER_CHOICE_MARKER } from '@/renderer/hooks/context/UserChoiceNotifications/protocol';
 import ConversationRow from '@/renderer/pages/conversation/GroupedHistory/ConversationRow';
 import type { ConversationRowProps } from '@/renderer/pages/conversation/GroupedHistory/types';
@@ -25,10 +27,11 @@ import { useUnreadConversationFailures } from '@/renderer/pages/conversation/Gro
 import ProjectGroupHeader from '@/renderer/pages/conversation/GroupedHistory/components/ProjectGroupHeader';
 import { applyTheme } from '@/renderer/utils/theme/applyTheme';
 import { BUILTIN_THEMES } from '@/renderer/theme/builtinThemes';
+import MarkdownView from '@/renderer/components/Markdown';
 
 await i18next.use(initReactI18next).init({
   lng: 'ko-KR',
-  resources: { 'ko-KR': { translation: { conversation: koConversation } } },
+  resources: { 'ko-KR': { translation: { conversation: koConversation, messages: koMessages } } },
   interpolation: { escapeValue: false },
 });
 ipcBridge.conversation.responseStream.on = () => () => {};
@@ -64,7 +67,7 @@ ipcBridge.database.getUserConversations.invoke = async () => ({
   total: conversations.length,
   has_more: false,
 });
-const store = createChoiceNoticeStore(localStorage, 'isolated-choice-notification-fixture');
+const store = createChoiceNoticeStore();
 for (const conversation of conversations) {
   store.consume({
     type: 'content',
@@ -73,6 +76,25 @@ for (const conversation of conversations) {
     data: `${USER_CHOICE_MARKER}\n검증이 끝나면 재시작해도 될까요?\n`,
   });
 }
+const storageKey = 'isolated-choice-notification-fixture';
+const saved = localStorage.getItem(storageKey);
+if (saved) store.replaceAll(JSON.parse(saved) as ChoiceNotice[]);
+let remoteNotices = store.getSnapshot();
+const persistNotices = () => {
+  localStorage.setItem(storageKey, JSON.stringify(remoteNotices));
+  return remoteNotices;
+};
+persistNotices();
+ipcBridge.conversation.choiceNoticesChanged.on = () => () => {};
+ipcBridge.conversation.listChoiceNotices.invoke = async () => remoteNotices;
+ipcBridge.conversation.registerChoiceNotice.invoke = async (notice) => {
+  remoteNotices = [...remoteNotices.filter((item) => item.key !== notice.key), notice];
+  return persistNotices();
+};
+ipcBridge.conversation.dismissChoiceNotice.invoke = async (notice) => {
+  remoteNotices = remoteNotices.filter((item) => item.key !== notice.key);
+  return persistNotices();
+};
 const noop = () => {};
 const rowProps = (conversation: TChatConversation): ConversationRowProps => ({
   conversation,
@@ -102,12 +124,18 @@ function Fixture() {
   const location = useLocation();
   const { notices } = useUserChoiceNotifications();
   const { failures } = useUnreadConversationFailures();
+  const highlightedQuestionIndex = useMessageNotificationHighlight('conversation-a', 'message-conversation-a');
   const state = location.state as { targetMessageId?: string } | null;
   return (
     <div className='bg-1 text-t-primary min-h-screen p-16px'>
       <div className='flex justify-end h-48px items-center gap-16px border-b border-b-base'>
         <span>사용량 91%</span>
         <UserChoiceNotificationButton />
+      </div>
+      <div className='mt-24px max-w-650px' data-testid='fixture-message'>
+        <MarkdownView highlightUserQuestions highlightedQuestionIndex={highlightedQuestionIndex}>
+          {`${USER_CHOICE_MARKER}\n검증이 끝나면 재시작해도 될까요?\n\n${USER_CHOICE_MARKER}\n별도 질문입니다.`}
+        </MarkdownView>
       </div>
       <div className='w-260px flex flex-col gap-8px mt-16px'>
         {conversations.map((conversation) => (
@@ -130,7 +158,8 @@ function Fixture() {
 }
 
 document.documentElement.setAttribute('data-color-scheme', 'default');
-applyTheme(BUILTIN_THEMES.find((theme) => theme.appearance === 'dark')!);
+const appearance = new URLSearchParams(window.location.search).get('theme') ?? 'dark';
+applyTheme(BUILTIN_THEMES.find((theme) => theme.appearance === appearance)!);
 createRoot(document.getElementById('root')!).render(
   <I18nextProvider i18n={i18next}>
     <LayoutContext.Provider

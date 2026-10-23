@@ -48,6 +48,7 @@ type MarkdownViewProps = {
   allowHtml?: boolean;
   /** Opt in only for assistant prose; preview documents and user messages stay unchanged. */
   highlightUserQuestions?: boolean;
+  highlightedQuestionIndex?: number;
 };
 
 const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
@@ -59,6 +60,7 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
     onLocalFileLink,
     allowHtml,
     highlightUserQuestions,
+    highlightedQuestionIndex,
     children: childrenProp,
   }) => {
     const { t } = useTranslation();
@@ -144,9 +146,12 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
     const remarkPlugins = useMemo<React.ComponentProps<typeof ReactMarkdown>['remarkPlugins']>(
       () =>
         highlightUserQuestions
-          ? [[remarkChoiceQuestions, { label: t('messages.userQuestion.prose') }], ...MARKDOWN_REMARK_PLUGINS]
+          ? [
+              [remarkChoiceQuestions, { label: t('messages.userQuestion.prose'), highlightedQuestionIndex }],
+              ...MARKDOWN_REMARK_PLUGINS,
+            ]
           : MARKDOWN_REMARK_PLUGINS,
-      [highlightUserQuestions, t]
+      [highlightUserQuestions, highlightedQuestionIndex, t]
     );
 
     return (

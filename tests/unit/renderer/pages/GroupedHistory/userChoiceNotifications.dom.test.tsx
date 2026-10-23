@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
 import type { ConversationFailure } from '@/renderer/pages/conversation/GroupedHistory/utils/conversationFailure';
@@ -49,6 +49,8 @@ import {
   ProjectChoiceBadge,
   UserChoiceNotificationButton,
   UserChoiceNotificationsProvider,
+  useConversationNotificationHighlight,
+  useMessageNotificationHighlight,
 } from '@/renderer/hooks/context/UserChoiceNotifications';
 import { createChoiceNoticeStore } from '@/renderer/hooks/context/UserChoiceNotifications/store';
 import { USER_CHOICE_MARKER } from '@/renderer/hooks/context/UserChoiceNotifications/protocol';
@@ -165,6 +167,94 @@ afterEach(() => {
 });
 
 describe('in-app attention notification UI', () => {
+  const HighlightTargets = ({ conversationId = 'conversation-a' }: { conversationId?: string }) => {
+    const highlighted = useConversationNotificationHighlight(conversationId);
+    const highlightedQuestionIndex = useMessageNotificationHighlight(conversationId, 'persisted-row', 'message-a');
+    return (
+      <div data-testid={`targets-${conversationId}`}>
+        <span data-testid={`row-${conversationId}`} data-highlighted={highlighted} />
+        <ReactMarkdown remarkPlugins={[[remarkChoiceQuestions, { label: '답변 요청', highlightedQuestionIndex }]]}>
+          {`${USER_CHOICE_MARKER}\n첫 질문?\n\n${USER_CHOICE_MARKER}\n둘째 질문?`}
+        </ReactMarkdown>
+      </div>
+    );
+  };
+
+  const setupHighlight = () => {
+    const store = createChoiceNoticeStore();
+    store.consume({ ...frame(), data: `${USER_CHOICE_MARKER}\n첫 질문?\n\n${USER_CHOICE_MARKER}\n둘째 질문?\n` });
+    render(
+      <UserChoiceNotificationsProvider store={store}>
+        <UserChoiceNotificationButton />
+        <HighlightTargets />
+        <HighlightTargets conversationId='conversation-b' />
+      </UserChoiceNotificationsProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));
+    return store;
+  };
+
+  it('previews only the matching conversation and marker without opening or dismissing it', async () => {
+    const store = setupHighlight();
+    const button = await screen.findByRole('button', { name: /Conversation A.*둘째 질문/ });
+    const item = button.parentElement!;
+    const boxes = within(screen.getByTestId('targets-conversation-a')).getAllByRole('group');
+    fireEvent.mouseEnter(item);
+
+    expect(screen.getByTestId('row-conversation-a')).toHaveAttribute('data-highlighted', 'true');
+    expect(boxes.map((box) => box.hasAttribute('data-notification-highlight'))).toEqual([false, true]);
+    expect(screen.getByTestId('row-conversation-b')).toHaveAttribute('data-highlighted', 'false');
+    expect(screen.getByTestId('targets-conversation-b').querySelector('[data-notification-highlight]')).toBeNull();
+    fireEvent.mouseEnter(within(item).getByRole('button', { name: 'conversation.userChoiceNotifications.dismiss' }));
+    expect(boxes[1]).toHaveAttribute('data-notification-highlight', 'true');
+    fireEvent.mouseLeave(item);
+    expect(boxes[1]).not.toHaveAttribute('data-notification-highlight');
+    expect(store.getSnapshot()).toHaveLength(2);
+    expect(state.navigate).not.toHaveBeenCalled();
+    expect(state.dismissChoiceNotice).not.toHaveBeenCalled();
+  });
+
+  it('moves the preview between questions and clears it when the popup closes', async () => {
+    setupHighlight();
+    const first = (await screen.findByRole('button', { name: /Conversation A.*첫 질문/ })).parentElement!;
+    const second = screen.getByRole('button', { name: /Conversation A.*둘째 질문/ }).parentElement!;
+    const boxes = within(screen.getByTestId('targets-conversation-a')).getAllByRole('group');
+    fireEvent.mouseEnter(first);
+    fireEvent.mouseLeave(first);
+    fireEvent.mouseEnter(second);
+    expect(boxes.map((box) => box.hasAttribute('data-notification-highlight'))).toEqual([false, true]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));
+    await waitFor(() => expect(boxes[1]).not.toHaveAttribute('data-notification-highlight'));
+    expect(screen.getByTestId('row-conversation-a')).toHaveAttribute('data-highlighted', 'false');
+  });
+
+  it('keeps keyboard focus preview on the dismiss button and clears only the dismissed target', async () => {
+    const store = setupHighlight();
+    const open = await screen.findByRole('button', { name: /Conversation A.*둘째 질문/ });
+    const dismiss = within(open.parentElement!).getByRole('button', {
+      name: 'conversation.userChoiceNotifications.dismiss',
+    });
+    const boxes = within(screen.getByTestId('targets-conversation-a')).getAllByRole('group');
+    fireEvent.focus(open);
+    fireEvent.blur(open, { relatedTarget: dismiss });
+    fireEvent.focus(dismiss, { relatedTarget: open });
+    expect(boxes[1]).toHaveAttribute('data-notification-highlight', 'true');
+    fireEvent.click(dismiss);
+    expect(boxes[1]).not.toHaveAttribute('data-notification-highlight');
+    expect(store.getSnapshot().map((notice) => notice.markerIndex)).toEqual([0]);
+    expect(state.navigate).not.toHaveBeenCalled();
+  });
+
+  it('clears a preview removed by another device while keeping the original question visible', async () => {
+    const store = setupHighlight();
+    const item = (await screen.findByRole('button', { name: /Conversation A.*둘째 질문/ })).parentElement!;
+    fireEvent.mouseEnter(item);
+    act(() => store.replaceAll(store.getSnapshot().filter((notice) => notice.markerIndex === 0)));
+    expect(screen.getByTestId('targets-conversation-a').querySelector('[data-notification-highlight]')).toBeNull();
+    expect(within(screen.getByTestId('targets-conversation-a')).getAllByRole('group')).toHaveLength(2);
+  });
+
   it('opens and manually dismisses a server-owned structured question without a prose marker', async () => {
     const store = setup(undefined, false);
     const notice = {

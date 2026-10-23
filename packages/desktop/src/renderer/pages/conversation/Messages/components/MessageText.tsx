@@ -30,6 +30,10 @@ import { stripSkillSuggest, hasSkillSuggest } from '@renderer/utils/chat/skillSu
 import { isForkEnabled } from '@/common/chat/forkConversation';
 import { useForkConversation } from '@/renderer/hooks/chat/useForkConversation';
 import ForkBranchIcon from '@renderer/components/base/ForkBranchIcon';
+import {
+  notificationHighlightStyles,
+  useMessageNotificationHighlight,
+} from '@renderer/hooks/context/UserChoiceNotifications';
 
 /**
  * Format a timestamp for message display.
@@ -135,6 +139,7 @@ const MessageText: React.FC<{
   const [showCopyAlert, setShowCopyAlert] = useState(false);
   const isUserMessage = message.position === 'right';
   const userQuestion = message.position === 'left' ? message.content.user_choice : undefined;
+  const highlightedQuestionIndex = useMessageNotificationHighlight(message.conversation_id, message.id, message.msg_id);
   const userQuestionLabel = userQuestion
     ? t(
         userQuestion.options?.some((option) => option.trim())
@@ -397,11 +402,13 @@ const MessageText: React.FC<{
         <div
           role={userQuestion ? 'group' : undefined}
           aria-label={userQuestionLabel}
+          data-notification-highlight={(Boolean(userQuestion) && highlightedQuestionIndex === 0) || undefined}
           className={classNames('min-w-0 [&>p:first-child]:mt-0px [&>p:last-child]:mb-0px', {
             'bg-aou-2 p-6px md:p-8px': isUserMessage || cronMeta,
             'bg-3 p-6px md:p-8px': isTeammateMessage,
             'w-full': !(isUserMessage || cronMeta || isTeammateMessage),
             'box-border bg-primary-light-1 border border-primary-3 rounded-8px p-12px': Boolean(userQuestion),
+            [notificationHighlightStyles.question]: Boolean(userQuestion) && highlightedQuestionIndex === 0,
           })}
           style={{
             ...(isUserMessage || cronMeta
@@ -435,6 +442,7 @@ const MessageText: React.FC<{
                 codeStyle={CODE_STYLE}
                 onLocalFileLink={handleLocalFileLink}
                 highlightUserQuestions={message.position === 'left' && !userQuestion}
+                highlightedQuestionIndex={highlightedQuestionIndex}
               >
                 {data}
               </MarkdownView>

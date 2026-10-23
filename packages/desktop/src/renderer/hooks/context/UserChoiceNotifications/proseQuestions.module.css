@@ -22,3 +22,9 @@
 .question > :last-child {
   margin-bottom: 0;
 }
+
+.question[data-notification-highlight='true'] {
+  outline: 4px solid var(--warning);
+  outline-offset: 4px;
+  box-shadow: 0 0 0 8px var(--color-warning-light-2);
+}

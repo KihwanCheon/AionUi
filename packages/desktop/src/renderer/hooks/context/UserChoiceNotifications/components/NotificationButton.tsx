@@ -44,7 +44,7 @@ export default function UserChoiceNotificationButton() {
       </Badge>
     </Button>
   );
-  const list = <NotificationList notices={notices} onOpen={onOpen} onDismiss={dismiss} />;
+  const list = <NotificationList notices={notices} onOpen={onOpen} onDismiss={dismiss} active={open} />;
   if (phone) {
     return (
       <>

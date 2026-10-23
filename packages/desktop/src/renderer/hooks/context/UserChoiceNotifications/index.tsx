@@ -2,6 +2,7 @@ import { ipcBridge } from '@/common';
 import { LayoutContext, type LayoutContextValue } from '../LayoutContext';
 import React, { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { createChoiceNoticeStore, type ChoiceNotice, type ChoiceNoticeStore } from './store';
+import { NotificationHighlightProvider } from './NotificationHighlight';
 
 const emptyStore = createChoiceNoticeStore();
 const ChoiceContext = createContext<ChoiceNoticeStore>(emptyStore);
@@ -96,7 +97,11 @@ export function UserChoiceNotificationsProvider({
       unsubscribeChoiceNotices?.();
     };
   }, [store, suppliedStore]);
-  return <ChoiceContext.Provider value={store}>{children}</ChoiceContext.Provider>;
+  return (
+    <NotificationHighlightProvider>
+      <ChoiceContext.Provider value={store}>{children}</ChoiceContext.Provider>
+    </NotificationHighlightProvider>
+  );
 }
 
 /** Read pending entries without modifying their manually controlled lifecycle. */
@@ -123,3 +128,9 @@ export function ChoiceNotificationLayoutProvider({
 
 export { default as UserChoiceNotificationButton } from './components/NotificationButton';
 export { ConversationChoiceBadge, ProjectChoiceBadge } from './components/ChoiceBadge';
+export {
+  useConversationNotificationHighlight,
+  useMessageNotificationHighlight,
+  useNotificationHighlight,
+} from './NotificationHighlight';
+export { default as notificationHighlightStyles } from './highlight.module.css';
