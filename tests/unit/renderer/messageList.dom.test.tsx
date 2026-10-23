@@ -74,8 +74,20 @@ vi.mock('@/renderer/pages/conversation/Messages/useAutoScroll', () => ({
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/components/MessageText', () => ({
-  default: ({ message, showCopyRow }: { message: IMessageText; showCopyRow?: boolean }) => (
-    <div data-testid={`msgtext-${message.id}`} data-copy-row={String(showCopyRow ?? true)}>
+  default: ({
+    message,
+    showCopyRow,
+    isStreaming,
+  }: {
+    message: IMessageText;
+    showCopyRow?: boolean;
+    isStreaming?: boolean;
+  }) => (
+    <div
+      data-testid={`msgtext-${message.id}`}
+      data-copy-row={String(showCopyRow ?? true)}
+      data-streaming={String(isStreaming)}
+    >
       {message.content.content}
     </div>
   ),
@@ -413,6 +425,25 @@ describe('MessageList', () => {
     expect(screen.getByTestId('msgtext-text-a').getAttribute('data-copy-row')).toBe('true');
     // The in-progress final turn withholds its row until streaming ends.
     expect(screen.getByTestId('msgtext-text-b').getAttribute('data-copy-row')).toBe('false');
+  });
+
+  it('finalizes marker parsing for completed messages while only the current turn stays provisional', () => {
+    mockIsProcessing = true;
+    const messages: IMessageText[] = [
+      { ...createTextMessage(), id: 'old', created_at: 1 },
+      { ...createTextMessage(), id: 'user', position: 'right', created_at: 2 },
+      { ...createTextMessage(), id: 'finished', status: 'finish', created_at: 3 },
+      { ...createTextMessage(), id: 'live', created_at: 4 },
+    ];
+    const { rerender } = render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+    expect(
+      ['old', 'user', 'finished', 'live'].map((id) => screen.getByTestId(`msgtext-${id}`).dataset.streaming)
+    ).toEqual(['false', 'false', 'false', 'true']);
+    mockIsProcessing = false;
+    rerender(<MessageList />);
+    expect(screen.getByTestId('msgtext-live')).toHaveAttribute('data-streaming', 'false');
   });
 
   it('renders the empty slot when there are no messages', () => {

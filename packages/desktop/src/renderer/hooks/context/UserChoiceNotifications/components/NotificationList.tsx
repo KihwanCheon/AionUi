@@ -87,9 +87,7 @@ export default function NotificationList({
               <span className={styles.preview}>
                 {notice.preview ||
                   t(
-                    notice.kind === 'failure'
-                      ? 'conversation.history.responseFailed'
-                      : 'conversation.userChoiceNotifications.questionPending'
+                    notice.kind === 'failure' ? 'conversation.history.responseFailed' : 'messages.userQuestion.fallback'
                   )}
               </span>
             </Button>

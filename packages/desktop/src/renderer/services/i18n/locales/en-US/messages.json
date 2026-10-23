@@ -1,5 +1,6 @@
 {
   "userQuestion": {
+    "fallback": "Your confirmation is needed. Please review the content above.",
     "prose": "Response requested",
     "choice": "Response requested · Choice",
     "freeText": "Response requested · Free text"

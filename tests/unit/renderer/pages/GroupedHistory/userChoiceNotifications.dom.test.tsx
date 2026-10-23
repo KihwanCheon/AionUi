@@ -51,6 +51,7 @@ import {
   UserChoiceNotificationsProvider,
   useConversationNotificationHighlight,
   useMessageNotificationHighlight,
+  useCompletedChoiceMessage,
 } from '@/renderer/hooks/context/UserChoiceNotifications';
 import { createChoiceNoticeStore } from '@/renderer/hooks/context/UserChoiceNotifications/store';
 import { USER_CHOICE_MARKER } from '@/renderer/hooks/context/UserChoiceNotifications/protocol';
@@ -95,11 +96,32 @@ beforeEach(() => {
 });
 
 describe('prose question boxes', () => {
-  const markdown = (text: string) => (
-    <ReactMarkdown remarkPlugins={[[remarkChoiceQuestions, { label: '답변 요청' }], ...MARKDOWN_REMARK_PLUGINS]}>
+  const fallback = '사용자 확인이 필요합니다. 위 내용을 확인해 주세요.';
+  const markdown = (text: string, complete = false) => (
+    <ReactMarkdown
+      remarkPlugins={[[remarkChoiceQuestions, { label: '답변 요청', fallback, complete }], ...MARKDOWN_REMARK_PLUGINS]}
+    >
       {text}
     </ReactMarkdown>
   );
+
+  it('turns a final marker after the question and options into an anchored fallback box at completion', () => {
+    const text = `어떻게 진행할까요?\n\n- 직접 처리\n- 자동 처리\n\n${USER_CHOICE_MARKER}`;
+    const { container, rerender } = render(markdown(text));
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+    rerender(markdown(text, true));
+    const box = screen.getByRole('group', { name: '답변 요청' });
+    expect(box).toHaveAttribute('data-choice-marker-index', '0');
+    expect(box).toHaveTextContent(fallback);
+    expect(box).not.toHaveTextContent('직접 처리');
+    expect(container).not.toHaveTextContent(USER_CHOICE_MARKER);
+  });
+
+  it('shows separate fallback boxes for consecutive empty markers', () => {
+    render(markdown(`${USER_CHOICE_MARKER}\n\n${USER_CHOICE_MARKER}`, true));
+    expect(screen.getAllByText(fallback)).toHaveLength(2);
+    expect(screen.getAllByRole('group').map((box) => box.dataset.choiceMarkerIndex)).toEqual(['0', '1']);
+  });
 
   it('keeps introductory prose outside the question box even without a blank line', () => {
     const { container } = render(markdown(`먼저 설명합니다.\n${USER_CHOICE_MARKER}\n이 범위로 진행할까요?`));
@@ -167,13 +189,82 @@ afterEach(() => {
 });
 
 describe('in-app attention notification UI', () => {
+  const CompletedQuestion = ({ complete }: { complete: boolean }) => {
+    const message = React.useMemo(
+      () => ({
+        id: 'stored-row',
+        msg_id: 'stored-message',
+        conversation_id: 'conversation-a',
+        type: 'text' as const,
+        position: 'left' as const,
+        created_at: 123,
+        content: { content: `어떻게 진행할까요?\n\n${USER_CHOICE_MARKER}` },
+      }),
+      []
+    );
+    useCompletedChoiceMessage(message, message.content.content, complete);
+    return null;
+  };
+
+  it('recovers a completed final marker on mount and navigates to its fallback box', async () => {
+    state.registerChoiceNotice.mockImplementation(async (notice) => [notice]);
+    setup(
+      <>
+        <UserChoiceNotificationButton />
+        <CompletedQuestion complete />
+      </>,
+      false
+    );
+    await waitFor(() => expect(state.registerChoiceNotice).toHaveBeenCalledTimes(1));
+    expect(state.registerChoiceNotice).toHaveBeenCalledWith(
+      expect.objectContaining({ preview: '', messageId: 'stored-message', markerIndex: 0 })
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));
+    fireEvent.click(await screen.findByRole('button', { name: /messages.userQuestion.fallback/ }));
+    expect(state.navigate).toHaveBeenCalledWith('/conversation/conversation-a', {
+      state: { targetMessageId: 'stored-message', targetMarkerIndex: 0 },
+    });
+  });
+
+  it('keeps a recovered question hidden when the server already has its dismissal tombstone', async () => {
+    setup(
+      <>
+        <UserChoiceNotificationButton />
+        <CompletedQuestion complete />
+      </>,
+      false
+    );
+    await waitFor(() => expect(state.registerChoiceNotice).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:0' })).toBeInTheDocument();
+  });
+
+  it('does not recover a final partial line while its response is streaming', async () => {
+    setup(
+      <>
+        <UserChoiceNotificationButton />
+        <CompletedQuestion complete={false} />
+      </>,
+      false
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(state.registerChoiceNotice).not.toHaveBeenCalled();
+  });
   const HighlightTargets = ({ conversationId = 'conversation-a' }: { conversationId?: string }) => {
     const highlighted = useConversationNotificationHighlight(conversationId);
     const highlightedQuestionIndex = useMessageNotificationHighlight(conversationId, 'persisted-row', 'message-a');
     return (
       <div data-testid={`targets-${conversationId}`}>
         <span data-testid={`row-${conversationId}`} data-highlighted={highlighted} />
-        <ReactMarkdown remarkPlugins={[[remarkChoiceQuestions, { label: '답변 요청', highlightedQuestionIndex }]]}>
+        <ReactMarkdown
+          remarkPlugins={[
+            [
+              remarkChoiceQuestions,
+              { label: '답변 요청', fallback: '위 내용을 확인해 주세요.', highlightedQuestionIndex },
+            ],
+          ]}
+        >
           {`${USER_CHOICE_MARKER}\n첫 질문?\n\n${USER_CHOICE_MARKER}\n둘째 질문?`}
         </ReactMarkdown>
       </div>

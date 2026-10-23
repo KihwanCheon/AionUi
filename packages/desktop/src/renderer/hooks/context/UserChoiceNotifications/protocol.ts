@@ -14,10 +14,12 @@ export class ChoiceSignalParser {
   private committedPreview = '';
   private capturing = false;
   private lineNumber = 1;
+  private finished = false;
 
   constructor(private readonly onMarker?: (index: number, line: number) => void) {}
 
   feed(text: string): ChoiceSignal[] {
+    if (this.finished) return this.snapshot();
     for (const part of text.split(/(?<=\n)/)) {
       if (!this.overflow) {
         this.line += part;
@@ -32,6 +34,16 @@ export class ChoiceSignalParser {
         this.line = '';
         this.overflow = false;
       }
+    }
+    return this.snapshot();
+  }
+
+  /** Flush an unterminated final line only after the message is complete. */
+  finish(): ChoiceSignal[] {
+    if (!this.finished) {
+      if (!this.overflow && this.line) this.commitLine(this.line.replace(/\r$/, ''));
+      this.line = '';
+      this.finished = true;
     }
     return this.snapshot();
   }
@@ -71,11 +83,12 @@ export class ChoiceSignalParser {
 
   private snapshot(): ChoiceSignal[] {
     const lastIndex = this.signals.length - 1;
+    const provisionalLine = USER_CHOICE_MARKER.startsWith(this.line.trim()) ? '' : this.line;
     return this.signals.map((signal, index) => ({
       ...signal,
       preview:
         index === lastIndex && this.capturing && !this.fence && !this.overflow
-          ? this.previewWith(this.line)
+          ? this.previewWith(provisionalLine)
           : signal.preview,
     }));
   }

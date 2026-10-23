@@ -33,6 +33,7 @@ import ForkBranchIcon from '@renderer/components/base/ForkBranchIcon';
 import {
   notificationHighlightStyles,
   useMessageNotificationHighlight,
+  useCompletedChoiceMessage,
 } from '@renderer/hooks/context/UserChoiceNotifications';
 
 /**
@@ -111,11 +112,19 @@ const MessageText: React.FC<{
   message: IMessageText;
   showCopyRow?: boolean;
   isLastMessage?: boolean;
+  isStreaming?: boolean;
   hasForkAnchor?: boolean;
   /** All text segments of this message's turn, in order — the copy button
    * copies the whole reply, not just the segment it happens to sit on. */
   turnTexts?: string[];
-}> = ({ message, showCopyRow = true, isLastMessage = false, hasForkAnchor = false, turnTexts }) => {
+}> = ({
+  message,
+  showCopyRow = true,
+  isLastMessage = false,
+  isStreaming = false,
+  hasForkAnchor = false,
+  turnTexts,
+}) => {
   const logos = useAgentLogos();
   // Filter think tags from content before rendering
   // 在渲染前过滤 think 标签
@@ -185,6 +194,7 @@ const MessageText: React.FC<{
       )
     : visibleText;
   const { data, json } = useFormatContent(renderedText);
+  useCompletedChoiceMessage(message, renderedText, !isStreaming);
   const shouldRenderPlainText = isUserMessage || Boolean(contextResetNotice);
   const conversationContext = useConversationContextSafe();
   const forkConversation = useForkConversation(conversationContext?.conversation_id);
@@ -441,8 +451,11 @@ const MessageText: React.FC<{
               <MarkdownView
                 codeStyle={CODE_STYLE}
                 onLocalFileLink={handleLocalFileLink}
-                highlightUserQuestions={message.position === 'left' && !userQuestion}
+                highlightUserQuestions={
+                  message.position === 'left' && !userQuestion && !isTeammateMessage && !message.hidden
+                }
                 highlightedQuestionIndex={highlightedQuestionIndex}
+                questionsComplete={!isStreaming}
               >
                 {data}
               </MarkdownView>

@@ -3,6 +3,7 @@ import { LayoutContext, type LayoutContextValue } from '../LayoutContext';
 import React, { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { createChoiceNoticeStore, type ChoiceNotice, type ChoiceNoticeStore } from './store';
 import { NotificationHighlightProvider } from './NotificationHighlight';
+import type { IMessageText } from '@/common/chat/chatLib';
 
 const emptyStore = createChoiceNoticeStore();
 const ChoiceContext = createContext<ChoiceNoticeStore>(emptyStore);
@@ -109,6 +110,21 @@ export function useUserChoiceNotifications() {
   const store = useContext(ChoiceContext);
   const notices = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   return { notices, dismiss: store.dismiss };
+}
+
+/** Recover completed history without optimistically reviving dismissed notices. */
+export function useCompletedChoiceMessage(message: IMessageText, text: string, complete: boolean) {
+  const store = useContext(ChoiceContext);
+  useEffect(() => {
+    let disposed = false;
+    // Parent effects install synchronization handlers after child effects run.
+    queueMicrotask(() => {
+      if (complete && !disposed) store.recoverCompleted(message, text);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [store, message, text, complete]);
 }
 
 /** Compose at the existing layout boundary without reindenting upstream's layout tree. */

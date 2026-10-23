@@ -1,6 +1,7 @@
 import type { IChoiceNotice, IResponseMessage } from '@/common/adapter/ipcBridge';
+import type { IMessageText } from '@/common/chat/chatLib';
 import { normalizeTextMessageContent } from '@/common/chat/chatLib';
-import { ChoiceSignalParser } from './protocol';
+import { ChoiceSignalParser, USER_CHOICE_MARKER } from './protocol';
 
 export type ChoiceNotice = IChoiceNotice;
 
@@ -35,8 +36,18 @@ export const createChoiceNoticeStore = () => {
   let pending: ChoiceNotice[] = [];
   const suppressed = new Map<string, ChoiceNotice>();
   const staged = new Map<string, ChoiceNotice>();
+  const recovered = new Set<string>();
+  const seenOnServer = new Set<string>();
   const listeners = new Set<() => void>();
-  const parsers = new Map<string, { conversationId: string; parser: ChoiceSignalParser }>();
+  const parsers = new Map<
+    string,
+    {
+      conversationId: string;
+      messageId: string;
+      createdAt: number;
+      parser: ChoiceSignalParser;
+    }
+  >();
   let syncHandlers: SyncHandlers | undefined;
 
   const publish = () => {
@@ -46,6 +57,14 @@ export const createChoiceNoticeStore = () => {
   const register = (notice: ChoiceNotice): void => {
     if (suppressed.has(notice.key)) return;
     const previous = pending.find((item) => item.key === notice.key);
+    if (!previous && seenOnServer.has(notice.key)) {
+      // A removed server notice may have been dismissed on another device.
+      if (syncHandlers && !recovered.has(notice.key)) {
+        recovered.add(notice.key);
+        syncHandlers.upsert({ ...notice, preview: normalizedPreview(notice.preview) });
+      }
+      return;
+    }
     let changed = previous?.preview !== notice.preview;
     if (changed) {
       pending = previous
@@ -80,7 +99,7 @@ export const createChoiceNoticeStore = () => {
       });
     }
     publish();
-    if (preview && syncHandlers) {
+    if (syncHandlers) {
       const normalizedNotice = { ...notice, preview };
       staged.set(notice.key, normalizedNotice);
       syncHandlers.upsert(normalizedNotice);
@@ -89,9 +108,7 @@ export const createChoiceNoticeStore = () => {
 
   const replaceFromServer = (notices: ChoiceNotice[]) => {
     const remote = new Map(notices.filter(isNotice).map((notice) => [notice.key, notice]));
-    for (const key of suppressed.keys()) {
-      if (!remote.has(key)) suppressed.delete(key);
-    }
+    for (const key of remote.keys()) seenOnServer.add(key);
     for (const key of staged.keys()) {
       if (remote.has(key)) staged.delete(key);
     }
@@ -114,10 +131,41 @@ export const createChoiceNoticeStore = () => {
       replaceFromServer(notices);
     },
     settleUpsert: (key: string, notices: ChoiceNotice[]) => {
+      const notice = staged.get(key);
+      if (notice && !notices.some((item) => item.key === key)) suppressed.set(key, notice);
       staged.delete(key);
       replaceFromServer(notices);
     },
+    recoverCompleted: (message: IMessageText, text: string) => {
+      if (
+        message.position !== 'left' ||
+        message.hidden ||
+        message.content.teammateMessage ||
+        message.content.user_choice
+      )
+        return;
+      if (!text.includes(USER_CHOICE_MARKER)) return;
+      const messageId = message.msg_id || message.id;
+      const parser = new ChoiceSignalParser();
+      parser.feed(text);
+      for (const signal of parser.finish()) {
+        const key = choiceNoticeKey(message.conversation_id, messageId, signal.index);
+        if (!syncHandlers || recovered.has(key) || suppressed.has(key) || pending.some((item) => item.key === key))
+          continue;
+        recovered.add(key);
+        // History discovery must consult durable tombstones before displaying a notice.
+        syncHandlers.upsert({
+          key,
+          conversationId: message.conversation_id,
+          messageId,
+          markerIndex: signal.index,
+          preview: normalizedPreview(signal.preview),
+          createdAt: message.created_at ?? 0,
+        });
+      }
+    },
     mergeAll: (notices: ChoiceNotice[]) => {
+      for (const notice of notices.filter(isNotice)) seenOnServer.add(notice.key);
       const merged = new Map([...notices.filter(isNotice), ...pending].map((notice) => [notice.key, notice]));
       pending = [...merged.values()].filter((notice) => !suppressed.has(notice.key));
       publish();
@@ -145,9 +193,20 @@ export const createChoiceNoticeStore = () => {
     },
     consume: (message: IResponseMessage) => {
       if (message.type === 'finish' || message.type === 'error') {
-        // Drop scratch buffers, never pending notifications.
+        // Complete every text segment in the turn before releasing scratch state.
         for (const [key, value] of parsers) {
-          if (value.conversationId === message.conversation_id) parsers.delete(key);
+          if (value.conversationId !== message.conversation_id) continue;
+          for (const signal of value.parser.finish()) {
+            register({
+              key: choiceNoticeKey(value.conversationId, value.messageId, signal.index),
+              conversationId: value.conversationId,
+              messageId: value.messageId,
+              markerIndex: signal.index,
+              preview: signal.preview,
+              createdAt: value.createdAt,
+            });
+          }
+          parsers.delete(key);
         }
         return;
       }
@@ -169,10 +228,17 @@ export const createChoiceNoticeStore = () => {
           const oldest = parsers.keys().next().value;
           if (oldest) parsers.delete(oldest);
         }
-        parsers.set(parserKey, { conversationId: message.conversation_id, parser: new ChoiceSignalParser() });
+        parsers.set(parserKey, {
+          conversationId: message.conversation_id,
+          messageId: message.msg_id,
+          createdAt: message.created_at ?? Date.now(),
+          parser: new ChoiceSignalParser(),
+        });
       }
       const parser = parsers.get(parserKey)!.parser;
-      for (const signal of parser.feed(content.content)) {
+      const signals = parser.feed(content.content);
+      const completed = message.status === 'finish' || message.status === 'error';
+      for (const signal of completed ? parser.finish() : signals) {
         register({
           key: choiceNoticeKey(message.conversation_id, message.msg_id, signal.index),
           conversationId: message.conversation_id,
@@ -182,6 +248,7 @@ export const createChoiceNoticeStore = () => {
           createdAt: message.created_at ?? Date.now(),
         });
       }
+      if (completed) parsers.delete(parserKey);
     },
   };
 };

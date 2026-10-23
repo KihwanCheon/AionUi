@@ -1,5 +1,6 @@
 {
   "userQuestion": {
+    "fallback": "需要您的確認。請查看上方內容。",
     "prose": "回答請求",
     "choice": "回答請求 · 選項",
     "freeText": "回答請求 · 自由輸入"

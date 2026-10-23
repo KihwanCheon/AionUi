@@ -1,5 +1,6 @@
 {
   "userQuestion": {
+    "fallback": "Onayınız gerekiyor. Lütfen yukarıdaki içeriği inceleyin.",
     "prose": "Yanıt isteniyor",
     "choice": "Yanıt isteniyor · Seçenekler",
     "freeText": "Yanıt isteniyor · Serbest metin"

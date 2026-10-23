@@ -15,6 +15,39 @@ const question = `${USER_CHOICE_MARKER}\n재시작해도 될까요?\n`;
 afterEach(() => vi.restoreAllMocks());
 
 describe('explicit prose question signal', () => {
+  it('flushes an unterminated final marker once and keeps streamed lines provisional', () => {
+    const onMarker = vi.fn();
+    const parser = new ChoiceSignalParser(onMarker);
+    expect(parser.feed(`어느 쪽으로 진행할까요?\n\n${USER_CHOICE_MARKER}`)).toEqual([]);
+    expect(parser.finish()).toEqual([{ index: 0, preview: '' }]);
+    expect(parser.finish()).toEqual([{ index: 0, preview: '' }]);
+    expect(onMarker.mock.calls).toEqual([[0, 3]]);
+  });
+
+  it('does not leak a following partial marker into the preceding question preview', () => {
+    const parser = new ChoiceSignalParser();
+    parser.feed(`${USER_CHOICE_MARKER}\n`);
+    for (const character of USER_CHOICE_MARKER) {
+      expect(parser.feed(character)).toEqual([{ index: 0, preview: '' }]);
+    }
+    expect(parser.finish()).toEqual([
+      { index: 0, preview: '' },
+      { index: 1, preview: '' },
+    ]);
+  });
+
+  it.each([
+    `> ${USER_CHOICE_MARKER}`,
+    `    ${USER_CHOICE_MARKER}`,
+    `\`${USER_CHOICE_MARKER}\``,
+    `\`\`\`\n${USER_CHOICE_MARKER}`,
+    `${USER_CHOICE_MARKER} example`,
+    USER_CHOICE_MARKER.slice(0, -1),
+  ])('does not promote excluded or incomplete final text: %s', (text) => {
+    const parser = new ChoiceSignalParser();
+    parser.feed(text);
+    expect(parser.finish()).toEqual([]);
+  });
   it('reports stable marker lines and indices across fragmented CRLF input', () => {
     const onMarker = vi.fn();
     const parser = new ChoiceSignalParser(onMarker);
@@ -75,6 +108,27 @@ describe('explicit prose question signal', () => {
 });
 
 describe('prose notification lifecycle', () => {
+  it('does not infer a permanent dismissal from an out-of-order server snapshot', () => {
+    const store = createChoiceNoticeStore();
+    store.consume(frame(question));
+    const notice = store.getSnapshot()[0];
+    store.replaceAll([notice]);
+    store.replaceAll([]);
+    store.replaceAll([notice]);
+    expect(store.getSnapshot()).toEqual([notice]);
+  });
+
+  it('consults the server before redisplaying a streamed notice removed on another device', () => {
+    const store = createChoiceNoticeStore();
+    store.consume(frame(question));
+    store.replaceAll(store.getSnapshot());
+    store.replaceAll([]);
+    const upsert = vi.fn();
+    store.setSyncHandlers({ upsert, dismiss: vi.fn() });
+    store.consume(frame(question, { replace: true }));
+    expect(store.getSnapshot()).toEqual([]);
+    expect(upsert).toHaveBeenCalledTimes(1);
+  });
   it('preserves a fragmented marker while the initial server snapshot merges', () => {
     const store = createChoiceNoticeStore();
     store.consume(frame(USER_CHOICE_MARKER.slice(0, 12)));
@@ -112,14 +166,63 @@ describe('prose notification lifecycle', () => {
     expect(store.getSnapshot()[0].preview).toBe('재시작해도 될까요?');
   });
 
-  it('synchronizes only non-empty question previews', () => {
+  it('synchronizes an empty marker preview and updates it when question text arrives', () => {
     const store = createChoiceNoticeStore();
     const upsert = vi.fn();
     store.setSyncHandlers({ upsert, dismiss: vi.fn() });
     store.consume(frame(`${USER_CHOICE_MARKER}\n`));
-    expect(upsert).not.toHaveBeenCalled();
+    expect(upsert).toHaveBeenLastCalledWith(expect.objectContaining({ preview: '' }));
     store.consume(frame('  재시작해도   될까요?  \n'));
     expect(upsert).toHaveBeenLastCalledWith(expect.objectContaining({ preview: '재시작해도 될까요?' }));
+  });
+
+  it.each(['finish', 'error'])('registers the final marker on %s without merging separate empty questions', (type) => {
+    const store = createChoiceNoticeStore();
+    const upsert = vi.fn();
+    store.setSyncHandlers({ upsert, dismiss: vi.fn() });
+    store.consume(frame(`질문과 선택지\n\n${USER_CHOICE_MARKER}`));
+    store.consume(frame(USER_CHOICE_MARKER, { msg_id: 'message-b' }));
+    expect(store.getSnapshot()).toHaveLength(0);
+    store.consume(frame('', { type }));
+    expect(store.getSnapshot().map((notice) => notice.messageId)).toEqual(['message-a', 'message-b']);
+    expect(upsert).toHaveBeenCalledTimes(2);
+    store.consume(frame('', { type }));
+    expect(upsert).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not revive an empty dismissed marker after server acknowledgement and terminal replay', () => {
+    const store = createChoiceNoticeStore();
+    store.consume(frame(USER_CHOICE_MARKER, { status: 'finish' }));
+    store.dismiss(store.getSnapshot()[0].key);
+    store.replaceAll([]);
+    store.consume(frame(USER_CHOICE_MARKER, { status: 'finish', replace: true }));
+    expect(store.getSnapshot()).toEqual([]);
+  });
+
+  it('recovers completed history through the server without showing a dismissed notice optimistically', () => {
+    const store = createChoiceNoticeStore();
+    const upsert = vi.fn();
+    store.setSyncHandlers({ upsert, dismiss: vi.fn() });
+    const message = {
+      id: 'row-a',
+      msg_id: 'stream-a',
+      conversation_id: 'conversation-a',
+      type: 'text' as const,
+      position: 'left' as const,
+      content: { content: USER_CHOICE_MARKER },
+      created_at: 123,
+    };
+    store.recoverCompleted(message, message.content.content);
+    store.recoverCompleted(message, message.content.content);
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ messageId: 'stream-a', markerIndex: 0, preview: '', createdAt: 123 })
+    );
+    expect(store.getSnapshot()).toEqual([]);
+    store.settleUpsert(upsert.mock.calls[0][0].key, []);
+    store.recoverCompleted(message, message.content.content);
+    expect(store.getSnapshot()).toEqual([]);
+    expect(upsert).toHaveBeenCalledTimes(1);
   });
 
   it('keeps an unsynchronized local notice across an unrelated server snapshot', () => {

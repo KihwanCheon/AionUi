@@ -115,10 +115,12 @@ vi.mock('@/renderer/components/Markdown', () => ({
     onLocalFileLink,
     highlightUserQuestions,
     highlightedQuestionIndex,
+    questionsComplete,
   }: {
     children?: React.ReactNode;
     highlightUserQuestions?: boolean;
     highlightedQuestionIndex?: number;
+    questionsComplete?: boolean;
     onLocalFileLink?: (
       path: string,
       reference?: {
@@ -133,6 +135,7 @@ vi.mock('@/renderer/components/Markdown', () => ({
     <div
       data-highlight-user-questions={highlightUserQuestions}
       data-highlighted-question-index={highlightedQuestionIndex}
+      data-questions-complete={questionsComplete}
     >
       {children}
       {onLocalFileLink && (
@@ -904,6 +907,19 @@ describe('MessageText session message navigation', () => {
 });
 
 describe('MessageText structured questions', () => {
+  it('tells the question renderer when the live response finishes', () => {
+    const message: IMessageText = {
+      id: 'live-text',
+      conversation_id: 'conv-1',
+      type: 'text',
+      position: 'left',
+      content: { content: '마지막 줄' },
+    };
+    const { rerender } = render(<MessageText message={message} isStreaming />);
+    expect(screen.getByTestId('message-text-content').firstChild).toHaveAttribute('data-questions-complete', 'false');
+    rerender(<MessageText message={message} isStreaming={false} />);
+    expect(screen.getByTestId('message-text-content').firstChild).toHaveAttribute('data-questions-complete', 'true');
+  });
   const Preview = ({ messageId, markerIndex = 0 }: { messageId: string; markerIndex?: number }) => {
     const { highlight, clear } = useNotificationHighlight();
     React.useEffect(() => {

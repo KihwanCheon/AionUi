@@ -228,6 +228,7 @@ const MessageItem: React.FC<{
   rowWidthClass: string;
   showCopyRow?: boolean;
   isLastMessage?: boolean;
+  isStreaming?: boolean;
   hasForkAnchor?: boolean;
   turnTexts?: string[];
 }> = React.memo(
@@ -262,6 +263,7 @@ const MessageItem: React.FC<{
       message,
       showCopyRow,
       isLastMessage,
+      isStreaming,
       hasForkAnchor,
       turnTexts,
     }: {
@@ -270,6 +272,7 @@ const MessageItem: React.FC<{
       rowWidthClass: string;
       showCopyRow?: boolean;
       isLastMessage?: boolean;
+      isStreaming?: boolean;
       hasForkAnchor?: boolean;
       turnTexts?: string[];
     }) => {
@@ -281,6 +284,7 @@ const MessageItem: React.FC<{
               message={message}
               showCopyRow={showCopyRow}
               isLastMessage={isLastMessage}
+              isStreaming={isStreaming}
               hasForkAnchor={hasForkAnchor}
               turnTexts={turnTexts}
             ></MessageText>
@@ -326,6 +330,7 @@ const MessageItem: React.FC<{
     prev.rowWidthClass === next.rowWidthClass &&
     prev.showCopyRow === next.showCopyRow &&
     prev.isLastMessage === next.isLastMessage &&
+    prev.isStreaming === next.isStreaming &&
     prev.hasForkAnchor === next.hasForkAnchor &&
     // Compare by content: the map is rebuilt per render, so reference equality
     // would defeat the memo for the one row that carries the copy button.
@@ -347,6 +352,16 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
   // moving down, so we defer its copy/timestamp row until the turn finishes to
   // avoid the row flashing in and the layout reflowing mid-stream.
   const { isProcessing } = useConversationRuntimeView(conversationContext?.conversation_id ?? '');
+  const streamingTextIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!isProcessing) return ids;
+    for (let index = list.length - 1; index >= 0; index--) {
+      const message = list[index];
+      if (message.position === 'right') break;
+      if (message.type === 'text' && message.status !== 'finish' && message.status !== 'error') ids.add(message.id);
+    }
+    return ids;
+  }, [list, isProcessing]);
   const { t } = useTranslation();
   const location = useLocation();
   const locationState = (location.state || {}) as ConversationLocationState;
@@ -756,6 +771,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         rowWidthClass={rowWidthClass}
         showCopyRow={showCopyRow}
         isLastMessage={message.id === lastMessageId}
+        isStreaming={streamingTextIds.has(message.id)}
         hasForkAnchor={forkAnchoredIds.has(message.id)}
         turnTexts={aiTurnTextsById.get(message.id)}
       ></MessageItem>

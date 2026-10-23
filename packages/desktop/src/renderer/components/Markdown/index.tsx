@@ -49,6 +49,8 @@ type MarkdownViewProps = {
   /** Opt in only for assistant prose; preview documents and user messages stay unchanged. */
   highlightUserQuestions?: boolean;
   highlightedQuestionIndex?: number;
+  /** A live stream must not accept an unterminated marker line. */
+  questionsComplete?: boolean;
 };
 
 const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
@@ -61,6 +63,7 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
     allowHtml,
     highlightUserQuestions,
     highlightedQuestionIndex,
+    questionsComplete = true,
     children: childrenProp,
   }) => {
     const { t } = useTranslation();
@@ -147,11 +150,19 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
       () =>
         highlightUserQuestions
           ? [
-              [remarkChoiceQuestions, { label: t('messages.userQuestion.prose'), highlightedQuestionIndex }],
+              [
+                remarkChoiceQuestions,
+                {
+                  label: t('messages.userQuestion.prose'),
+                  fallback: t('messages.userQuestion.fallback'),
+                  complete: questionsComplete,
+                  highlightedQuestionIndex,
+                },
+              ],
               ...MARKDOWN_REMARK_PLUGINS,
             ]
           : MARKDOWN_REMARK_PLUGINS,
-      [highlightUserQuestions, highlightedQuestionIndex, t]
+      [highlightUserQuestions, highlightedQuestionIndex, questionsComplete, t]
     );
 
     return (

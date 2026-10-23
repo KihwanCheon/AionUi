@@ -1,5 +1,6 @@
 {
   "userQuestion": {
+    "fallback": "사용자 확인이 필요합니다. 위 내용을 확인해 주세요.",
     "prose": "답변 요청",
     "choice": "답변 요청 · 선택형",
     "freeText": "답변 요청 · 자유 입력"

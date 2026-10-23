@@ -9,10 +9,22 @@ type PhrasingContent = Extract<RootContent, { type: 'paragraph' }>['children'][n
 
 /** Decorate explicit prose questions without reparsing or splitting Markdown documents. */
 export const remarkChoiceQuestions =
-  ({ label, highlightedQuestionIndex }: { label: string; highlightedQuestionIndex?: number }) =>
+  ({
+    label,
+    fallback,
+    complete = false,
+    highlightedQuestionIndex,
+  }: {
+    label: string;
+    fallback: string;
+    complete?: boolean;
+    highlightedQuestionIndex?: number;
+  }) =>
   (tree: MarkdownRoot, file: { toString(): string }) => {
     const markers = new Map<number, number>();
-    new ChoiceSignalParser((index, line) => markers.set(line, index)).feed(String(file));
+    const parser = new ChoiceSignalParser((index, line) => markers.set(line, index));
+    parser.feed(String(file));
+    if (complete) parser.finish();
     if (!markers.size) return;
 
     const output: RootContent[] = [];
@@ -77,6 +89,11 @@ export const remarkChoiceQuestions =
         if (text) children.push({ ...child, value: text });
       }
       flush();
+    }
+    for (const block of output) {
+      if (block.type === 'blockquote' && block.data?.hName === 'section' && block.children.length === 1) {
+        block.children.push({ type: 'paragraph', children: [{ type: 'text', value: fallback }] });
+      }
     }
     tree.children = output;
   };

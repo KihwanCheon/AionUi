@@ -1338,6 +1338,7 @@ export type I18nKey =
   | 'messages.slash.title'
   | 'messages.unknownMessageType'
   | 'messages.userQuestion.choice'
+  | 'messages.userQuestion.fallback'
   | 'messages.userQuestion.freeText'
   | 'messages.userQuestion.prose'
   | 'pet.confirmBubble'

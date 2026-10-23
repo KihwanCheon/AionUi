@@ -1,5 +1,6 @@
 {
   "userQuestion": {
+    "fallback": "Ihre Bestätigung ist erforderlich. Bitte prüfen Sie den obigen Inhalt.",
     "prose": "Antwort erbeten",
     "choice": "Antwort erbeten · Auswahl",
     "freeText": "Antwort erbeten · Freitext"

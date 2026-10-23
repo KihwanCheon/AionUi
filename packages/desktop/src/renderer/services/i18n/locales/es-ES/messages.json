@@ -1,5 +1,6 @@
 {
   "userQuestion": {
+    "fallback": "Se necesita tu confirmación. Revisa el contenido anterior.",
     "prose": "Respuesta solicitada",
     "choice": "Respuesta solicitada · Opciones",
     "freeText": "Respuesta solicitada · Texto libre"

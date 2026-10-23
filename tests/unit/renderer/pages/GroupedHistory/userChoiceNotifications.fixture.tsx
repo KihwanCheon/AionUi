@@ -29,6 +29,9 @@ import { applyTheme } from '@/renderer/utils/theme/applyTheme';
 import { BUILTIN_THEMES } from '@/renderer/theme/builtinThemes';
 import MarkdownView from '@/renderer/components/Markdown';
 
+const trailingMarker = new URLSearchParams(window.location.search).get('case') === 'trailing';
+const trailingText = `어떻게 진행할까요?\n\n- 직접 처리\n- 자동 처리\n\n${USER_CHOICE_MARKER}`;
+
 await i18next.use(initReactI18next).init({
   lng: 'ko-KR',
   resources: { 'ko-KR': { translation: { conversation: koConversation, messages: koMessages } } },
@@ -73,8 +76,9 @@ for (const conversation of conversations) {
     type: 'content',
     conversation_id: conversation.id,
     msg_id: `message-${conversation.id}`,
-    data: `${USER_CHOICE_MARKER}\n검증이 끝나면 재시작해도 될까요?\n`,
+    data: trailingMarker ? trailingText : `${USER_CHOICE_MARKER}\n검증이 끝나면 재시작해도 될까요?\n`,
   });
+  if (trailingMarker) store.consume({ type: 'finish', conversation_id: conversation.id, data: {} });
 }
 const storageKey = 'isolated-choice-notification-fixture';
 const saved = localStorage.getItem(storageKey);
@@ -134,7 +138,9 @@ function Fixture() {
       </div>
       <div className='mt-24px max-w-650px' data-testid='fixture-message'>
         <MarkdownView highlightUserQuestions highlightedQuestionIndex={highlightedQuestionIndex}>
-          {`${USER_CHOICE_MARKER}\n검증이 끝나면 재시작해도 될까요?\n\n${USER_CHOICE_MARKER}\n별도 질문입니다.`}
+          {trailingMarker
+            ? trailingText
+            : `${USER_CHOICE_MARKER}\n검증이 끝나면 재시작해도 될까요?\n\n${USER_CHOICE_MARKER}\n별도 질문입니다.`}
         </MarkdownView>
       </div>
       <div className='w-260px flex flex-col gap-8px mt-16px'>

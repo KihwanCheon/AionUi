@@ -17,7 +17,10 @@ try {
     ['desktop-dark', 1280, 'dark'],
     ['tablet', 1024, 'dark'],
     ['phone', 390, 'dark'],
+    ['trailing-light', 1280, 'light'],
+    ['trailing-dark', 1280, 'dark'],
   ]) {
+    const trailingMarker = name.startsWith('trailing-');
     const context = await browser.newContext({ viewport: { width, height: 800 } });
     const page = await context.newPage();
     const errors = [];
@@ -34,7 +37,9 @@ try {
     await page.route('**/api/**', (route) =>
       route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: [] }) })
     );
-    await page.goto(`${host}/choice-notification-fixture.html?theme=${theme}`);
+    await page.goto(
+      `${host}/choice-notification-fixture.html?theme=${theme}&case=${trailingMarker ? 'trailing' : 'normal'}`
+    );
     await page.getByRole('button', { name: '확인이 필요한 대화 2개' }).click();
     const question = page.getByRole('button', { name: /사용자 선택 필요.*선택 질문 테스트 1/ });
     await question.waitFor();
@@ -56,7 +61,14 @@ try {
         () => document.querySelector('#c-conversation-a')?.dataset.notificationHighlight === 'true'
       );
       assert.equal(await boxes.nth(0).getAttribute('data-notification-highlight'), 'true');
-      assert.equal(await boxes.nth(1).getAttribute('data-notification-highlight'), null);
+      if (trailingMarker) {
+        assert.equal(await boxes.count(), 1);
+        assert.ok((await boxes.first().textContent()).includes('사용자 확인이 필요합니다. 위 내용을 확인해 주세요.'));
+        assert.ok(!(await boxes.first().textContent()).includes('직접 처리'));
+        assert.ok(!(await page.getByTestId('fixture-message').innerText()).includes('[[AIONUI_USER_CHOICE_REQUIRED]]'));
+      } else {
+        assert.equal(await boxes.nth(1).getAttribute('data-notification-highlight'), null);
+      }
       assert.notEqual(await row.evaluate((element) => getComputedStyle(element).boxShadow), 'none');
       assert.equal(await boxes.nth(0).evaluate((element) => getComputedStyle(element).outlineStyle), 'solid');
       assert.equal(await page.getByTestId('fixture-navigation').getAttribute('data-path'), '/guid');
