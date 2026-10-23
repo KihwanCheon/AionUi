@@ -23,6 +23,11 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }
 
 import ConversationRow from '@/renderer/pages/conversation/GroupedHistory/ConversationRow';
 import type { ConversationRowProps } from '@/renderer/pages/conversation/GroupedHistory/types';
+import {
+  NotificationHighlightProvider,
+  useNotificationHighlight,
+} from '@/renderer/hooks/context/UserChoiceNotifications/NotificationHighlight';
+import highlightStyles from '@/renderer/hooks/context/UserChoiceNotifications/highlight.module.css';
 
 const conversation = {
   id: 'conv-1',
@@ -87,6 +92,31 @@ describe('ConversationRow', () => {
   });
 
   afterEach(() => vi.restoreAllMocks());
+
+  it('uses the same outline with a distinct sender tone, then restores notification styling', () => {
+    const Preview = ({ source }: { source: boolean }) => {
+      const { highlight, clear } = useNotificationHighlight();
+      React.useEffect(() => {
+        highlight({ key: 'preview', conversationId: conversation.id, ...(source && { tone: 'source' as const }) });
+        return () => clear('preview');
+      }, [source, highlight, clear]);
+      return null;
+    };
+    const view = (source: boolean) => (
+      <NotificationHighlightProvider>
+        <Preview source={source} />
+        <ConversationRow {...baseProps} />
+        <ConversationRow {...baseProps} conversation={{ ...conversation, id: 'other' }} />
+      </NotificationHighlightProvider>
+    );
+    const { rerender } = render(view(true));
+    const row = document.getElementById('c-conv-1');
+    expect(row).toHaveClass(highlightStyles.conversation, highlightStyles.sourceConversation);
+    expect(document.getElementById('c-other')).not.toHaveClass(highlightStyles.conversation);
+    rerender(view(false));
+    expect(row).toHaveClass(highlightStyles.conversation);
+    expect(row).not.toHaveClass(highlightStyles.sourceConversation);
+  });
 
   it('shows the full conversation title when hovering anywhere on an expanded desktop row', async () => {
     const title = 'A conversation title that is longer than the available sidebar width';

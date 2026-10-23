@@ -28,7 +28,7 @@ import MindNProgressTitle from './components/MindNProgressTitle';
 import {
   ConversationChoiceBadge,
   notificationHighlightStyles,
-  useConversationNotificationHighlight,
+  useConversationHighlight,
   useUserChoiceNotifications,
 } from '@renderer/hooks/context/UserChoiceNotifications';
 
@@ -71,7 +71,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
   const { notices } = useUserChoiceNotifications();
-  const isNoticeHighlighted = useConversationNotificationHighlight(conversation.id);
+  const highlightTone = useConversationHighlight(conversation.id);
   const hasChoiceNotice = notices.some((notice) => notice.conversationId === conversation.id);
   const {
     onToggleChecked,
@@ -224,13 +224,15 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     >
       <div
         id={'c-' + conversation.id}
-        data-notification-highlight={isNoticeHighlighted || undefined}
+        data-notification-highlight={highlightTone === 'notification' || undefined}
+        data-source-highlight={highlightTone === 'source' || undefined}
         className={classNames(
           'chat-history__item h-34px rd-8px flex items-center group cursor-pointer relative overflow-hidden shrink-0 conversation-item [&.conversation-item+&.conversation-item]:mt-2px min-w-0 transition-colors',
           collapsed ? 'justify-center px-0' : `justify-start gap-8px ${hasChoiceNotice ? 'pe-56px' : 'pe-16px'}`,
           // dimIcon means this row sits inside a project/cron parent — visually indent the row content while keeping the bg full-width
           !collapsed && (dimIcon ? 'ps-34px' : 'ps-10px'),
-          isNoticeHighlighted && notificationHighlightStyles.conversation,
+          highlightTone && notificationHighlightStyles.conversation,
+          highlightTone === 'source' && notificationHighlightStyles.sourceConversation,
           {
             'hover:bg-fill-3': !batchMode && !selected,
             '!bg-fill-3': selected,

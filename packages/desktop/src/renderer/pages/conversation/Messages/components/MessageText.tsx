@@ -34,6 +34,7 @@ import {
   notificationHighlightStyles,
   useMessageNotificationHighlight,
   useCompletedChoiceMessage,
+  useSourceConversationPreview,
 } from '@renderer/hooks/context/UserChoiceNotifications';
 
 /**
@@ -176,6 +177,9 @@ const MessageText: React.FC<{
   const { text: textWithoutSource, source: deliverySource } = useMemo(
     () => (isUserMessage ? parseConversationSourceBlock(text) : { text, source: null }),
     [isUserMessage, text]
+  );
+  const sourcePreview = useSourceConversationPreview(
+    deliverySource?.externalUrl === undefined ? deliverySource?.fromId : undefined
   );
   const { text: visibleText, sessions: mentionedSessions } = useMemo(
     () => (isUserMessage ? parseSessionsBlock(textWithoutSource) : { text: textWithoutSource, sessions: [] }),
@@ -355,6 +359,7 @@ const MessageText: React.FC<{
               type='text'
               size='mini'
               className='!h-auto !p-0 !text-12px !text-t-secondary'
+              {...sourcePreview}
               disabled={deliverySource.externalUrl === null}
               onClick={() => {
                 if (deliverySource.externalUrl) {

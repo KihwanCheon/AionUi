@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useState, useSyncExternalStore } from 'react';
+import React, { createContext, useContext, useEffect, useId, useState, useSyncExternalStore } from 'react';
 
 type NotificationTarget = {
   key: string;
   conversationId: string;
   messageId?: string;
   markerIndex?: number;
+  tone?: 'source';
 };
 
 const createHighlightStore = () => {
@@ -33,7 +34,7 @@ const createHighlightStore = () => {
 
 const HighlightContext = createContext(createHighlightStore());
 
-/** Keep transient notification previews separate from persisted notice state. */
+/** Keep transient conversation previews separate from persisted notice state. */
 export function NotificationHighlightProvider({ children }: { children: React.ReactNode }) {
   const [store] = useState(createHighlightStore);
   return <HighlightContext.Provider value={store}>{children}</HighlightContext.Provider>;
@@ -43,13 +44,42 @@ export function NotificationHighlightProvider({ children }: { children: React.Re
 export const useNotificationHighlight = () => useContext(HighlightContext);
 
 /** Subscribe to this row only, so unrelated conversations do not rerender on hover. */
-export function useConversationNotificationHighlight(conversationId: string): boolean {
+export function useConversationHighlight(conversationId: string): 'notification' | 'source' | undefined {
   const store = useContext(HighlightContext);
   return useSyncExternalStore(
     store.subscribe,
-    () => store.getSnapshot()?.conversationId === conversationId,
-    () => false
+    () => {
+      const target = store.getSnapshot();
+      return target?.conversationId === conversationId ? (target.tone ?? 'notification') : undefined;
+    },
+    (): undefined => undefined
   );
+}
+
+/** Read notification previews without treating sender links as pending choices. */
+export function useConversationNotificationHighlight(conversationId: string): boolean {
+  return useConversationHighlight(conversationId) === 'notification';
+}
+
+/** Highlight a local sender while its badge is hovered or keyboard-focused. */
+export function useSourceConversationPreview(conversationId?: string) {
+  const { highlight, clear } = useNotificationHighlight();
+  const id = useId();
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const active = hovered || focused;
+  useEffect(() => {
+    if (!conversationId || !active) return;
+    const key = `source:${id}`;
+    highlight({ key, conversationId, tone: 'source' });
+    return () => clear(key);
+  }, [conversationId, id, active, highlight, clear]);
+  return {
+    onMouseEnter: () => setHovered(true),
+    onMouseLeave: () => setHovered(false),
+    onFocus: () => setFocused(true),
+    onBlur: () => setFocused(false),
+  };
 }
 
 /** Resolve the exact question by conversation, message identity, and marker index. */

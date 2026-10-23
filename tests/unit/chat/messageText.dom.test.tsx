@@ -22,6 +22,7 @@ import { openExternalUrl } from '@/renderer/utils/platform';
 import {
   NotificationHighlightProvider,
   useNotificationHighlight,
+  useConversationHighlight,
 } from '@/renderer/hooks/context/UserChoiceNotifications/NotificationHighlight';
 
 const mnpContent = (source: Record<string, unknown>, body = '# MindNProgress 업무 전문') =>
@@ -754,21 +755,32 @@ describe('MessageText session message navigation', () => {
     vi.mocked(openExternalUrl).mockClear();
   });
 
-  const renderSessionMessage = (content: string, position: IMessageText['position'] = 'right') =>
-    render(
+  const HighlightState = ({ id }: { id: string }) => (
+    <output data-testid={`highlight-${id}`}>{useConversationHighlight(id) ?? 'none'}</output>
+  );
+  const sessionView = (content: string | null, position: IMessageText['position'] = 'right') => (
+    <NotificationHighlightProvider>
+      {['sender-123', 'recipient', 'other'].map((id) => (
+        <HighlightState key={id} id={id} />
+      ))}
       <ConversationProvider value={{ conversation_id: 'recipient', workspace: '/workspace/demo', type: 'acp' }}>
-        <MessageText
-          showCopyRow={false}
-          message={{
-            id: 'received-message',
-            conversation_id: 'recipient',
-            type: 'text',
-            position,
-            content: { content },
-          }}
-        />
+        {content !== null && (
+          <MessageText
+            showCopyRow={false}
+            message={{
+              id: 'received-message',
+              conversation_id: 'recipient',
+              type: 'text',
+              position,
+              content: { content },
+            }}
+          />
+        )}
       </ConversationProvider>
-    );
+    </NotificationHighlightProvider>
+  );
+  const renderSessionMessage = (content: string, position: IMessageText['position'] = 'right') =>
+    render(sessionView(content, position));
 
   const deliveryContent = (id = 'sender-123', name = 'Sender conversation', workspace = 'same') =>
     [
@@ -779,6 +791,55 @@ describe('MessageText session message navigation', () => {
       '[[/AION_SESSION_MESSAGE]]',
       'The delegated work is complete.',
     ].join('\n');
+
+  it.each([
+    ['session', deliveryContent()],
+    ['delegation', mnpContent({ kind: 'delegation', conversationId: 'sender-123' })],
+    ['report', mnpContent({ kind: 'report', conversationId: 'sender-123' })],
+  ])('previews only the local %s sender on hover without navigation', (_kind, content) => {
+    renderSessionMessage(content);
+    const badge = screen.getByRole('button', { name: /From conversation/ });
+    fireEvent.mouseEnter(badge);
+    expect(['sender-123', 'recipient', 'other'].map((id) => screen.getByTestId(`highlight-${id}`).textContent)).toEqual(
+      ['source', 'none', 'none']
+    );
+    expect(forkMocks.navigate).not.toHaveBeenCalled();
+    fireEvent.mouseLeave(badge);
+    expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('none');
+  });
+
+  it('keeps the sender preview while keyboard focus remains and clears it on blur', () => {
+    renderSessionMessage(deliveryContent());
+    const badge = screen.getByRole('button', { name: /From conversation/ });
+    fireEvent.focus(badge);
+    expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('source');
+    fireEvent.mouseEnter(badge);
+    fireEvent.mouseLeave(badge);
+    expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('source');
+    fireEvent.blur(badge);
+    expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('none');
+  });
+
+  it('updates the preview when the source changes and clears it when the message unmounts', () => {
+    const { rerender } = renderSessionMessage(deliveryContent());
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /From conversation/ }));
+    rerender(sessionView(deliveryContent('other')));
+    expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('none');
+    expect(screen.getByTestId('highlight-other')).toHaveTextContent('source');
+    rerender(sessionView(null));
+    expect(screen.getByTestId('highlight-other')).toHaveTextContent('none');
+  });
+
+  it.each([null, 'http://remote.example/#/conversation/sender-123'])(
+    'does not highlight an unrelated local ID for a remote sender (%s)',
+    (externalUrl) => {
+      renderSessionMessage(mnpContent({ kind: 'report', conversationId: 'sender-123', externalUrl }));
+      const badge = screen.getByRole('button', { name: /From conversation/ });
+      fireEvent.mouseEnter(badge);
+      fireEvent.focus(badge);
+      expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('none');
+    }
+  );
 
   it.each([
     { kind: 'delegation', conversationId: 'parent-1', name: '상위 업무 대화' },

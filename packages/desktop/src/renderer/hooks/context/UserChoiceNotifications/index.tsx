@@ -145,8 +145,10 @@ export function ChoiceNotificationLayoutProvider({
 export { default as UserChoiceNotificationButton } from './components/NotificationButton';
 export { ConversationChoiceBadge, ProjectChoiceBadge } from './components/ChoiceBadge';
 export {
+  useConversationHighlight,
   useConversationNotificationHighlight,
   useMessageNotificationHighlight,
   useNotificationHighlight,
+  useSourceConversationPreview,
 } from './NotificationHighlight';
 export { default as notificationHighlightStyles } from './highlight.module.css';
