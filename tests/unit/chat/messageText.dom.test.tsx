@@ -18,6 +18,10 @@ import MessageText, {
   parseTeamContextResetNotice,
 } from '@/renderer/pages/conversation/Messages/components/MessageText';
 import { copyText } from '@/renderer/utils/ui/clipboard';
+import { openExternalUrl } from '@/renderer/utils/platform';
+
+const mnpContent = (source: Record<string, unknown>, body = '# MindNProgress 업무 전문') =>
+  `[[MNP_CONVERSATION_SOURCE]]\n${JSON.stringify(source)}\n[[/MNP_CONVERSATION_SOURCE]]\n\n${body}`;
 
 const previewMocks = vi.hoisted(() => ({
   openPreview: vi.fn(),
@@ -156,6 +160,10 @@ vi.mock('@/renderer/pages/conversation/Messages/components/TeammateMessageAvatar
 
 vi.mock('@/renderer/utils/ui/clipboard', () => ({
   copyText: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@/renderer/utils/platform', () => ({
+  openExternalUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@arco-design/web-react', () => {
@@ -731,9 +739,10 @@ describe('MessageText session message navigation', () => {
     forkMocks.navigate.mockReset();
     sessionMentionMocks.mention.mockReset();
     sessionMentionMocks.available = true;
+    vi.mocked(openExternalUrl).mockClear();
   });
 
-  const renderSessionMessage = (content: string) =>
+  const renderSessionMessage = (content: string, position: IMessageText['position'] = 'right') =>
     render(
       <ConversationProvider value={{ conversation_id: 'recipient', workspace: '/workspace/demo', type: 'acp' }}>
         <MessageText
@@ -742,7 +751,7 @@ describe('MessageText session message navigation', () => {
             id: 'received-message',
             conversation_id: 'recipient',
             type: 'text',
-            position: 'right',
+            position,
             content: { content },
           }}
         />
@@ -758,6 +767,63 @@ describe('MessageText session message navigation', () => {
       '[[/AION_SESSION_MESSAGE]]',
       'The delegated work is complete.',
     ].join('\n');
+
+  it.each([
+    { kind: 'delegation', conversationId: 'parent-1', name: '상위 업무 대화' },
+    { kind: 'report', conversationId: 'child-1', name: '하위 업무 대화' },
+  ])('opens the source of an MnP $kind without adding a draft mention', (source) => {
+    renderSessionMessage(mnpContent(source));
+    fireEvent.click(screen.getByRole('button', { name: `From conversation ${source.name}` }));
+    expect(forkMocks.navigate).toHaveBeenCalledWith(`/conversation/${source.conversationId}`);
+    expect(sessionMentionMocks.mention).not.toHaveBeenCalled();
+    expect(screen.getByTestId('message-text-content')).not.toHaveTextContent('[[MNP_CONVERSATION_SOURCE]]');
+  });
+
+  it('opens a remote reporting conversation in its own WebUI', () => {
+    const externalUrl = 'http://sub.example:7777/#/conversation/child-1';
+    renderSessionMessage(mnpContent({ kind: 'report', conversationId: 'child-1', name: '하위 대화', externalUrl }));
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation 하위 대화' }));
+    expect(openExternalUrl).toHaveBeenCalledWith(externalUrl);
+    expect(forkMocks.navigate).not.toHaveBeenCalled();
+    expect(sessionMentionMocks.mention).not.toHaveBeenCalled();
+  });
+
+  it('does not navigate locally when the remote machine address is unavailable', () => {
+    renderSessionMessage(mnpContent({ kind: 'report', conversationId: 'child-1', externalUrl: null }));
+    const badge = screen.getByRole('button', { name: 'From conversation child-1' });
+    expect(badge).toBeDisabled();
+    fireEvent.click(badge);
+    expect(forkMocks.navigate).not.toHaveBeenCalled();
+    expect(openExternalUrl).not.toHaveBeenCalled();
+  });
+
+  it.each(['{Enter}', ' '])('opens the MnP source with the %s key', async (key) => {
+    const user = userEvent.setup();
+    renderSessionMessage(mnpContent({ kind: 'delegation', conversationId: 'parent-1', name: '상위 대화' }));
+    screen.getByRole('button', { name: 'From conversation 상위 대화' }).focus();
+    await user.keyboard(key);
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/parent-1');
+    expect(sessionMentionMocks.mention).not.toHaveBeenCalled();
+  });
+
+  it('keeps the outer report source when a child quotes a session message', () => {
+    renderSessionMessage(
+      mnpContent({ kind: 'report', conversationId: 'child-1', name: '하위 대화' }, deliveryContent())
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation 하위 대화' }));
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/child-1');
+    expect(screen.queryByRole('button', { name: 'From conversation Sender conversation' })).not.toBeInTheDocument();
+  });
+
+  it.each(['right', 'left'] as const)(
+    'does not create a source badge for invalid or assistant-provided metadata (%s)',
+    (position) => {
+      const source = { kind: 'report', conversationId: position === 'right' ? '' : 'child-1' };
+      renderSessionMessage(mnpContent(source), position);
+      expect(screen.queryByRole('button', { name: /From conversation/ })).not.toBeInTheDocument();
+      expect(screen.getByTestId('message-text-content')).toHaveTextContent('[[MNP_CONVERSATION_SOURCE]]');
+    }
+  );
 
   it('opens the sending conversation by ID without adding a mention to the draft', () => {
     renderSessionMessage(deliveryContent());

@@ -7,7 +7,7 @@
 import type { IMessageText } from '@/common/chat/chatLib';
 import { parseFileMarker, resolveMessageFilePath } from './fileMarker';
 import SessionMentionAction from './SessionMentionAction';
-import { parseSessionMessageBlock, parseSessionsBlock } from './sessionMarkers';
+import { parseConversationSourceBlock, parseSessionsBlock } from './sessionMarkers';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useLocalFilePreview } from '@/renderer/pages/conversation/Preview/hooks/useLocalFilePreview';
@@ -19,6 +19,7 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { copyText } from '@/renderer/utils/ui/clipboard';
+import { openExternalUrl } from '@/renderer/utils/platform';
 import CollapsibleContent from '@renderer/components/chat/CollapsibleContent';
 import FilePreview from '@renderer/components/media/FilePreview';
 import HorizontalFileList from '@renderer/components/media/HorizontalFileList';
@@ -158,13 +159,13 @@ const MessageText: React.FC<{
   // `[[AION_SESSIONS]]` block is appended to the user's own message, and a
   // delivery is persisted as a user message too. Not parsing them would show
   // raw marker text in a bubble.
-  const { text: textWithoutMentions, sessions: mentionedSessions } = useMemo(
-    () => (isUserMessage ? parseSessionsBlock(text) : { text, sessions: [] }),
+  const { text: textWithoutSource, source: deliverySource } = useMemo(
+    () => (isUserMessage ? parseConversationSourceBlock(text) : { text, source: null }),
     [isUserMessage, text]
   );
-  const { text: visibleText, source: deliverySource } = useMemo(
-    () => (isUserMessage ? parseSessionMessageBlock(textWithoutMentions) : { text: textWithoutMentions, source: null }),
-    [isUserMessage, textWithoutMentions]
+  const { text: visibleText, sessions: mentionedSessions } = useMemo(
+    () => (isUserMessage ? parseSessionsBlock(textWithoutSource) : { text: textWithoutSource, sessions: [] }),
+    [isUserMessage, textWithoutSource]
   );
   const contextResetNotice = useMemo(
     () => (isTeammateMessage && senderName === 'team_system' ? parseTeamContextResetNotice(text) : null),
@@ -339,7 +340,14 @@ const MessageText: React.FC<{
               type='text'
               size='mini'
               className='!h-auto !p-0 !text-12px !text-t-secondary'
-              onClick={() => void navigate(`/conversation/${encodeURIComponent(deliverySource.fromId)}`)}
+              disabled={deliverySource.externalUrl === null}
+              onClick={() => {
+                if (deliverySource.externalUrl) {
+                  void openExternalUrl(deliverySource.externalUrl).catch(console.error);
+                } else {
+                  void navigate(`/conversation/${encodeURIComponent(deliverySource.fromId)}`);
+                }
+              }}
             >
               {t('conversation.crossSession.fromBadge', {
                 name: deliverySource.fromName || deliverySource.fromId,

@@ -22,6 +22,8 @@ export type SessionDeliverySource = {
   fromId: string;
   workspace: string;
   replyTo: string;
+  // Undefined means local; null means a remote source without a usable URL.
+  externalUrl?: string | null;
 };
 
 /**
@@ -111,4 +113,58 @@ export function parseSessionMessageBlock(content: string): { text: string; sourc
   }
 
   return { text: block.text, source: { fromName, fromId, workspace, replyTo } };
+}
+
+/** Parse the outer sender of a session message or an MnP delegation/report. */
+export function parseConversationSourceBlock(content: string): { text: string; source: SessionDeliverySource | null } {
+  if (!content.startsWith('[[MNP_CONVERSATION_SOURCE]]')) return parseSessionMessageBlock(content);
+
+  // Only the leading envelope identifies the sender. Quoted child results can
+  // contain their own envelopes and must not replace the outer source.
+  const block = /^\[\[MNP_CONVERSATION_SOURCE\]\]\r?\n([^\r\n]+)\r?\n\[\[\/MNP_CONVERSATION_SOURCE\]\](?:\r?\n|$)/.exec(
+    content
+  );
+  const unchanged: { text: string; source: null } = { text: content, source: null };
+  if (!block) return unchanged;
+  try {
+    const data: unknown = JSON.parse(block[1]);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return unchanged;
+    const source = data as Record<string, unknown>;
+    if (
+      (source.kind !== 'delegation' && source.kind !== 'report') ||
+      typeof source.conversationId !== 'string' ||
+      !source.conversationId.trim() ||
+      (source.name !== undefined && typeof source.name !== 'string')
+    )
+      return unchanged;
+
+    const fromId = source.conversationId.trim();
+    let externalUrl: string | null | undefined;
+    if (source.externalUrl === null) {
+      externalUrl = null;
+    } else if (source.externalUrl !== undefined) {
+      if (typeof source.externalUrl !== 'string') return unchanged;
+      const url = new URL(source.externalUrl);
+      if (
+        !['http:', 'https:'].includes(url.protocol) ||
+        url.username ||
+        url.password ||
+        url.hash !== `#/conversation/${encodeURIComponent(fromId)}`
+      )
+        return unchanged;
+      externalUrl = url.toString();
+    }
+    return {
+      text: content.slice(block[0].length).trim(),
+      source: {
+        fromId,
+        fromName: typeof source.name === 'string' ? source.name.trim() : '',
+        workspace: '',
+        replyTo: '',
+        ...(externalUrl !== undefined ? { externalUrl } : {}),
+      },
+    };
+  } catch {
+    return unchanged;
+  }
 }
