@@ -33,6 +33,7 @@ import { useTypewriterPlaceholder } from './hooks/useTypewriterPlaceholder';
 import { ensureBackendMcpCatalog } from '@/renderer/hooks/mcp/catalog';
 import { resolveGuidAssistantDefaults } from './utils/assistantDefaults';
 import { handleBackslashLineContinuation } from '@/renderer/utils/ui/input/lineContinuation';
+import { getChatEnterMode, isChatNewlineKey } from '@/renderer/utils/ui/input/chatEnterPolicy';
 import SpeechInputButton from '@/renderer/components/chat/SpeechInputButton';
 import { chatFileRefPath, uploadFileRef } from '@/common/types/chatFile';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
@@ -59,6 +60,7 @@ type GuidNavigationState = {
 
 const GuidPage: React.FC = () => {
   const { t, i18n } = useTranslation();
+  const enterMode = getChatEnterMode();
   const navigate = useNavigate();
   const location = useLocation();
   const handleExternalLaunchCallbackPending = useCallback(() => {
@@ -334,6 +336,7 @@ const GuidPage: React.FC = () => {
       if (slashController.onKeyDown(event)) {
         return;
       }
+      if (isChatNewlineKey(event, enterMode)) return;
 
       if (event.key === 'Enter' && !event.shiftKey) {
         if (handleBackslashLineContinuation(event, guidInput.setInput)) return;
@@ -345,7 +348,7 @@ const GuidPage: React.FC = () => {
         send.sendMessageHandler();
       }
     },
-    [guidInput.setInput, send.isButtonDisabled, send.sendMessageHandler, slashController]
+    [enterMode, guidInput.setInput, send.isButtonDisabled, send.sendMessageHandler, slashController]
   );
 
   const handleSelectAssistant = useCallback(
@@ -757,6 +760,7 @@ const GuidPage: React.FC = () => {
             input={guidInput.input}
             onInputChange={handleInputChange}
             onKeyDown={handleInputKeyDown}
+            enterKeyHint={enterMode === 'newline' ? 'enter' : 'send'}
             onPaste={guidInput.onPaste}
             onFocus={guidInput.handleTextareaFocus}
             onBlur={guidInput.handleTextareaBlur}

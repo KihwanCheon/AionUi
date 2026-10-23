@@ -5,6 +5,7 @@
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React, { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -128,14 +129,14 @@ import SendBox from '@/renderer/components/chat/SendBox';
 const desktopElectronApi = window.electronAPI;
 const originalMatchMedia = window.matchMedia;
 
-const useWebEnvironment = (touchFirst: boolean): void => {
+const useWebEnvironment = (touchFirst: boolean, touchMedia = '(pointer: coarse)'): void => {
   Object.defineProperty(window, 'electronAPI', { configurable: true, value: undefined, writable: true });
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     value: vi.fn(
       (query: string) =>
         ({
-          matches: touchFirst && (query === '(hover: none)' || query === '(pointer: coarse)'),
+          matches: touchFirst && query === touchMedia,
           media: query,
           onchange: null,
           addEventListener: vi.fn(),
@@ -162,6 +163,7 @@ const SendBoxHarness = ({
   initialValue = '',
   onSend = vi.fn().mockResolvedValue(undefined),
   onAddToDraft,
+  slashCommands,
 }: {
   active?: boolean;
   onFocused?: () => void;
@@ -169,6 +171,7 @@ const SendBoxHarness = ({
   initialValue?: string;
   onSend?: (message: string) => Promise<void | false>;
   onAddToDraft?: () => void;
+  slashCommands?: React.ComponentProps<typeof SendBox>['slash_commands'];
 }) => {
   const [value, setValue] = useState(initialValue);
   return (
@@ -180,6 +183,7 @@ const SendBoxHarness = ({
       onFocused={onFocused}
       disabled={disabled}
       onAddToDraft={onAddToDraft}
+      slash_commands={slashCommands}
     />
   );
 };
@@ -253,6 +257,125 @@ describe('SendBox active-controlled focus', () => {
     fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter', ctrlKey: true });
 
     expect(onAddToDraft).toHaveBeenCalledTimes(1);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { device: 'phone', mobileLayout: true, touchMedia: '(pointer: coarse)' },
+    { device: 'large tablet', mobileLayout: false, touchMedia: '(hover: none)' },
+  ])('inserts a newline with Enter on a $device', async ({ mobileLayout, touchMedia }) => {
+    layoutState.isMobile = mobileLayout;
+    useWebEnvironment(true, touchMedia);
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<SendBoxHarness initialValue='first line' onSend={onSend} />);
+    const textarea = screen.getByTestId('sendbox-input');
+
+    await user.click(textarea);
+    await user.keyboard('{End}{Enter}second line');
+
+    expect(textarea).toHaveValue('first line\nsecond line');
+    expect(textarea).toHaveStyle({ whiteSpace: 'pre-wrap' });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('sends a multiline touch draft with the button and advertises a newline key', async () => {
+    useWebEnvironment(true);
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    render(<SendBoxHarness initialValue={'first line\nsecond line'} onSend={onSend} />);
+
+    expect(screen.getByTestId('sendbox-input')).toHaveAttribute('enterkeyhint', 'enter');
+    expect(screen.getByTestId('sendbox-send-btn')).toHaveAttribute('aria-label', 'Send now');
+    fireEvent.click(screen.getByTestId('sendbox-send-btn'));
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('first line\nsecond line'));
+  });
+
+  it.each(['web', 'electron'])('keeps Enter submission in a narrow %s desktop', async (environment) => {
+    layoutState.isMobile = true;
+    useWebEnvironment(environment === 'electron');
+    if (environment === 'electron') {
+      Object.defineProperty(window, 'electronAPI', { configurable: true, value: {}, writable: true });
+    }
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    render(<SendBoxHarness initialValue='desktop message' onSend={onSend} />);
+
+    expect(screen.getByTestId('sendbox-input')).toHaveAttribute('enterkeyhint', 'send');
+    expect(screen.getByTestId('sendbox-send-btn')).toHaveAttribute('aria-label', 'Send now · Enter');
+    await act(async () => {
+      fireEvent.keyDown(screen.getByTestId('sendbox-input'), { key: 'Enter', code: 'Enter' });
+    });
+    expect(onSend).toHaveBeenCalledWith('desktop message');
+  });
+
+  it('keeps Ctrl+Enter assigned to the draft box on touch clients', () => {
+    useWebEnvironment(true);
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const onAddToDraft = vi.fn();
+    render(<SendBoxHarness initialValue='save this draft' onSend={onSend} onAddToDraft={onAddToDraft} />);
+
+    fireEvent.keyDown(screen.getByTestId('sendbox-input'), { key: 'Enter', code: 'Enter', ctrlKey: true });
+
+    expect(onAddToDraft).toHaveBeenCalledTimes(1);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('accepts slash menu selections before treating touch Enter as a newline', () => {
+    useWebEnvironment(true);
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    render(
+      <SendBoxHarness
+        initialValue='/review'
+        onSend={onSend}
+        slashCommands={[{ name: 'review', description: 'Review changes', kind: 'template', source: 'acp' }]}
+      />
+    );
+    const textarea = screen.getByTestId('sendbox-input');
+
+    fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter' });
+
+    expect(textarea).toHaveValue('/review ');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('preserves a trailing backslash when Enter is already a touch newline', async () => {
+    useWebEnvironment(true);
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<SendBoxHarness initialValue={'first line\\'} onSend={onSend} />);
+    const textarea = screen.getByTestId('sendbox-input');
+
+    await user.click(textarea);
+    await user.keyboard('{End}{Enter}');
+
+    expect(textarea).toHaveValue('first line\\\n');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('keeps Shift+Enter as a desktop newline', async () => {
+    useWebEnvironment(false);
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<SendBoxHarness initialValue='first line' onSend={onSend} />);
+    const textarea = screen.getByTestId('sendbox-input');
+
+    await user.click(textarea);
+    await user.keyboard('{End}{Shift>}{Enter}{/Shift}');
+
+    expect(textarea).toHaveValue('first line\n');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('does not submit while composing Korean (touch: %s)', (touchFirst) => {
+    useWebEnvironment(touchFirst);
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    render(<SendBoxHarness initialValue='한글' onSend={onSend} />);
+    const textarea = screen.getByTestId('sendbox-input');
+
+    fireEvent.compositionStart(textarea);
+    const defaultAllowed = fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter', isComposing: true });
+    fireEvent.compositionEnd(textarea, { data: '글' });
+
+    expect(defaultAllowed).toBe(true);
     expect(onSend).not.toHaveBeenCalled();
   });
 

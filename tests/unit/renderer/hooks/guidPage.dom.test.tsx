@@ -4,10 +4,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LayoutContext } from '@/renderer/hooks/context/LayoutContext';
+
+const originalMatchMedia = window.matchMedia;
+const desktopElectronApi = window.electronAPI;
+
+const useTouchWebEnvironment = (): void => {
+  Object.defineProperty(window, 'electronAPI', { configurable: true, value: undefined, writable: true });
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn((query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+    writable: true,
+  });
+};
+
+afterEach(() => {
+  Object.defineProperty(window, 'electronAPI', { configurable: true, value: desktopElectronApi, writable: true });
+  Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia, writable: true });
+});
 
 const {
   modelSelectionMock,
@@ -232,6 +259,7 @@ vi.mock('@/renderer/hooks/system/useSpeechInput', () => ({
 }));
 
 vi.mock('@/renderer/utils/platform', () => ({
+  isElectronDesktop: () => Boolean(window.electronAPI),
   openExternalUrl: vi.fn(),
   resolveExtensionAssetUrl: vi.fn(),
   resolveBackendAssetUrl: vi.fn((path: string) => path),
@@ -801,9 +829,81 @@ describe('GuidPage', () => {
     // Restore shared mock state for later tests.
     sendMock.isButtonDisabled = false;
   });
+
+  it.each(['', 'first line'])('leaves Enter as a touch newline without starting a conversation (%s)', (input) => {
+    useTouchWebEnvironment();
+    guidInputMock.input = input;
+    sendMock.isButtonDisabled = false;
+    sendMock.sendMessageHandler.mockClear();
+    render(<GuidPage />);
+    const props = capturedGuidInputCardProps.at(-1);
+    const onKeyDown = props?.onKeyDown as (event: unknown) => void;
+    const preventDefault = vi.fn();
+
+    onKeyDown({ key: 'Enter', shiftKey: false, preventDefault });
+
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(sendMock.sendMessageHandler).not.toHaveBeenCalled();
+    expect(props?.enterKeyHint).toBe('enter');
+  });
+
+  it('still starts a touch conversation from the send button', () => {
+    useTouchWebEnvironment();
+    sendMock.isButtonDisabled = false;
+    sendMock.sendMessageHandler.mockClear();
+    render(<GuidPage />);
+
+    const onSend = capturedGuidActionRowProps.at(-1)?.onSend as () => void;
+    onSend();
+
+    expect(sendMock.sendMessageHandler).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('GuidInputCard prefill focus', () => {
+  it('accepts a multiline touch draft and preserves the newline keyboard hint', async () => {
+    const { default: GuidInputCard } = await vi.importActual<
+      typeof import('@/renderer/pages/guid/components/GuidInputCard')
+    >('@/renderer/pages/guid/components/GuidInputCard');
+    const user = userEvent.setup();
+    const onKeyDown = vi.fn();
+    const Harness = () => {
+      const [value, setValue] = React.useState('first line');
+      return (
+        <GuidInputCard
+          {...guidInputCardProps}
+          input={value}
+          onInputChange={setValue}
+          onKeyDown={onKeyDown}
+          enterKeyHint='enter'
+        />
+      );
+    };
+    render(<Harness />);
+    const textarea = screen.getByTestId('guid-input');
+
+    await user.click(textarea);
+    await user.keyboard('{End}{Enter}second line');
+
+    expect(textarea).toHaveValue('first line\nsecond line');
+    expect(textarea).toHaveAttribute('enterkeyhint', 'enter');
+  });
+
+  it('does not forward Enter to the send handler during Korean composition', async () => {
+    const { default: GuidInputCard } = await vi.importActual<
+      typeof import('@/renderer/pages/guid/components/GuidInputCard')
+    >('@/renderer/pages/guid/components/GuidInputCard');
+    const onKeyDown = vi.fn();
+    render(<GuidInputCard {...guidInputCardProps} onKeyDown={onKeyDown} enterKeyHint='enter' />);
+    const textarea = screen.getByTestId('guid-input');
+
+    fireEvent.compositionStart(textarea);
+    fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter', isComposing: true });
+    fireEvent.compositionEnd(textarea, { data: '글' });
+
+    expect(onKeyDown).not.toHaveBeenCalled();
+  });
+
   it('focuses a draft-preserving prefill on desktop', async () => {
     const { default: GuidInputCard } = await vi.importActual<
       typeof import('@/renderer/pages/guid/components/GuidInputCard')

@@ -56,6 +56,7 @@ import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMe
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { useCompositionInput } from '@renderer/hooks/chat/useCompositionInput';
+import { getChatEnterMode, isChatNewlineKey } from '@/renderer/utils/ui/input/chatEnterPolicy';
 import { useConversationExport } from '@renderer/hooks/file/useConversationExport';
 import { useDragUpload } from '@renderer/hooks/file/useDragUpload';
 import { useLatestRef } from '@renderer/hooks/ui/useLatestRef';
@@ -347,6 +348,7 @@ const SendBox: React.FC<{
 }) => {
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
+  const enterMode = getChatEnterMode();
   const requiresExplicitInputFocus = shouldRequireExplicitInputFocus(isMobile);
   // Mobile compact mode: parent supplies the `+` action sheet, which collapses
   // tools/rightTools into a single launcher and lets the textarea start as a single line.
@@ -1679,7 +1681,11 @@ const SendBox: React.FC<{
     defaultValue: isMacOS() ? '⌘ + Enter' : 'Ctrl + Enter',
   });
   const sendActionTooltip =
-    sendDisabled && sendDisabledTooltip ? sendDisabledTooltip : `${sendNowLabel} · ${enterShortcutLabel}`;
+    sendDisabled && sendDisabledTooltip
+      ? sendDisabledTooltip
+      : enterMode === 'newline'
+        ? sendNowLabel
+        : `${sendNowLabel} · ${enterShortcutLabel}`;
   const draftActionBaseTooltip = addToDraftTooltip ?? addToDraftLabel;
 
   const handlePrimaryAction = () => {
@@ -2160,6 +2166,7 @@ const SendBox: React.FC<{
               autoFocus={active && !requiresExplicitInputFocus}
               disabled={disabled}
               spellCheck={false}
+              enterKeyHint={enterMode === 'newline' ? 'enter' : 'send'}
               value={input}
               placeholder={
                 isMobileCompact
@@ -2212,6 +2219,7 @@ const SendBox: React.FC<{
                   handleAtFileMenuKeyDown(event) ||
                   handleOverlayKeyDown(event) ||
                   handleHistoryKeyDown(event) ||
+                  isChatNewlineKey(event, enterMode) ||
                   handleBackslashLineContinuation(event, setInputRef.current)
                 );
               })}

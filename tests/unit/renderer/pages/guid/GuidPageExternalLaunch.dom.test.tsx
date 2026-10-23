@@ -110,6 +110,7 @@ vi.mock('@/renderer/hooks/system/useSpeechInput', () => ({
   appendSpeechTranscript: (previous: string, next: string) => `${previous}${next}`,
 }));
 vi.mock('@/renderer/utils/platform', () => ({
+  isElectronDesktop: () => Boolean(window.electronAPI),
   openExternalUrl: vi.fn(),
   resolveExtensionAssetUrl: vi.fn(),
   resolveBackendAssetUrl: (path: string) => path,
