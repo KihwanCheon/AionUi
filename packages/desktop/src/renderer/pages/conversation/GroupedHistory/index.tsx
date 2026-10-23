@@ -73,7 +73,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     toggleSection,
   } = useConversations();
 
-  const activityFilter = useConversationActivityFilter(conversations);
+  const activityFilter = useConversationActivityFilter(conversations, historyView);
   const { pinnedConversations, timelineSections } = useMemo(
     () =>
       activityFilter.enabled

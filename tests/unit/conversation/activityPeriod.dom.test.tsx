@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TChatConversation } from '@/common/config/storage';
 import ConversationActivityFilter from '@/renderer/pages/conversation/GroupedHistory/components/ConversationActivityFilter';
 import { useConversationActivityFilter } from '@/renderer/pages/conversation/GroupedHistory/hooks/useConversationActivityFilter';
+import type { ConversationHistoryView } from '@/renderer/pages/conversation/GroupedHistory/utils/bookmarkHelpers';
 import {
   filterConversationsByActivityPeriod,
   getActivityPeriodStart,
@@ -43,6 +44,9 @@ const conversation = (id: string, modifiedAt: number, createdAt = modifiedAt): T
     modified_at: modifiedAt,
     extra: { backend: 'aioncore' },
   }) as TChatConversation;
+
+const renderActivityFilter = (conversations: TChatConversation[] = [], initialView: ConversationHistoryView = 'all') =>
+  renderHook(({ view }) => useConversationActivityFilter(conversations, view), { initialProps: { view: initialView } });
 
 beforeEach(() => {
   localStorage.clear();
@@ -131,7 +135,7 @@ describe('ConversationActivityFilter', () => {
       localStorage.setItem('conversation-activity-period', 'last7Days');
       localStorage.setItem('conversation-activity-filter-enabled', 'true');
       const conversations = [conversation('today', atLocalTime(9)), conversation('old', atLocalTime(1))];
-      const { result } = renderHook(() => useConversationActivityFilter(conversations));
+      const { result } = renderActivityFilter(conversations);
 
       expect(result.current.period).toBe('last7Days');
       expect(result.current.enabled).toBe(true);
@@ -142,15 +146,15 @@ describe('ConversationActivityFilter', () => {
   });
 
   it('persists checkbox and period selections', () => {
-    const { result } = renderHook(() => useConversationActivityFilter([]));
+    const { result } = renderActivityFilter();
 
     act(() => {
       result.current.setEnabled(true);
       result.current.setPeriod('last2Days');
     });
 
-    expect(localStorage.getItem('conversation-activity-filter-enabled')).toBe('true');
-    expect(localStorage.getItem('conversation-activity-period')).toBe('last2Days');
+    expect(localStorage.getItem('conversation-activity-filter-enabled:all')).toBe('true');
+    expect(localStorage.getItem('conversation-activity-period:all')).toBe('last2Days');
   });
 
   it('keeps the cutoff fixed until the user refreshes it', () => {
@@ -161,7 +165,7 @@ describe('ConversationActivityFilter', () => {
       localStorage.setItem('conversation-activity-period', 'last1Day');
       localStorage.setItem('conversation-activity-filter-enabled', 'true');
       const conversations = [conversation('near-edge', initialTime - 23 * 60 * 60 * 1000)];
-      const { result } = renderHook(() => useConversationActivityFilter(conversations));
+      const { result } = renderActivityFilter(conversations);
 
       vi.setSystemTime(initialTime + 2 * 60 * 60 * 1000);
       expect(result.current.filteredConversations.map(({ id }) => id)).toEqual(['near-edge']);
@@ -170,6 +174,136 @@ describe('ConversationActivityFilter', () => {
       expect(result.current.filteredConversations).toEqual([]);
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('keeps checkbox and period selections independent while switching views', () => {
+    const { result, rerender } = renderActivityFilter();
+    act(() => {
+      result.current.setEnabled(true);
+      result.current.setPeriod('last7Days');
+    });
+
+    rerender({ view: 'bookmarks' });
+    expect(result.current).toMatchObject({ enabled: false, period: 'today' });
+    act(() => result.current.setPeriod('last30Days'));
+
+    rerender({ view: 'all' });
+    expect(result.current).toMatchObject({ enabled: true, period: 'last7Days' });
+    rerender({ view: 'bookmarks' });
+    expect(result.current).toMatchObject({ enabled: false, period: 'last30Days' });
+  });
+
+  it('restores each view independently after remounting', () => {
+    const first = renderActivityFilter();
+    act(() => {
+      first.result.current.setEnabled(true);
+      first.result.current.setPeriod('last2Days');
+    });
+    first.rerender({ view: 'bookmarks' });
+    act(() => {
+      first.result.current.setEnabled(false);
+      first.result.current.setPeriod('last30Days');
+    });
+    first.unmount();
+
+    const restored = renderActivityFilter([], 'bookmarks');
+    expect(restored.result.current).toMatchObject({ enabled: false, period: 'last30Days' });
+    restored.rerender({ view: 'all' });
+    expect(restored.result.current).toMatchObject({ enabled: true, period: 'last2Days' });
+  });
+
+  it('seeds both views from legacy settings without coupling later changes', () => {
+    localStorage.setItem('conversation-activity-period', 'last7Days');
+    localStorage.setItem('conversation-activity-filter-enabled', 'true');
+    const first = renderActivityFilter();
+    expect(first.result.current).toMatchObject({ enabled: true, period: 'last7Days' });
+    act(() => {
+      first.result.current.setEnabled(false);
+      first.result.current.setPeriod('last3Days');
+    });
+    first.unmount();
+
+    const restored = renderActivityFilter([], 'bookmarks');
+    expect(restored.result.current).toMatchObject({ enabled: true, period: 'last7Days' });
+    restored.rerender({ view: 'all' });
+    expect(restored.result.current).toMatchObject({ enabled: false, period: 'last3Days' });
+  });
+
+  it('uses the active view period to filter conversations', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(atLocalTime(9));
+      const conversations = [conversation('today', atLocalTime(9)), conversation('older', atLocalTime(6))];
+      const { result, rerender } = renderActivityFilter(conversations);
+      act(() => result.current.setEnabled(true));
+      expect(result.current.filteredConversations.map(({ id }) => id)).toEqual(['today']);
+
+      rerender({ view: 'bookmarks' });
+      act(() => {
+        result.current.setEnabled(true);
+        result.current.setPeriod('last7Days');
+      });
+      expect(result.current.filteredConversations.map(({ id }) => id)).toEqual(['today', 'older']);
+      rerender({ view: 'all' });
+      expect(result.current.filteredConversations.map(({ id }) => id)).toEqual(['today']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refreshes only the active view cutoff', () => {
+    vi.useFakeTimers();
+    try {
+      const initialTime = atLocalTime(9);
+      vi.setSystemTime(initialTime);
+      localStorage.setItem('conversation-activity-period', 'last1Day');
+      localStorage.setItem('conversation-activity-filter-enabled', 'true');
+      const conversations = [conversation('near-edge', initialTime - 23 * 60 * 60 * 1000)];
+      const { result, rerender } = renderActivityFilter(conversations);
+
+      vi.setSystemTime(initialTime + 2 * 60 * 60 * 1000);
+      act(() => result.current.refresh());
+      expect(result.current.filteredConversations).toEqual([]);
+      rerender({ view: 'bookmarks' });
+      expect(result.current.filteredConversations.map(({ id }) => id)).toEqual(['near-edge']);
+      act(() => result.current.refresh());
+      expect(result.current.filteredConversations).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('falls back safely for an invalid view period without changing the other view', () => {
+    localStorage.setItem('conversation-activity-period:all', 'invalid-period');
+    localStorage.setItem('conversation-activity-period:bookmarks', 'last3Days');
+    const { result, rerender } = renderActivityFilter();
+    expect(result.current.period).toBe('today');
+    rerender({ view: 'bookmarks' });
+    expect(result.current.period).toBe('last3Days');
+  });
+
+  it('keeps independent in-memory settings when storage is unavailable', () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('Storage unavailable');
+    });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Storage unavailable');
+    });
+    try {
+      const { result, rerender } = renderActivityFilter();
+      expect(result.current).toMatchObject({ enabled: false, period: 'today' });
+      act(() => {
+        result.current.setEnabled(true);
+        result.current.setPeriod('last2Days');
+      });
+      rerender({ view: 'bookmarks' });
+      expect(result.current).toMatchObject({ enabled: false, period: 'today' });
+      rerender({ view: 'all' });
+      expect(result.current).toMatchObject({ enabled: true, period: 'last2Days' });
+    } finally {
+      getItem.mockRestore();
+      setItem.mockRestore();
     }
   });
 });
