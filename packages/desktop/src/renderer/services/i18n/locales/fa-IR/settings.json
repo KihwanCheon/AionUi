@@ -1521,5 +1521,46 @@
       "nothing": "صفحه بلااستفاده‌ای برای بازیابی وجود ندارد.",
       "generic": "عملیات ناموفق بود. گزارش برنامه را بررسی کنید و دوباره تلاش کنید."
     }
+  },
+  "mobilePush": {
+    "title": "اعلان‌های پوش اندروید",
+    "description": "تا زمانی که Windows AionUi در حال اجراست، درخواست‌های تأیید جدید و خطاهای خوانده‌نشده را به تلفن می‌فرستد. به‌طور پیش‌فرض خاموش است.",
+    "enabled": "فعال‌سازی پوش تلفن",
+    "credentialPath": "فایل حساب سرویس Firebase",
+    "loadCredentials": "بارگذاری تنظیمات",
+    "project": "پروژه: {{projectId}}",
+    "sourceName": "نام رایانه",
+    "includePreview": "افزودن پیش‌نمایش پرسش",
+    "previewHint": "متن پرسش را از طریق Firebase ارسال می‌کند. به‌طور پیش‌فرض خاموش است.",
+    "devices": "تلفن‌های متصل",
+    "refresh": "تازه‌سازی",
+    "connectPhone": "اتصال تلفن",
+    "pairHelp": "در Aion Notifier این کد QR را اسکن کنید یا کد اتصال را بچسبانید.",
+    "expiresIn": "انقضا پس از {{seconds}} ثانیه",
+    "copyCode": "کپی کد",
+    "expired": "کد اتصال منقضی شده است. کد جدیدی بسازید.",
+    "noDevices": "تلفنی متصل نیست.",
+    "disabledOnPhone": "اعلان‌های تلفن خاموش است",
+    "disconnect": "قطع اتصال",
+    "test": "آزمایش پوش",
+    "testTitle": "اعلان آزمایشی AionUi",
+    "testBody": "اعلان آزمایشی ارسال‌شده از Windows AionUi از طریق Firebase.",
+    "testRequested": "Firebase درخواست ارسال را پذیرفت.",
+    "lastSent": "آخرین درخواست پذیرفته‌شده: {{time}}",
+    "choiceTitle": "AionUi به تأیید شما نیاز دارد",
+    "choiceBody": "برای بررسی درخواست، AionUi را باز کنید.",
+    "failureTitle": "AionUi خطایی برای بررسی دارد",
+    "failureBody": "برای بررسی خطا، AionUi را باز کنید.",
+    "errors": {
+      "unsupported": "برنامه Windows را دوباره اجرا کنید و تلاش کنید.",
+      "identity": "کاربر AionUi تأیید نشد. کمی بعد دوباره تلاش کنید.",
+      "credentials": "فایل JSON حساب سرویس را بررسی کنید.",
+      "secureStorage": "فضای ذخیره‌سازی امن Windows در دسترس نیست.",
+      "storage": "ذخیره تنظیمات پوش ممکن نشد.",
+      "disabled": "ابتدا پوش تلفن را فعال کنید.",
+      "device": "تلفن‌های متصل را تازه‌سازی کنید و دوباره تلاش کنید.",
+      "invalidInput": "تنظیمات واردشده را بررسی کنید.",
+      "firebase": "اتصال‌های Firebase و AionUi را بررسی کنید و دوباره تلاش کنید."
+    }
   }
 }

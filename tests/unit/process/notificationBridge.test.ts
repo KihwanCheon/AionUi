@@ -53,6 +53,11 @@ vi.mock('@/common/electronSafe', () => ({
   electronNotification: FakeElectronNotification,
 }));
 
+vi.mock('@process/startup/bootstrap/mobile-push', () => ({
+  initMobilePushProviders: vi.fn(),
+  setMobilePushWindow: vi.fn(),
+}));
+
 vi.mock('fs', () => ({ default: { existsSync: () => false }, existsSync: () => false }));
 
 import { showNotification, setNotificationMainWindow } from '@/process/bridge/notificationBridge';

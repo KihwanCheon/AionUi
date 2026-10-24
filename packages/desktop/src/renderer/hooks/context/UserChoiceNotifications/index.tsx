@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useSyncExternalS
 import { createChoiceNoticeStore, type ChoiceNotice, type ChoiceNoticeStore } from './store';
 import { NotificationHighlightProvider } from './NotificationHighlight';
 import type { IMessageText } from '@/common/chat/chatLib';
+import MobilePushSync from './MobilePushSync';
 
 const emptyStore = createChoiceNoticeStore();
 const ChoiceContext = createContext<ChoiceNoticeStore>(emptyStore);
@@ -100,7 +101,10 @@ export function UserChoiceNotificationsProvider({
   }, [store, suppliedStore]);
   return (
     <NotificationHighlightProvider>
-      <ChoiceContext.Provider value={store}>{children}</ChoiceContext.Provider>
+      <ChoiceContext.Provider value={store}>
+        {children}
+        <MobilePushSync />
+      </ChoiceContext.Provider>
     </NotificationHighlightProvider>
   );
 }

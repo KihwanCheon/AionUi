@@ -1521,5 +1521,46 @@
       "nothing": "No unused pages were found to reclaim.",
       "generic": "The operation failed. Check the application log, then try again."
     }
+  },
+  "mobilePush": {
+    "title": "Android push notifications",
+    "description": "Send new confirmation requests and unread errors while Windows AionUi is running. Off by default.",
+    "enabled": "Enable phone push",
+    "credentialPath": "Firebase service account file",
+    "loadCredentials": "Load settings",
+    "project": "Project: {{projectId}}",
+    "sourceName": "PC name",
+    "includePreview": "Include question preview",
+    "previewHint": "Sends question text through Firebase. Off by default.",
+    "devices": "Connected phones",
+    "refresh": "Refresh",
+    "connectPhone": "Connect phone",
+    "pairHelp": "In Aion Notifier, scan this QR or paste the connection code.",
+    "expiresIn": "Expires in {{seconds}} seconds",
+    "copyCode": "Copy code",
+    "expired": "The connection code expired. Generate a new code.",
+    "noDevices": "No phones connected.",
+    "disabledOnPhone": "Notifications off on phone",
+    "disconnect": "Disconnect",
+    "test": "Test push",
+    "testTitle": "AionUi test push",
+    "testBody": "A test notification sent from Windows AionUi through Firebase.",
+    "testRequested": "Firebase accepted the send request.",
+    "lastSent": "Last send accepted: {{time}}",
+    "choiceTitle": "AionUi needs your confirmation",
+    "choiceBody": "Open AionUi to review the request.",
+    "failureTitle": "AionUi needs your attention",
+    "failureBody": "Open AionUi to review the error.",
+    "errors": {
+      "unsupported": "Restart the Windows desktop app and try again.",
+      "identity": "Could not verify the AionUi user. Try again shortly.",
+      "credentials": "Check the service account JSON file.",
+      "secureStorage": "Windows secure storage is unavailable.",
+      "storage": "Could not save push settings.",
+      "disabled": "Enable phone push first.",
+      "device": "Refresh connected phones and try again.",
+      "invalidInput": "Check the settings you entered.",
+      "firebase": "Check your Firebase and AionUi connections, then try again."
+    }
   }
 }

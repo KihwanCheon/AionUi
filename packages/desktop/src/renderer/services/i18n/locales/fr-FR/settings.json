@@ -1521,5 +1521,46 @@
       "nothing": "Aucune page inutilisée à récupérer.",
       "generic": "L’opération a échoué. Consultez les journaux de l’application puis réessayez."
     }
+  },
+  "mobilePush": {
+    "title": "Notifications push Android",
+    "description": "Envoyez les nouvelles demandes de confirmation et les erreurs non lues au téléphone lorsque Windows AionUi est ouvert. Désactivé par défaut.",
+    "enabled": "Activer les push sur le téléphone",
+    "credentialPath": "Fichier du compte de service Firebase",
+    "loadCredentials": "Charger les paramètres",
+    "project": "Projet : {{projectId}}",
+    "sourceName": "Nom du PC",
+    "includePreview": "Inclure un aperçu de la question",
+    "previewHint": "Envoie le texte de la question via Firebase. Désactivé par défaut.",
+    "devices": "Téléphones connectés",
+    "refresh": "Actualiser",
+    "connectPhone": "Connecter un téléphone",
+    "pairHelp": "Scannez ce code QR dans Aion Notifier ou collez le code de connexion.",
+    "expiresIn": "Expire dans {{seconds}} secondes",
+    "copyCode": "Copier le code",
+    "expired": "Le code de connexion a expiré. Générez un nouveau code.",
+    "noDevices": "Aucun téléphone connecté.",
+    "disabledOnPhone": "Notifications désactivées sur le téléphone",
+    "disconnect": "Déconnecter",
+    "test": "Tester le push",
+    "testTitle": "Notification de test AionUi",
+    "testBody": "Notification de test envoyée par Windows AionUi via Firebase.",
+    "testRequested": "Firebase a accepté la demande d’envoi.",
+    "lastSent": "Dernier envoi accepté : {{time}}",
+    "choiceTitle": "AionUi demande votre confirmation",
+    "choiceBody": "Ouvrez AionUi pour consulter la demande.",
+    "failureTitle": "AionUi signale une erreur à vérifier",
+    "failureBody": "Ouvrez AionUi pour consulter l’erreur.",
+    "errors": {
+      "unsupported": "Redémarrez l’application Windows et réessayez.",
+      "identity": "Impossible de vérifier l’utilisateur AionUi. Réessayez plus tard.",
+      "credentials": "Vérifiez le fichier JSON du compte de service.",
+      "secureStorage": "Le stockage sécurisé de Windows est indisponible.",
+      "storage": "Impossible d’enregistrer les paramètres push.",
+      "disabled": "Activez d’abord les push sur le téléphone.",
+      "device": "Actualisez les téléphones connectés et réessayez.",
+      "invalidInput": "Vérifiez les paramètres saisis.",
+      "firebase": "Vérifiez les connexions Firebase et AionUi, puis réessayez."
+    }
   }
 }

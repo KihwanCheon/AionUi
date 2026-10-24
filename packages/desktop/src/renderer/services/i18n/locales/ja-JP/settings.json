@@ -1523,5 +1523,46 @@
       "nothing": "回収できる未使用ページはありません。",
       "generic": "処理に失敗しました。アプリのログを確認して再試行してください。"
     }
+  },
+  "mobilePush": {
+    "title": "Android プッシュ通知",
+    "description": "Windows AionUi の実行中に、新しい確認依頼と未読エラーをスマートフォンへ送信します。初期設定はオフです。",
+    "enabled": "スマートフォンへのプッシュを有効化",
+    "credentialPath": "Firebase サービスアカウントファイル",
+    "loadCredentials": "設定を読み込む",
+    "project": "プロジェクト: {{projectId}}",
+    "sourceName": "PC 名",
+    "includePreview": "質問のプレビューを含める",
+    "previewHint": "Firebase を経由して質問内容を送信します。初期設定はオフです。",
+    "devices": "接続済みのスマートフォン",
+    "refresh": "更新",
+    "connectPhone": "スマートフォンを接続",
+    "pairHelp": "Aion Notifier でこの QR コードを読み取るか、接続コードを貼り付けてください。",
+    "expiresIn": "{{seconds}} 秒後に期限切れ",
+    "copyCode": "コードをコピー",
+    "expired": "接続コードの期限が切れました。新しいコードを作成してください。",
+    "noDevices": "接続済みのスマートフォンはありません。",
+    "disabledOnPhone": "スマートフォンの通知はオフ",
+    "disconnect": "接続を解除",
+    "test": "テスト送信",
+    "testTitle": "AionUi テスト通知",
+    "testBody": "Windows AionUi から Firebase を経由して送信されたテスト通知です。",
+    "testRequested": "Firebase が送信リクエストを受け付けました。",
+    "lastSent": "前回の送信受付: {{time}}",
+    "choiceTitle": "AionUi で確認が必要です",
+    "choiceBody": "AionUi を開いて依頼内容を確認してください。",
+    "failureTitle": "AionUi に確認が必要なエラーがあります",
+    "failureBody": "AionUi を開いてエラーを確認してください。",
+    "errors": {
+      "unsupported": "Windows デスクトップアプリを再起動して再試行してください。",
+      "identity": "AionUi ユーザーを確認できませんでした。しばらくしてから再試行してください。",
+      "credentials": "サービスアカウントの JSON ファイルを確認してください。",
+      "secureStorage": "Windows の安全なストレージを利用できません。",
+      "storage": "プッシュ設定を保存できませんでした。",
+      "disabled": "先にスマートフォンへのプッシュを有効にしてください。",
+      "device": "接続済みのスマートフォンを更新して再試行してください。",
+      "invalidInput": "入力した設定を確認してください。",
+      "firebase": "Firebase と AionUi の接続を確認して再試行してください。"
+    }
   }
 }

@@ -1522,5 +1522,46 @@
       "nothing": "没有可回收的空闲页。",
       "generic": "操作失败。请检查应用日志后重试。"
     }
+  },
+  "mobilePush": {
+    "title": "Android 推送通知",
+    "description": "在 Windows AionUi 运行时，将新的确认请求和未读错误发送到手机。默认关闭。",
+    "enabled": "启用手机推送",
+    "credentialPath": "Firebase 服务账号文件",
+    "loadCredentials": "加载设置",
+    "project": "项目：{{projectId}}",
+    "sourceName": "电脑名称",
+    "includePreview": "包含问题预览",
+    "previewHint": "通过 Firebase 发送问题内容。默认关闭。",
+    "devices": "已连接的手机",
+    "refresh": "刷新",
+    "connectPhone": "连接手机",
+    "pairHelp": "在 Aion Notifier 中扫描此二维码或粘贴连接代码。",
+    "expiresIn": "{{seconds}} 秒后过期",
+    "copyCode": "复制代码",
+    "expired": "连接代码已过期，请生成新代码。",
+    "noDevices": "尚未连接手机。",
+    "disabledOnPhone": "手机通知已关闭",
+    "disconnect": "断开连接",
+    "test": "测试推送",
+    "testTitle": "AionUi 测试推送",
+    "testBody": "从 Windows AionUi 通过 Firebase 发送的测试通知。",
+    "testRequested": "Firebase 已接受发送请求。",
+    "lastSent": "上次接受发送：{{time}}",
+    "choiceTitle": "AionUi 需要您确认",
+    "choiceBody": "请打开 AionUi 查看请求。",
+    "failureTitle": "AionUi 有错误需要处理",
+    "failureBody": "请打开 AionUi 查看错误。",
+    "errors": {
+      "unsupported": "请重启 Windows 桌面应用后重试。",
+      "identity": "无法验证 AionUi 用户，请稍后重试。",
+      "credentials": "请检查服务账号 JSON 文件。",
+      "secureStorage": "Windows 安全存储不可用。",
+      "storage": "无法保存推送设置。",
+      "disabled": "请先启用手机推送。",
+      "device": "请刷新已连接的手机后重试。",
+      "invalidInput": "请检查输入的设置。",
+      "firebase": "请检查 Firebase 和 AionUi 连接后重试。"
+    }
   }
 }

@@ -16,6 +16,7 @@ import { ipcBridge } from '@/common';
 import { electronNotification } from '@/common/electronSafe';
 import { ProcessConfig } from '@process/utils/initStorage';
 import { buildWindowsConversationToast } from '@process/startup/bootstrap/windowsNotification';
+import { initMobilePushProviders, setMobilePushWindow } from '@process/startup/bootstrap/mobile-push';
 import type { BrowserWindow } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -25,6 +26,7 @@ let mainWindowRef: BrowserWindow | null = null;
 
 export const setNotificationMainWindow = (win: BrowserWindow): void => {
   mainWindowRef = win;
+  setMobilePushWindow(win);
 };
 
 /**
@@ -121,6 +123,7 @@ export async function showNotification({
  * Register IPC provider so renderer can trigger notifications cross-process.
  */
 export function initNotificationBridge(): void {
+  initMobilePushProviders();
   ipcBridge.notification.show.provider(async (options) => {
     await showNotification(options);
   });

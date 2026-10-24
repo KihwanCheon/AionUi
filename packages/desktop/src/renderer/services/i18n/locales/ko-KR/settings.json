@@ -1523,5 +1523,46 @@
       "nothing": "회수할 수 있는 빈 페이지가 없습니다.",
       "generic": "작업에 실패했습니다. 앱 로그를 확인한 뒤 다시 시도하세요."
     }
+  },
+  "mobilePush": {
+    "title": "Android 푸시 알림",
+    "description": "Windows AionUi 실행 중 새 확인 요청과 미확인 오류를 휴대폰으로 보냅니다. 기본값은 꺼짐입니다.",
+    "enabled": "휴대폰 푸시 사용",
+    "credentialPath": "Firebase 서비스 계정 파일",
+    "loadCredentials": "설정 불러오기",
+    "project": "연결 프로젝트: {{projectId}}",
+    "sourceName": "PC 이름",
+    "includePreview": "질문 미리보기 포함",
+    "previewHint": "질문 내용을 Firebase를 거쳐 휴대폰으로 전송합니다. 기본값은 꺼짐입니다.",
+    "devices": "연결된 휴대폰",
+    "refresh": "새로고침",
+    "connectPhone": "휴대폰 연결",
+    "pairHelp": "Aion 알리미에서 이 QR을 스캔하거나 연결 코드를 붙여넣어 주세요.",
+    "expiresIn": "{{seconds}}초 후 만료",
+    "copyCode": "코드 복사",
+    "expired": "연결 코드가 만료되었습니다. 새 코드를 만들어 주세요.",
+    "noDevices": "연결된 휴대폰이 없습니다.",
+    "disabledOnPhone": "휴대폰 알림 꺼짐",
+    "disconnect": "연결 해제",
+    "test": "테스트 푸시",
+    "testTitle": "AionUi 테스트 푸시",
+    "testBody": "Windows AionUi에서 Firebase를 거쳐 보낸 테스트 알림입니다.",
+    "testRequested": "Firebase에 전송 요청을 접수했습니다.",
+    "lastSent": "최근 전송 접수: {{time}}",
+    "choiceTitle": "AionUi 사용자 확인이 필요합니다",
+    "choiceBody": "AionUi에서 요청 내용을 확인해 주세요.",
+    "failureTitle": "AionUi에서 확인할 오류가 있습니다",
+    "failureBody": "AionUi에서 오류 내용을 확인해 주세요.",
+    "errors": {
+      "unsupported": "Windows 데스크톱 앱을 재시작한 뒤 다시 시도해 주세요.",
+      "identity": "AionUi 사용자 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      "credentials": "서비스 계정 JSON 파일을 확인해 주세요.",
+      "secureStorage": "Windows 보안 저장소를 사용할 수 없습니다.",
+      "storage": "푸시 설정을 저장하지 못했습니다.",
+      "disabled": "먼저 휴대폰 푸시 사용을 켜 주세요.",
+      "device": "연결된 휴대폰을 새로고침한 뒤 다시 시도해 주세요.",
+      "invalidInput": "입력한 설정을 확인해 주세요.",
+      "firebase": "Firebase와 AionUi 연결을 확인한 뒤 다시 시도해 주세요."
+    }
   }
 }

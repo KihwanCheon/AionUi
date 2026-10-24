@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function authenticated() { return request.auth != null; }
+
+    // Only the trusted Windows sender creates pairings, using server credentials.
+    // The 256-bit id is a one-use capability; clients cannot list pairings.
+    match /pairings/{pairingId} {
+      allow get: if authenticated() && (
+        resource.data.claimedBy == request.auth.uid ||
+        (resource.data.claimedBy == null && resource.data.expiresAt > request.time)
+      );
+      allow update: if authenticated()
+        && resource.data.claimedBy == null
+        && resource.data.expiresAt > request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['claimedBy', 'claimedAt'])
+        && request.resource.data.claimedBy == request.auth.uid
+        && request.resource.data.claimedAt == request.time;
+      allow list, create, delete: if false;
+    }
+
+    match /devices/{uid} {
+      function ownDevice() { return authenticated() && request.auth.uid == uid; }
+      function validRegistration() {
+        let data = request.resource.data;
+        let pairing = get(/databases/$(database)/documents/pairings/$(data.pairingId)).data;
+        return data.keys().hasOnly(['pairingId', 'sourceId', 'deviceName', 'fcmToken', 'enabled', 'updatedAt'])
+          && pairing.claimedBy == uid && pairing.sourceId == data.sourceId
+          && data.deviceName is string && data.deviceName.size() <= 160
+          && data.fcmToken is string && data.fcmToken.size() > 0 && data.fcmToken.size() <= 4096
+          && data.enabled is bool && data.updatedAt == request.time;
+      }
+      allow get, delete: if ownDevice();
+      allow create, update: if ownDevice() && validRegistration();
+      allow list: if false;
+    }
+  }
+}

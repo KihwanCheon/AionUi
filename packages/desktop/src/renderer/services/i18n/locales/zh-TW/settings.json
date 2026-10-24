@@ -1523,5 +1523,46 @@
       "nothing": "沒有可回收的未使用頁面。",
       "generic": "操作失敗。請檢查應用程式日誌後重試。"
     }
+  },
+  "mobilePush": {
+    "title": "Android 推播通知",
+    "description": "在 Windows AionUi 執行時，將新的確認請求和未讀錯誤傳送到手機。預設關閉。",
+    "enabled": "啟用手機推播",
+    "credentialPath": "Firebase 服務帳戶檔案",
+    "loadCredentials": "載入設定",
+    "project": "專案：{{projectId}}",
+    "sourceName": "電腦名稱",
+    "includePreview": "包含問題預覽",
+    "previewHint": "透過 Firebase 傳送問題內容。預設關閉。",
+    "devices": "已連線的手機",
+    "refresh": "重新整理",
+    "connectPhone": "連接手機",
+    "pairHelp": "在 Aion Notifier 中掃描此 QR 碼或貼上連線代碼。",
+    "expiresIn": "{{seconds}} 秒後到期",
+    "copyCode": "複製代碼",
+    "expired": "連線代碼已到期，請產生新代碼。",
+    "noDevices": "尚未連接手機。",
+    "disabledOnPhone": "手機通知已關閉",
+    "disconnect": "中斷連線",
+    "test": "測試推播",
+    "testTitle": "AionUi 測試推播",
+    "testBody": "從 Windows AionUi 透過 Firebase 傳送的測試通知。",
+    "testRequested": "Firebase 已接受傳送請求。",
+    "lastSent": "上次接受傳送：{{time}}",
+    "choiceTitle": "AionUi 需要您確認",
+    "choiceBody": "請開啟 AionUi 檢視請求。",
+    "failureTitle": "AionUi 有錯誤需要處理",
+    "failureBody": "請開啟 AionUi 檢視錯誤。",
+    "errors": {
+      "unsupported": "請重新啟動 Windows 桌面應用程式後再試。",
+      "identity": "無法驗證 AionUi 使用者，請稍後再試。",
+      "credentials": "請檢查服務帳戶 JSON 檔案。",
+      "secureStorage": "Windows 安全儲存空間無法使用。",
+      "storage": "無法儲存推播設定。",
+      "disabled": "請先啟用手機推播。",
+      "device": "請重新整理已連線的手機後再試。",
+      "invalidInput": "請檢查輸入的設定。",
+      "firebase": "請檢查 Firebase 和 AionUi 連線後再試。"
+    }
   }
 }

@@ -31,6 +31,7 @@ import BrowserDataSection from './BrowserDataSection';
 import DirInputItem from './DirInputItem';
 import PreferenceRow from './PreferenceRow';
 import VoiceInputSection from './VoiceInputSection';
+import MobilePushSection from './MobilePushSection';
 
 /**
  * System settings content component
@@ -568,6 +569,8 @@ const SystemModalContent: React.FC = () => {
               )}
             </Form>
           </div>
+
+          <MobilePushSection />
 
           {/* Voice input (speech-to-text) settings */}
           <VoiceInputSection />

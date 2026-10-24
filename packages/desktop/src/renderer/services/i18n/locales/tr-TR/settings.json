@@ -1521,5 +1521,46 @@
       "nothing": "Geri kazanılabilecek kullanılmayan sayfa yok.",
       "generic": "İşlem başarısız oldu. Uygulama günlüğünü kontrol edip tekrar deneyin."
     }
+  },
+  "mobilePush": {
+    "title": "Android anlık bildirimleri",
+    "description": "Windows AionUi çalışırken yeni onay isteklerini ve okunmamış hataları telefonunuza gönderir. Varsayılan olarak kapalıdır.",
+    "enabled": "Telefon bildirimlerini etkinleştir",
+    "credentialPath": "Firebase hizmet hesabı dosyası",
+    "loadCredentials": "Ayarları yükle",
+    "project": "Proje: {{projectId}}",
+    "sourceName": "Bilgisayar adı",
+    "includePreview": "Soru önizlemesini ekle",
+    "previewHint": "Soru metnini Firebase üzerinden gönderir. Varsayılan olarak kapalıdır.",
+    "devices": "Bağlı telefonlar",
+    "refresh": "Yenile",
+    "connectPhone": "Telefon bağla",
+    "pairHelp": "Aion Notifier uygulamasında bu QR kodunu tarayın veya bağlantı kodunu yapıştırın.",
+    "expiresIn": "{{seconds}} saniye sonra sona erer",
+    "copyCode": "Kodu kopyala",
+    "expired": "Bağlantı kodunun süresi doldu. Yeni bir kod oluşturun.",
+    "noDevices": "Bağlı telefon yok.",
+    "disabledOnPhone": "Telefonda bildirimler kapalı",
+    "disconnect": "Bağlantıyı kes",
+    "test": "Test bildirimi",
+    "testTitle": "AionUi test bildirimi",
+    "testBody": "Windows AionUi uygulamasından Firebase üzerinden gönderilen test bildirimi.",
+    "testRequested": "Firebase gönderme isteğini kabul etti.",
+    "lastSent": "Son kabul edilen gönderim: {{time}}",
+    "choiceTitle": "AionUi onayınızı bekliyor",
+    "choiceBody": "İsteği incelemek için AionUi uygulamasını açın.",
+    "failureTitle": "AionUi ilgilenmenizi gerektiren bir hata bildirdi",
+    "failureBody": "Hatayı incelemek için AionUi uygulamasını açın.",
+    "errors": {
+      "unsupported": "Windows masaüstü uygulamasını yeniden başlatıp tekrar deneyin.",
+      "identity": "AionUi kullanıcısı doğrulanamadı. Biraz sonra tekrar deneyin.",
+      "credentials": "Hizmet hesabı JSON dosyasını kontrol edin.",
+      "secureStorage": "Windows güvenli depolaması kullanılamıyor.",
+      "storage": "Bildirim ayarları kaydedilemedi.",
+      "disabled": "Önce telefon bildirimlerini etkinleştirin.",
+      "device": "Bağlı telefonları yenileyip tekrar deneyin.",
+      "invalidInput": "Girdiğiniz ayarları kontrol edin.",
+      "firebase": "Firebase ve AionUi bağlantılarını kontrol edip tekrar deneyin."
+    }
   }
 }
