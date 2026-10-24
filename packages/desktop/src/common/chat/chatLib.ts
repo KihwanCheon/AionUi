@@ -328,6 +328,10 @@ export type IMessageAsk = IMessage<
     session_id: string;
     request_id: string;
     questions: IAskQuestion[];
+    persisted?: boolean;
+    pendingVerified?: boolean;
+    resolution?: 'answered' | 'declined' | 'closed';
+    answers?: Array<{ question: string; labels: string[] }>;
   }
 >;
 
@@ -1095,6 +1099,16 @@ export const composeMessage = (
     return pushMessage(message);
   }
 
+  if (message.type === 'ask' && message.content.request_id) {
+    const existingIndex = list.findIndex(
+      (item) => item.type === 'ask' && item.content.request_id === message.content.request_id
+    );
+    if (existingIndex >= 0) {
+      const existing = list[existingIndex] as IMessageAsk;
+      if (existing.content.persisted && !message.content.persisted) return list;
+      return updateMessage(existingIndex, { ...message, id: existing.id });
+    }
+  }
   if (last.msg_id !== message.msg_id || last.type !== message.type) {
     return pushMessage(message);
   }

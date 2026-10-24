@@ -105,6 +105,7 @@
   "askDecline": "پاسخ ندادن",
   "askAnswered": "پاسخ داده شد",
   "askDeclined": "رد شد",
+  "askClosed": "این پرسش دیگر منتظر پاسخ نیست.",
   "askOther": "سایر",
   "askOtherPlaceholder": "پاسخ خود را بنویسید",
   "requestDetails": "جزئیات درخواست:",

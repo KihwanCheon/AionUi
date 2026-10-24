@@ -144,7 +144,8 @@ export const getSidebarStreamGuardDecision = ({
  * (`ask`). These pause the turn until the user answers, so the sidebar shows a
  * distinct "needs you" icon instead of the generic generating spinner.
  */
-export const isWaitingConfirmationStreamMessage = (type: string): boolean => {
+export const isWaitingConfirmationStreamMessage = (type: string, data?: unknown): boolean => {
+  if (type === 'ask' && data && typeof data === 'object' && 'resolution' in data && data.resolution) return false;
   return type === 'permission' || type === 'acp_permission' || type === 'ask';
 };
 
@@ -719,7 +720,7 @@ const initializeConversationListSyncStore = () => {
     }
     // Resolved or late permission frames must not relight the waiting badge.
     // The server's pending list also repairs missed resolution events.
-    if (isWaitingConfirmationStreamMessage(message.type)) {
+    if (isWaitingConfirmationStreamMessage(message.type, message.data)) {
       const confirmationId = extractConfirmationId(message);
       if (confirmationId) {
         markWaitingConfirmation(conversation_id, confirmationId);

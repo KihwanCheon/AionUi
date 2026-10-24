@@ -105,6 +105,7 @@
   "askDecline": "Yanıtlama",
   "askAnswered": "Yanıtlandı",
   "askDeclined": "Atlandı",
+  "askClosed": "Bu soru artık yanıt beklemiyor.",
   "askOther": "Diğer",
   "askOtherPlaceholder": "Yanıtınızı yazın",
   "requestDetails": "İstek ayrıntıları:",

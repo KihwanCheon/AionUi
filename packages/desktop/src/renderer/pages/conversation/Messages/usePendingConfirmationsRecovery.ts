@@ -7,7 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { IConfirmation, IMessageAsk, IMessagePermission, TMessage } from '@/common/chat/chatLib';
 import { useEffect } from 'react';
-import { useUpdateMessageList } from './hooks';
+import { useMessageList, useUpdateMessageList } from './hooks';
 
 export const pendingConfirmationMsgId = (confirmationId: string) => `confirmation:${confirmationId}`;
 
@@ -55,18 +55,36 @@ export function hasPermissionMessageForCallId(list: TMessage[], callId: string):
 }
 
 export function removePermissionMessage(list: TMessage[], target: { id?: string; call_id?: string }): TMessage[] {
-  return list.filter((message) => {
+  return list.flatMap<TMessage>((message) => {
     if (message.type === 'ask') {
       // A recovered ask is keyed by request_id (== call_id == confirmation id).
-      if (target.id && message.content.request_id === target.id) return false;
-      if (target.call_id && message.content.request_id === target.call_id) return false;
-      return true;
+      const matches = message.content.request_id === target.id || message.content.request_id === target.call_id;
+      if (!matches) return [message];
+      return message.content.persisted
+        ? [{ ...message, content: { ...message.content, resolution: message.content.resolution ?? 'closed' } }]
+        : [];
     }
-    if (message.type !== 'permission') return true;
-    if (target.id && message.content.id === target.id) return false;
-    if (target.call_id && message.content.call_id === target.call_id) return false;
-    return true;
+    if (message.type !== 'permission') return [message];
+    if (target.id && message.content.id === target.id) return [];
+    if (target.call_id && message.content.call_id === target.call_id) return [];
+    return [message];
   });
+}
+
+/** History can outlive the backend's pending question; never revive an expired request. */
+export function reconcilePersistedQuestions(list: TMessage[], pendingIds: ReadonlySet<string>): TMessage[] {
+  return list.map((message) =>
+    message.type === 'ask' && message.content.persisted && !message.content.resolution
+      ? {
+          ...message,
+          content: {
+            ...message.content,
+            pendingVerified: true,
+            ...(pendingIds.has(message.content.request_id) ? {} : { resolution: 'closed' as const }),
+          },
+        }
+      : message
+  );
 }
 
 function errorMessage(error: unknown): string {
@@ -75,6 +93,47 @@ function errorMessage(error: unknown): string {
 
 export function usePendingConfirmationsRecovery(conversation_id: string) {
   const updateMessageList = useUpdateMessageList();
+  const messages = useMessageList();
+  const historyQuestions = messages
+    .filter(
+      (message) =>
+        message.type === 'ask' &&
+        message.content.persisted &&
+        !message.content.resolution &&
+        !message.content.pendingVerified &&
+        message.id === message.msg_id
+    )
+    .map((message) => message.msg_id)
+    .join(',');
+
+  useEffect(() => {
+    if (!historyQuestions) return;
+    let cancelled = false;
+    void ipcBridge.conversation.confirmation.list
+      .invoke({ conversation_id })
+      .then((confirmations) => {
+        if (cancelled) return;
+        const pendingIds = new Set((confirmations ?? []).map((confirmation) => confirmation.call_id));
+        const ids = new Set(historyQuestions.split(','));
+        updateMessageList((list) => {
+          const recovered = reconcilePersistedQuestions(
+            list.filter((message) => ids.has(message.msg_id ?? '')),
+            pendingIds
+          );
+          const byId = new Map(recovered.map((message) => [message.msg_id, message]));
+          return list.map((message) => byId.get(message.msg_id) ?? message);
+        });
+      })
+      .catch((error) =>
+        console.warn('[pending-confirmations] native question recovery failed', {
+          conversation_id,
+          error: errorMessage(error),
+        })
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [conversation_id, historyQuestions, updateMessageList]);
 
   useEffect(() => {
     if (!conversation_id) return;

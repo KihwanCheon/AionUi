@@ -109,6 +109,7 @@
   "askDecline": "Не отвечать",
   "askAnswered": "Отвечено",
   "askDeclined": "Пропущено",
+  "askClosed": "Этот вопрос больше не ожидает ответа.",
   "askOther": "Другое",
   "askOtherPlaceholder": "Введите свой ответ",
   "requestDetails": "Детали запроса:",

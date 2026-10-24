@@ -162,10 +162,10 @@ export function composeMessageWithIndex(
   const last = list[list.length - 1];
 
   // 对于 tool_group 类型，使用原始的 composeMessage（因为涉及内部数组匹配）
-  // For tool_group type, use original composeMessage (involves inner array matching)
+  // Tool groups and native questions need matching beyond their stream msg_id.
   // After composeMessage, the returned list may have different length/ordering,
   // so we must invalidate the index to prevent stale lookups in subsequent calls.
-  if (message.type === 'tool_group') {
+  if (message.type === 'tool_group' || message.type === 'ask') {
     const result = composeMessage(message, list);
     if (result !== list) {
       // Rebuild index maps from the new list to keep them in sync

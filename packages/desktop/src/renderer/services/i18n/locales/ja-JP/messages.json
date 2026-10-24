@@ -105,6 +105,7 @@
   "askDecline": "回答しない",
   "askAnswered": "回答済み",
   "askDeclined": "スキップ済み",
+  "askClosed": "この質問は回答待ちではありません。",
   "askOther": "その他",
   "askOtherPlaceholder": "回答を入力",
   "requestDetails": "リクエスト内容:",

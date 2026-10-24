@@ -31,6 +31,14 @@ Verified protocol evidence: codex-cli 0.162.1 `app-server generate-json-schema -
 
 The frontend receives these notices through the existing snapshot subscription. Selecting one loads its standalone message with index zero; when there is no prose marker, `useMessageTargetScroll` aligns the start of the message instead of the center of a potentially long options list. Existing marker lookup and layout stabilization remain active.
 
+## Native interactive questions (AionCore)
+
+The existing `ask` event is persisted as one interactive card, with a stable conversation/request identity. Each question in that card receives its own notice and `data-choice-marker-index` target. Registration happens on the server after the card is queryable and does not require a connected renderer or an open conversation. This extends the existing event contract; it does not infer questions from prose or generic permission requests.
+
+The dedicated answer endpoint records accepted answers or an explicit decline on the same card and broadcasts that state to other clients. It does not dismiss notices. Replays preserve the saved response and durable dismissal tombstones. Pending-confirmation recovery deduplicates transient cards against the persisted request; removing a pending confirmation retains the durable navigation anchor. Restored unanswered cards are disabled until the pending request is verified, and expired requests become read-only. No polling or automatic answer/approval is introduced.
+
+For focused checks, run the native/async question relay tests and the choice-notice tests in `aionui-conversation`, plus the AionUi notification DOM and pending-confirmation recovery tests. The browser navigation fixture includes native multi-question cards with long first-question options and older-history loading. These are event/SQLite/browser tests; they do not claim a fresh live CLI capture.
+
 ## Rebase integration seams
 
 1. Keep the isolated `UserChoiceNotifications` context feature mounted at the shared layout boundary. Retain exactly one global subscription each for `message.stream` and `conversation.choiceNoticesChanged` even when conversation routes or filters change. Do not subscribe to `message.userCreated` to clear question notifications.

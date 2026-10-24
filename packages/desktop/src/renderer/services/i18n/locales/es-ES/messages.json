@@ -105,6 +105,7 @@
   "askDecline": "No responder",
   "askAnswered": "Respondido",
   "askDeclined": "Omitido",
+  "askClosed": "Esta pregunta ya no está pendiente de respuesta.",
   "askOther": "Otro",
   "askOtherPlaceholder": "Escribe tu respuesta",
   "requestDetails": "Detalles de la solicitud:",

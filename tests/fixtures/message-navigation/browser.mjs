@@ -16,6 +16,8 @@ try {
     ['two-markers', 0],
     ['structured-older-anchor', 900],
     ['structured-long-options', 150],
+    ['native-long-options', 150],
+    ['native-older-anchor', 900],
   ]) {
     const context = await browser.newContext({ viewport: { width: 1100, height: 720 } });
     const page = await context.newPage();
@@ -47,8 +49,11 @@ try {
       page.evaluate(() => {
         const scroller = document.querySelector('[data-testid="message-list-scroller"]');
         const row = document.getElementById('message-navigation-10');
-        const shadow = row.querySelector('.markdown-shadow').shadowRoot;
-        const question = [...shadow.querySelectorAll('p')].find((p) => p.textContent.includes('검증용 승인 질문'));
+        const native = row.querySelector('[data-testid="message-question-item-1"]');
+        const shadow = row.querySelector('.markdown-shadow')?.shadowRoot;
+        const question = native
+          ? native.firstElementChild
+          : [...shadow.querySelectorAll('p')].find((p) => p.textContent.includes('검증용 승인 질문'));
         const frame = scroller.getBoundingClientRect();
         const rect = question.getBoundingClientRect();
         return {

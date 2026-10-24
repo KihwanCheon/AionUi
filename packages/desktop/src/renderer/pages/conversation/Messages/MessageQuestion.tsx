@@ -10,6 +10,10 @@ import { Button, Card, Checkbox, Input, Radio } from '@arco-design/web-react';
 import { CheckOne } from '@icon-park/react';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  notificationHighlightStyles,
+  useMessageNotificationHighlight,
+} from '@/renderer/hooks/context/UserChoiceNotifications';
 // The permission panel's stylesheet supplies the shared card chrome; own.* adds
 // the question-specific pieces (option rows with secondary description lines),
 // built on the same tokens so the two cards read as siblings (user feedback,
@@ -33,6 +37,13 @@ type Draft = {
 
 const emptyDraft = (): Draft => ({ labels: [], other: '', otherSelected: false });
 
+const answeredDraft = (question: IAskQuestion, answers: IMessageAsk['content']['answers']): Draft => {
+  const labels = answers?.find((answer) => answer.question === question.question)?.labels ?? [];
+  const known = new Set(question.options.map((option) => option.label));
+  const other = labels.filter((label) => !known.has(label)).join(', ');
+  return { labels: labels.filter((label) => known.has(label)), other, otherSelected: Boolean(other) };
+};
+
 /**
  * Structured question card (`ask` frame — claude AskUserQuestion).
  *
@@ -49,8 +60,16 @@ const MessageQuestion: React.FC<MessageQuestionProps> = React.memo(({ message })
     () => (Array.isArray(content.questions) ? content.questions : []),
     [content.questions]
   );
-  const [drafts, setDrafts] = useState<Draft[]>(() => questions.map(emptyDraft));
+  const [drafts, setDrafts] = useState<Draft[]>(() =>
+    questions.map((question) => answeredDraft(question, content.answers))
+  );
   const [submitted, setSubmitted] = useState<'answered' | 'declined' | null>(null);
+  const resolution = content.resolution ?? submitted;
+  const awaitingVerification = Boolean(
+    content.persisted && message.id === message.msg_id && !content.pendingVerified && resolution === null
+  );
+  const disabled = resolution !== null || awaitingVerification;
+  const highlightedQuestion = useMessageNotificationHighlight(message.conversation_id, message.id, message.msg_id);
 
   const updateDraft = useCallback((index: number, patch: Partial<Draft>) => {
     setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, ...patch } : d)));
@@ -91,11 +110,17 @@ const MessageQuestion: React.FC<MessageQuestionProps> = React.memo(({ message })
     <Card className={styles.card} bordered={false} data-testid='message-question'>
       <div className={styles.panel}>
         {questions.map((q, qi) => {
-          const d = drafts[qi] ?? emptyDraft();
+          const d = content.answers ? answeredDraft(q, content.answers) : (drafts[qi] ?? emptyDraft());
           // Wire spelling is multi_select (the ws relay snake_cases all keys).
           const multi = q.multiSelect === true || q.multi_select === true;
           return (
-            <div key={qi} className={own.questionBlock} data-testid={`message-question-item-${qi}`}>
+            <div
+              key={qi}
+              className={`${own.questionBlock} ${highlightedQuestion === qi ? notificationHighlightStyles.question : ''}`}
+              data-testid={`message-question-item-${qi}`}
+              data-choice-marker-index={qi}
+              data-notification-highlight={highlightedQuestion === qi ? 'true' : undefined}
+            >
               {q.header ? <div className={own.header}>{q.header}</div> : null}
               <div className={own.question}>{q.question}</div>
               {multi ? (
@@ -103,7 +128,7 @@ const MessageQuestion: React.FC<MessageQuestionProps> = React.memo(({ message })
                   className={own.optionList}
                   value={d.labels}
                   onChange={(labels) => updateDraft(qi, { labels: labels as string[] })}
-                  disabled={submitted !== null}
+                  disabled={disabled}
                 >
                   {q.options.map((opt) => (
                     <Checkbox
@@ -128,7 +153,7 @@ const MessageQuestion: React.FC<MessageQuestionProps> = React.memo(({ message })
                       ? updateDraft(qi, { labels: [], otherSelected: true })
                       : updateDraft(qi, { labels: [value], otherSelected: false })
                   }
-                  disabled={submitted !== null}
+                  disabled={disabled}
                 >
                   {q.options.map((opt) => (
                     <Radio
@@ -158,7 +183,7 @@ const MessageQuestion: React.FC<MessageQuestionProps> = React.memo(({ message })
                       placeholder={t('messages.askOtherPlaceholder')}
                       value={d.other}
                       onChange={(v) => updateDraft(qi, { other: v })}
-                      disabled={submitted !== null}
+                      disabled={disabled}
                       data-testid={`message-question-other-input-${qi}`}
                     />
                   ) : null}
@@ -167,7 +192,7 @@ const MessageQuestion: React.FC<MessageQuestionProps> = React.memo(({ message })
             </div>
           );
         })}
-        {submitted === null ? (
+        {resolution === null ? (
           // Plain Arco buttons on purpose: styles.optionButton resets the button
           // chrome to a transparent full-width list row (for permission option
           // lists), which turned the primary submit into white-on-white.
@@ -175,13 +200,13 @@ const MessageQuestion: React.FC<MessageQuestionProps> = React.memo(({ message })
             <Button
               type='primary'
               size='small'
-              disabled={!allAnswered}
+              disabled={disabled || !allAnswered}
               onClick={handleSubmit}
               data-testid='message-question-submit'
             >
               {t('messages.askSubmit')}
             </Button>
-            <Button size='small' onClick={handleDecline} data-testid='message-question-decline'>
+            <Button size='small' disabled={disabled} onClick={handleDecline} data-testid='message-question-decline'>
               {t('messages.askDecline')}
             </Button>
           </div>
@@ -193,7 +218,13 @@ const MessageQuestion: React.FC<MessageQuestionProps> = React.memo(({ message })
             data-testid='message-question-status'
           >
             <CheckOne theme='outline' size='16' aria-hidden='true' />
-            <span>{submitted === 'answered' ? t('messages.askAnswered') : t('messages.askDeclined')}</span>
+            <span>
+              {resolution === 'answered'
+                ? t('messages.askAnswered')
+                : resolution === 'declined'
+                  ? t('messages.askDeclined')
+                  : t('messages.askClosed')}
+            </span>
           </div>
         )}
       </div>

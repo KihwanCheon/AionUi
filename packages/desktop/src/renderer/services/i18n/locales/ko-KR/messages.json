@@ -105,6 +105,7 @@
   "askDecline": "답변 안 함",
   "askAnswered": "답변 완료",
   "askDeclined": "건너뜀",
+  "askClosed": "더 이상 응답을 기다리는 질문이 아닙니다.",
   "askOther": "기타",
   "askOtherPlaceholder": "답변을 입력하세요",
   "requestDetails": "요청 내용:",

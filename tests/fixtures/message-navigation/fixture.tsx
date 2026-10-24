@@ -9,7 +9,7 @@ import '@arco-design/web-react/dist/css/arco.css';
 import '@/renderer/styles/themes/index.css';
 import 'virtual:uno.css';
 import { ipcBridge } from '@/common';
-import type { IMessageText } from '@/common/chat/chatLib';
+import type { IMessageText, TMessage } from '@/common/chat/chatLib';
 import type { TChatConversation } from '@/common/config/storage';
 import { ConversationProvider } from '@/renderer/hooks/context/ConversationContext';
 import { LayoutContext } from '@/renderer/hooks/context/LayoutContext';
@@ -33,7 +33,9 @@ import koConversation from '@/renderer/services/i18n/locales/ko-KR/conversation.
 const params = new URLSearchParams(location.search);
 const scenario = params.get('scenario') ?? 'delayed-image';
 const structuredQuestion = scenario.startsWith('structured-');
-const olderAnchor = scenario === 'older-anchor' || scenario === 'structured-older-anchor';
+const nativeQuestion = scenario.startsWith('native-');
+const olderAnchor =
+  scenario === 'older-anchor' || scenario === 'structured-older-anchor' || scenario === 'native-older-anchor';
 const conversationId = 'isolated-message-navigation';
 const conversation = {
   id: conversationId,
@@ -56,10 +58,29 @@ const markerExamples = `> ${USER_CHOICE_MARKER}\n\n\`${USER_CHOICE_MARKER}\`\n\n
 const targetText = structuredQuestion
   ? `검증용 승인 질문입니다.\n\n${'- 긴 선택지 설명입니다. '.repeat(10)}\n\n${'- 추가 선택지입니다.\n'.repeat(scenario === 'structured-long-options' ? 60 : 2)}`
   : `${scenario === 'long-message' ? '긴 설명 문단입니다.\n\n'.repeat(45) : ''}${scenario === 'two-markers' ? `${markerExamples}${USER_CHOICE_MARKER}\n첫 질문입니다.\n\n${'긴 설명입니다.\n\n'.repeat(25)}` : ''}${USER_CHOICE_MARKER}\n검증용 승인 질문입니다.\n`;
-const messages = Array.from({ length: 25 }, (_, i) =>
+const messages: TMessage[] = Array.from({ length: 25 }, (_, i) =>
   message(i, i === 10 ? targetText : `기록 ${i}\n\n일반 대화 내용입니다.\n\n${'추가 설명입니다. '.repeat(8)}`)
 );
-if (scenario === 'delayed-image' || structuredQuestion) {
+if (nativeQuestion) {
+  messages[10] = {
+    ...message(10, ''),
+    type: 'ask',
+    content: {
+      session_id: conversationId,
+      request_id: 'native-fixture',
+      persisted: true,
+      pendingVerified: true,
+      questions: [
+        {
+          question: '첫 번째 질문입니다.',
+          options: [{ label: '사전 검토', description: '긴 선택지 설명입니다. '.repeat(180) }],
+        },
+        { question: '검증용 승인 질문입니다.', options: [{ label: '진행' }, { label: '보류' }] },
+      ],
+    },
+  };
+}
+if (scenario === 'delayed-image' || structuredQuestion || nativeQuestion) {
   messages[3] = message(3, '![늦게 표시되는 이미지](https://fixture.invalid/growth.svg)');
 }
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -69,6 +90,7 @@ for (const event of [
   ipcBridge.conversation.statusChanged,
   ipcBridge.conversation.listChanged,
   ipcBridge.conversation.turnCompleted,
+  ipcBridge.conversation.choiceNoticesChanged,
   ipcBridge.theme.changed,
 ])
   event.on = () => () => {};
@@ -94,14 +116,18 @@ await i18next.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 const store = createChoiceNoticeStore();
-if (structuredQuestion) {
+// Keep synchronization inside this fixture: a generic empty API response would
+// remove a newly registered notice when a target's completed history mounts.
+ipcBridge.conversation.registerChoiceNotice.invoke = async () => store.getSnapshot();
+ipcBridge.conversation.dismissChoiceNotice.invoke = async () => store.getSnapshot();
+if (structuredQuestion || nativeQuestion) {
   // Structured questions arrive through the server-owned snapshot, without markers.
   store.replaceAll([
     {
-      key: choiceNoticeKey(conversationId, targetId, 0),
+      key: choiceNoticeKey(conversationId, targetId, nativeQuestion ? 1 : 0),
       conversationId,
       messageId: targetId,
-      markerIndex: 0,
+      markerIndex: nativeQuestion ? 1 : 0,
       preview: '검증용 승인 질문입니다.',
       createdAt: 10,
     },

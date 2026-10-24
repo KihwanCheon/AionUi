@@ -1246,6 +1246,7 @@ export type I18nKey =
   | 'messages.anchorRail.searchAria'
   | 'messages.anchorRail.tickAria'
   | 'messages.askAnswered'
+  | 'messages.askClosed'
   | 'messages.askDecline'
   | 'messages.askDeclined'
   | 'messages.askOther'

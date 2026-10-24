@@ -105,6 +105,7 @@
   "askDecline": "Dismiss",
   "askAnswered": "Answered",
   "askDeclined": "Dismissed",
+  "askClosed": "This question is no longer pending.",
   "askOther": "Other",
   "askOtherPlaceholder": "Type your answer",
   "requestDetails": "Request details:",

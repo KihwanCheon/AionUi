@@ -111,6 +111,7 @@
   "askDecline": "Не відповідати",
   "askAnswered": "Відповіли",
   "askDeclined": "Пропущено",
+  "askClosed": "Це запитання більше не очікує відповіді.",
   "askOther": "Інше",
   "askOtherPlaceholder": "Введіть свою відповідь",
   "requestDetails": "Деталі запиту:",

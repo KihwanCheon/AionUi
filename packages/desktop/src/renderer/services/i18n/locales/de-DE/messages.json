@@ -105,6 +105,7 @@
   "askDecline": "Nicht beantworten",
   "askAnswered": "Beantwortet",
   "askDeclined": "Übersprungen",
+  "askClosed": "Für diese Frage wird keine Antwort mehr erwartet.",
   "askOther": "Andere",
   "askOtherPlaceholder": "Antwort eingeben",
   "requestDetails": "Anfragedetails:",

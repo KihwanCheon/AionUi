@@ -105,6 +105,7 @@
   "askDecline": "不回答",
   "askAnswered": "已回答",
   "askDeclined": "已跳過",
+  "askClosed": "此問題已不再等待回答。",
   "askOther": "其它",
   "askOtherPlaceholder": "輸入你的回答",
   "requestDetails": "請求內容：",

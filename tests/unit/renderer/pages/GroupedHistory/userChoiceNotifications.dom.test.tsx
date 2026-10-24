@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
 import type { ConversationFailure } from '@/renderer/pages/conversation/GroupedHistory/utils/conversationFailure';
+import type { IMessageAsk } from '@/common/chat/chatLib';
 
 const state = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -18,7 +19,12 @@ const state = vi.hoisted(() => ({
   lookupName: vi.fn(),
   failures: new Map<string, ConversationFailure>(),
   acknowledge: vi.fn(),
+  answerAsk: vi.fn(),
 }));
+vi.mock('@/common/adapter/ipcBridge', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/common/adapter/ipcBridge')>();
+  return { ...actual, conversation: { ...actual.conversation, answerAsk: { invoke: state.answerAsk } } };
+});
 vi.mock('@/common', () => ({
   ipcBridge: {
     conversation: {
@@ -59,6 +65,7 @@ import { remarkChoiceQuestions } from '@/renderer/hooks/context/UserChoiceNotifi
 import { MARKDOWN_REMARK_PLUGINS } from '@/renderer/components/Markdown/markdownComponents';
 import ProjectGroupHeader from '@/renderer/pages/conversation/GroupedHistory/components/ProjectGroupHeader';
 import ConversationLeadingStatus from '@/renderer/pages/conversation/GroupedHistory/components/ConversationLeadingStatus';
+import MessageQuestion from '@/renderer/pages/conversation/Messages/MessageQuestion';
 
 const frame = (
   conversationId = 'conversation-a',
@@ -93,6 +100,122 @@ beforeEach(() => {
   state.lookupName.mockReturnValue('Conversation A');
   state.getConversation.mockResolvedValue({ name: 'Conversation A' });
   state.failures = new Map();
+  state.answerAsk.mockResolvedValue(undefined);
+});
+
+describe('native question notifications', () => {
+  const question = (content: Partial<IMessageAsk['content']> = {}): IMessageAsk => ({
+    id: 'ask-native',
+    msg_id: 'ask-native',
+    conversation_id: 'conversation-a',
+    type: 'ask',
+    position: 'left',
+    content: {
+      session_id: 'conversation-a',
+      request_id: 'request-native',
+      persisted: true,
+      pendingVerified: true,
+      questions: [
+        { question: '배포 범위', options: [{ label: '검증 환경' }, { label: '운영 환경' }] },
+        { question: '대상 기능', multi_select: true, options: [{ label: '질문 알림' }, { label: '질문 이동' }] },
+      ],
+      ...content,
+    },
+  });
+  const nativeSetup = () => {
+    const store = createChoiceNoticeStore();
+    store.replaceAll(
+      [0, 1].map((index) => ({
+        key: JSON.stringify(['conversation-a', 'ask-native', index]),
+        conversationId: 'conversation-a',
+        messageId: 'ask-native',
+        markerIndex: index,
+        preview: index ? '대상 기능' : '배포 범위',
+        createdAt: 1,
+      }))
+    );
+    render(
+      <UserChoiceNotificationsProvider store={store}>
+        <MessageQuestion message={question()} />
+        <UserChoiceNotificationButton />
+      </UserChoiceNotificationsProvider>
+    );
+    return store;
+  };
+
+  it('navigates to the exact persisted question without answering or dismissing it', async () => {
+    const store = nativeSetup();
+    expect(screen.getByTestId('message-question-item-1')).toHaveAttribute('data-choice-marker-index', '1');
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Conversation A.*대상 기능/ }));
+    expect(state.navigate).toHaveBeenCalledWith('/conversation/conversation-a', {
+      state: { targetMessageId: 'ask-native', targetMarkerIndex: 1 },
+    });
+    expect(store.getSnapshot()).toHaveLength(2);
+    expect(state.answerAsk).not.toHaveBeenCalled();
+  });
+
+  it('highlights only the native question targeted by a notification preview', async () => {
+    nativeSetup();
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));
+    const item = (await screen.findByRole('button', { name: /Conversation A.*대상 기능/ })).parentElement!;
+    fireEvent.mouseEnter(item);
+    expect(screen.getByTestId('message-question-item-1')).toHaveAttribute('data-notification-highlight', 'true');
+    expect(screen.getByTestId('message-question-item-0')).not.toHaveAttribute('data-notification-highlight');
+    fireEvent.mouseLeave(item);
+    expect(screen.getByTestId('message-question-item-1')).not.toHaveAttribute('data-notification-highlight');
+  });
+
+  it('dismisses a notification without declining or answering the question', async () => {
+    const store = nativeSetup();
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.userChoiceNotifications.label:1' }));
+    const dismiss = await screen.findAllByRole('button', { name: 'conversation.userChoiceNotifications.dismiss' });
+    fireEvent.click(dismiss[0]);
+    expect(store.getSnapshot()).toHaveLength(1);
+    expect(state.answerAsk).not.toHaveBeenCalled();
+    expect(screen.getByTestId('message-question-decline')).toBeEnabled();
+  });
+
+  it('answers every question through the dedicated channel and preserves manual notices', async () => {
+    const store = nativeSetup();
+    fireEvent.click(screen.getByRole('radio', { name: '검증 환경' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '질문 알림' }));
+    fireEvent.click(screen.getByTestId('message-question-submit'));
+    await waitFor(() =>
+      expect(state.answerAsk).toHaveBeenCalledWith({
+        conversation_id: 'conversation-a',
+        request_id: 'request-native',
+        answers: [
+          { question: '배포 범위', labels: ['검증 환경'] },
+          { question: '대상 기능', labels: ['질문 알림'] },
+        ],
+      })
+    );
+    expect(store.getSnapshot()).toHaveLength(2);
+    expect(screen.getByTestId('message-question-status')).toHaveTextContent('messages.askAnswered');
+  });
+
+  it('restores accepted selections without enabling a second answer', () => {
+    render(
+      <MessageQuestion
+        message={question({
+          resolution: 'answered',
+          answers: [{ question: '배포 범위', labels: ['검증 환경'] }],
+        })}
+      />
+    );
+    expect(screen.queryByTestId('message-question-submit')).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '검증 환경' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '검증 환경' })).toBeDisabled();
+  });
+
+  it('keeps restored questions disabled until their pending state is verified', () => {
+    const { rerender } = render(<MessageQuestion message={question({ pendingVerified: false })} />);
+    expect(screen.getByTestId('message-question-decline')).toBeDisabled();
+    rerender(<MessageQuestion message={question({ resolution: 'closed' })} />);
+    expect(screen.getByTestId('message-question-status')).toHaveTextContent('messages.askClosed');
+    expect(state.answerAsk).not.toHaveBeenCalled();
+  });
 });
 
 describe('prose question boxes', () => {
