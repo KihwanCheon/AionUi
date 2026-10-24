@@ -9,6 +9,7 @@ import type { AgentStreamErrorInfo, IMessageText, IMessageTips, TMessage } from 
 import {
   composeMessage,
   mergeAcpToolCallContent,
+  mergeAskMessage,
   mergeTextMessageContent,
   normalizeAgentStreamError,
   normalizeTextMessageContent,
@@ -785,11 +786,16 @@ export function normalizeDbMessage(msg: TMessage): TMessage {
 }
 
 const getMessageMergeKey = (message: TMessage): string => {
+  // Recovery uses confirmation:* while history uses the persisted ask-* anchor.
+  if (message.type === 'ask' && message.content.request_id) {
+    return `ask:${JSON.stringify([message.conversation_id, message.content.request_id])}`;
+  }
   if (message.msg_id) return `${message.type}:${message.msg_id}`;
   return `id:${message.id}`;
 };
 
 const preferPersistedOrLiveMessage = (persisted: TMessage, live: TMessage): TMessage => {
+  if (persisted.type === 'ask' && live.type === 'ask') return mergeAskMessage(live, persisted);
   if (persisted.type === 'text' && live.type === 'text') {
     return preferTextMessageVersion(persisted, live);
   }
@@ -825,6 +831,14 @@ function mergeLoadedPageWithCurrent(conversationId: string, messages: TMessage[]
 export function prependHistoryMessages(currentList: TMessage[], messages: TMessage[]): TMessage[] {
   if (!messages.length) return currentList;
 
+  // Upgrade a recovered card in place so its draft and durable navigation target survive.
+  const historyQuestions = new Map(
+    messages.filter((message) => message.type === 'ask').map((message) => [getMessageMergeKey(message), message])
+  );
+  const mergedCurrent = currentList.map((message) => {
+    const history = message.type === 'ask' ? historyQuestions.get(getMessageMergeKey(message)) : undefined;
+    return history ? preferPersistedOrLiveMessage(history, message) : message;
+  });
   const currentIds = new Set(currentList.map((message) => message.id));
   const currentKeys = new Set(currentList.map(getMessageMergeKey));
   const uniqueHistory = messages.filter(
@@ -832,7 +846,8 @@ export function prependHistoryMessages(currentList: TMessage[], messages: TMessa
   );
   // Folding the combined list (not the page alone) also covers a retry run whose
   // attempts straddle a page boundary.
-  return uniqueHistory.length ? foldSupersededTips([...uniqueHistory, ...currentList]) : currentList;
+  const didUpdate = mergedCurrent.some((message, index) => message !== currentList[index]);
+  return uniqueHistory.length || didUpdate ? foldSupersededTips([...uniqueHistory, ...mergedCurrent]) : currentList;
 }
 
 export const usePrependHistoryPage = () => {

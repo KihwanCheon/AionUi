@@ -8,7 +8,7 @@ const fixture = path.resolve('tests/fixtures/message-navigation/fixture.tsx').re
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const results = [];
 try {
-  for (const [scenario, imageDelay] of [
+  for (const [scenario, imageDelay, viewportWidth = 1100] of [
     ['delayed-image', 150],
     ['delayed-image', 900],
     ['older-anchor', 0],
@@ -18,8 +18,10 @@ try {
     ['structured-long-options', 150],
     ['native-long-options', 150],
     ['native-older-anchor', 900],
+    ['native-long-options', 150, 390],
+    ['native-older-anchor', 900, 390],
   ]) {
-    const context = await browser.newContext({ viewport: { width: 1100, height: 720 } });
+    const context = await browser.newContext({ viewport: { width: viewportWidth, height: 720 } });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -42,13 +44,15 @@ try {
     await page.goto(`${host}/message-navigation.html?scenario=${scenario}`);
     await page.getByRole('button', { name: '확인이 필요한 대화 1개' }).click();
     await page.getByRole('button', { name: /사용자 선택 필요.*알림 위치 검증.*검증용 승인/ }).click();
-    await page.locator('#message-navigation-10').waitFor();
+    const nativeQuestion = scenario.startsWith('native-');
+    await (nativeQuestion ? page.getByTestId('message-ask-left') : page.locator('#message-navigation-10')).waitFor();
     // Allow browser smooth scrolling and delayed image layout to finish; no scroll API is mocked.
     await page.waitForTimeout(1800);
     const readGeometry = () =>
       page.evaluate(() => {
         const scroller = document.querySelector('[data-testid="message-list-scroller"]');
-        const row = document.getElementById('message-navigation-10');
+        const row =
+          document.getElementById('message-navigation-10') ?? document.querySelector('[data-message-type="ask"]');
         const native = row.querySelector('[data-testid="message-question-item-1"]');
         const shadow = row.querySelector('.markdown-shadow')?.shadowRoot;
         const question = native
@@ -67,6 +71,23 @@ try {
       });
     const geometry = await readGeometry();
     const visible = geometry.top >= geometry.viewportTop && geometry.bottom <= geometry.viewportBottom;
+    if (nativeQuestion) {
+      assert.equal(
+        await page.getByTestId('message-question').count(),
+        1,
+        'Recovery and history must display one question card'
+      );
+      const option = page.getByTestId('message-question-option-1-진행');
+      const radio = option.getByRole('radio');
+      await option.click();
+      await page.getByRole('button', { name: '질문 이력 다시 불러오기', exact: true }).click();
+      assert.equal(
+        await page.getByTestId('message-question').count(),
+        1,
+        'Reloading history must keep one question card'
+      );
+      assert.ok(await radio.isChecked(), 'Hydration must preserve the selected answer');
+    }
     // User scrolling must release anchoring: a subsequent layout change must
     // not force the question back into view.
     await page.getByTestId('message-list-scroller').hover();
@@ -96,7 +117,17 @@ try {
       .evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop < 2);
     // Replying and finishing navigation must leave the question pending.
     await page.getByRole('button', { name: '확인이 필요한 대화 1개' }).waitFor();
-    results.push({ scenario, imageDelay, visible, released, repeatedVisible, resumed, geometry, errors });
+    results.push({
+      scenario,
+      imageDelay,
+      viewportWidth,
+      visible,
+      released,
+      repeatedVisible,
+      resumed,
+      geometry,
+      errors,
+    });
     console.log(JSON.stringify(results.at(-1)));
     await context.close();
   }

@@ -64,6 +64,33 @@ const storedQuestion = (overrides: Partial<IMessageAsk['content']> = {}): IMessa
 });
 
 describe('persisted native question recovery', () => {
+  it('preserves an accepted answer when older unanswered history arrives afterwards', () => {
+    const answered = storedQuestion({
+      resolution: 'answered',
+      answers: [{ question: '진행할까요?', labels: ['진행'] }],
+      pendingVerified: true,
+    });
+    const result = composeMessage(storedQuestion(), [answered]);
+    expect((result[0] as IMessageAsk).content.resolution).toBe('answered');
+    expect((result[0] as IMessageAsk).content.answers).toEqual(answered.content.answers);
+  });
+
+  it('never downgrades a durable question to a delayed transient recovery card', () => {
+    const stored = storedQuestion({ resolution: 'declined' });
+    const transient = {
+      ...storedQuestion({ persisted: false }),
+      id: 'confirmation:request-1',
+      msg_id: 'confirmation:request-1',
+    };
+    expect(composeMessage(transient, [stored])).toEqual([stored]);
+  });
+
+  it('does not merge question requests that belong to different conversations', () => {
+    const stored = storedQuestion();
+    const other = { ...storedQuestion(), id: 'other-question', conversation_id: 'conv-2', msg_id: 'other-question' };
+    expect(composeMessage(other, [stored])).toHaveLength(2);
+  });
+
   it('does not relight the sidebar waiting state for an accepted answer update', () => {
     expect(isWaitingConfirmationStreamMessage('ask')).toBe(true);
     expect(isWaitingConfirmationStreamMessage('ask', { resolution: 'answered' })).toBe(false);

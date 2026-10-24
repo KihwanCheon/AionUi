@@ -335,6 +335,16 @@ export type IMessageAsk = IMessage<
   }
 >;
 
+/** Keep one question request across recovery, streaming and persisted history. */
+export const mergeAskMessage = (existing: IMessageAsk, incoming: IMessageAsk): IMessageAsk => {
+  if (existing.content.persisted && !incoming.content.persisted) return existing;
+  return {
+    ...incoming,
+    id: existing.id,
+    content: { ...existing.content, ...incoming.content },
+  };
+};
+
 export type IMessagePermission = IMessage<'permission', IConfirmation>;
 
 export type IMessageAcpToolCall = IMessage<'acp_tool_call', ToolCallUpdate>;
@@ -1101,12 +1111,15 @@ export const composeMessage = (
 
   if (message.type === 'ask' && message.content.request_id) {
     const existingIndex = list.findIndex(
-      (item) => item.type === 'ask' && item.content.request_id === message.content.request_id
+      (item) =>
+        item.type === 'ask' &&
+        item.conversation_id === message.conversation_id &&
+        item.content.request_id === message.content.request_id
     );
     if (existingIndex >= 0) {
       const existing = list[existingIndex] as IMessageAsk;
-      if (existing.content.persisted && !message.content.persisted) return list;
-      return updateMessage(existingIndex, { ...message, id: existing.id });
+      const merged = mergeAskMessage(existing, message);
+      return merged === existing ? list : updateMessage(existingIndex, merged);
     }
   }
   if (last.msg_id !== message.msg_id || last.type !== message.type) {

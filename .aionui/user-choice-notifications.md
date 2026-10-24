@@ -37,6 +37,8 @@ The existing `ask` event is persisted as one interactive card, with a stable con
 
 The dedicated answer endpoint records accepted answers or an explicit decline on the same card and broadcasts that state to other clients. It does not dismiss notices. Replays preserve the saved response and durable dismissal tombstones. Pending-confirmation recovery deduplicates transient cards against the persisted request; removing a pending confirmation retains the durable navigation anchor. Restored unanswered cards are disabled until the pending request is verified, and expired requests become read-only. No polling or automatic answer/approval is introduced.
 
+Latest-history hydration, notification anchor windows and older pages match native cards by conversation/request, including recovery that finishes before history loads. Upgrading a transient card preserves its React identity and draft; its durable `msg_id` is also accepted as a navigation target. Identical question text with different request identities remains separate.
+
 For focused checks, run the native/async question relay tests and the choice-notice tests in `aionui-conversation`, plus the AionUi notification DOM and pending-confirmation recovery tests. The browser navigation fixture includes native multi-question cards with long first-question options and older-history loading. These are event/SQLite/browser tests; they do not claim a fresh live CLI capture.
 
 ## Rebase integration seams

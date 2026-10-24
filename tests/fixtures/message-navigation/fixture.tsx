@@ -21,7 +21,9 @@ import {
   MessagePaginationProvider,
   useMessageLstCache,
   useUpdateMessageList,
+  useReplaceWithAnchorWindow,
 } from '@/renderer/pages/conversation/Messages/hooks';
+import { usePendingConfirmationsRecovery } from '@/renderer/pages/conversation/Messages/usePendingConfirmationsRecovery';
 import {
   UserChoiceNotificationsProvider,
   UserChoiceNotificationButton,
@@ -64,6 +66,7 @@ const messages: TMessage[] = Array.from({ length: 25 }, (_, i) =>
 if (nativeQuestion) {
   messages[10] = {
     ...message(10, ''),
+    msg_id: targetId,
     type: 'ask',
     content: {
       session_id: conversationId,
@@ -91,12 +94,27 @@ for (const event of [
   ipcBridge.conversation.listChanged,
   ipcBridge.conversation.turnCompleted,
   ipcBridge.conversation.choiceNoticesChanged,
+  ipcBridge.conversation.confirmation.remove,
   ipcBridge.theme.changed,
 ])
   event.on = () => () => {};
 ipcBridge.theme.requestCurrent.invoke = async () => ({ css: '' });
 ipcBridge.acpConversation.getManagedAgents.invoke = async () => [];
 ipcBridge.conversation.get.invoke = async () => conversation;
+ipcBridge.conversation.confirmation.list.invoke = async () => {
+  const question = messages[10];
+  return question.type === 'ask'
+    ? [
+        {
+          id: question.content.request_id,
+          call_id: question.content.request_id,
+          description: '',
+          options: [],
+          questions: question.content.questions,
+        },
+      ]
+    : [];
+};
 ipcBridge.database.getUserConversations.invoke = async () => ({ items: [conversation], total: 1, has_more: false });
 ipcBridge.database.getConversationMessages.invoke = async ({ limit, anchor_message_id, before }) => {
   await wait(limit === 200 ? 0 : 120);
@@ -138,12 +156,17 @@ if (structuredQuestion || nativeQuestion) {
 
 function Chat() {
   useMessageLstCache(conversationId);
+  usePendingConfirmationsRecovery(conversationId);
+  const replaceWithAnchorWindow = useReplaceWithAnchorWindow();
   const update = useUpdateMessageList();
   return (
     <>
       <Button onClick={() => update((list) => [...list, { ...message(100, '검증용 사용자 응답'), position: 'right' }])}>
         사용자 메시지 추가
       </Button>
+      {nativeQuestion && (
+        <Button onClick={() => replaceWithAnchorWindow(conversationId, messages)}>질문 이력 다시 불러오기</Button>
+      )}
       <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
         <MessageList />
       </div>
@@ -153,7 +176,7 @@ function Chat() {
 
 createRoot(document.getElementById('root')!).render(
   <I18nextProvider i18n={i18next}>
-    <LayoutContext.Provider value={{ isMobile: false, siderCollapsed: false, setSiderCollapsed: () => {} }}>
+    <LayoutContext.Provider value={{ isMobile: innerWidth < 768, siderCollapsed: false, setSiderCollapsed: () => {} }}>
       <MemoryRouter initialEntries={['/guid']}>
         <PreviewProvider>
           <UserChoiceNotificationsProvider store={store}>

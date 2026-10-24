@@ -8,7 +8,8 @@ import React, { type PropsWithChildren } from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ipcBridge } from '@/common';
-import type { IMessageAcpToolCall, IMessageText, IMessageThinking } from '@/common/chat/chatLib';
+import type { MessageCursorPage } from '@/common/adapter/ipcBridge';
+import type { IMessageAcpToolCall, IMessageAsk, IMessageText, IMessageThinking } from '@/common/chat/chatLib';
 import { transformMessage } from '@/common/chat/chatLib';
 import {
   MessageListLoadingProvider,
@@ -18,12 +19,18 @@ import {
   useMessageLstCache,
   useMessageList,
   useReplaceWithAnchorWindow,
+  usePrependHistoryPage,
   normalizeDbMessage,
 } from '@/renderer/pages/conversation/Messages/hooks';
+import { usePendingConfirmationsRecovery } from '@/renderer/pages/conversation/Messages/usePendingConfirmationsRecovery';
 
 vi.mock('@/common', () => ({
   ipcBridge: {
     conversation: {
+      confirmation: {
+        list: { invoke: vi.fn().mockResolvedValue([]) },
+        remove: { on: vi.fn().mockReturnValue(() => {}) },
+      },
       userCreated: {
         on: vi.fn().mockReturnValue(() => {}),
       },
@@ -43,6 +50,23 @@ vi.mock('@/common', () => ({
 }));
 
 const CONVERSATION_ID = 'conversation-1';
+
+function createQuestionMessage(requestId: string, persisted: boolean): IMessageAsk {
+  const id = persisted ? `ask-${requestId}` : `confirmation:${requestId}`;
+  return {
+    id,
+    msg_id: id,
+    type: 'ask',
+    conversation_id: CONVERSATION_ID,
+    position: 'left',
+    content: {
+      session_id: CONVERSATION_ID,
+      request_id: requestId,
+      questions: [{ question: '이 초안으로 등록할까요?', options: [{ label: '등록' }] }],
+      ...(persisted ? { persisted: true } : {}),
+    },
+  };
+}
 
 function createTextMessage(msgId: string, content: string): IMessageText {
   return {
@@ -151,6 +175,126 @@ describe('message merging', () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
+  });
+
+  it('keeps one native question when pending recovery finishes before history hydration', async () => {
+    const stored = createQuestionMessage('request-1', true);
+    const invoke = vi.mocked(ipcBridge.database.getConversationMessages.invoke);
+    let finishHistory!: (page: MessageCursorPage) => void;
+    invoke.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishHistory = resolve;
+      })
+    );
+    vi.mocked(ipcBridge.conversation.confirmation.list.invoke).mockResolvedValue([
+      { id: 'request-1', call_id: 'request-1', description: '', options: [], questions: stored.content.questions },
+    ]);
+
+    const { result } = renderHook(
+      () => {
+        useMessageLstCache(CONVERSATION_ID);
+        usePendingConfirmationsRecovery(CONVERSATION_ID);
+        return useMessageList();
+      },
+      { wrapper: CacheWrapper }
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current).toHaveLength(1);
+
+    await act(async () => {
+      finishHistory({ items: [stored], has_more_before: false, has_more_after: false });
+    });
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0].msg_id).toBe(stored.msg_id);
+  });
+
+  it('keeps one native question when history loads before pending recovery', async () => {
+    const stored = createQuestionMessage('request-1', true);
+    vi.mocked(ipcBridge.database.getConversationMessages.invoke).mockResolvedValueOnce({
+      items: [stored],
+      has_more_before: false,
+      has_more_after: false,
+    });
+    const confirmations = [
+      { id: 'request-1', call_id: 'request-1', description: '', options: [], questions: stored.content.questions },
+    ];
+    let finishRecovery!: (value: typeof confirmations) => void;
+    const pending = new Promise<typeof confirmations>((resolve) => {
+      finishRecovery = resolve;
+    });
+    vi.mocked(ipcBridge.conversation.confirmation.list.invoke).mockReturnValue(pending);
+    const { result } = renderHook(
+      () => {
+        useMessageLstCache(CONVERSATION_ID);
+        usePendingConfirmationsRecovery(CONVERSATION_ID);
+        return useMessageList();
+      },
+      { wrapper: CacheWrapper }
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      finishRecovery(confirmations);
+    });
+
+    expect(result.current).toHaveLength(1);
+    expect((result.current[0] as IMessageAsk).content.pendingVerified).toBe(true);
+  });
+
+  it('uses the persisted question anchor when a notification opens its history window', async () => {
+    const stored = createQuestionMessage('request-1', true);
+    const { result } = renderHook(() => useAnchorMessageHarness(), { wrapper: TestWrapper });
+    act(() => {
+      result.current.addOrUpdateMessage(createQuestionMessage('request-1', false));
+    });
+    await flushMessageQueue();
+
+    act(() => {
+      result.current.replaceWithAnchorWindow(CONVERSATION_ID, [stored]);
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].msg_id).toBe(stored.msg_id);
+  });
+
+  it('replaces a recovered question with its durable anchor when loading an older page', async () => {
+    const stored = createQuestionMessage('request-1', true);
+    const { result } = renderHook(
+      () => ({
+        ...useMessageHarness(),
+        prepend: usePrependHistoryPage(),
+      }),
+      { wrapper: TestWrapper }
+    );
+    act(() => {
+      result.current.addOrUpdateMessage(createQuestionMessage('request-1', false));
+    });
+    await flushMessageQueue();
+
+    act(() => {
+      result.current.prepend([stored]);
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].msg_id).toBe(stored.msg_id);
+  });
+
+  it('keeps identical question text from different requests as separate cards', async () => {
+    const { result } = renderHook(() => useAnchorMessageHarness(), { wrapper: TestWrapper });
+    act(() => {
+      result.current.addOrUpdateMessage(createQuestionMessage('request-2', false));
+    });
+    await flushMessageQueue();
+
+    act(() => {
+      result.current.replaceWithAnchorWindow(CONVERSATION_ID, [createQuestionMessage('request-1', true)]);
+    });
+
+    expect(result.current.messages).toHaveLength(2);
   });
 
   it('keeps one question and its metadata through replay and history hydration', async () => {

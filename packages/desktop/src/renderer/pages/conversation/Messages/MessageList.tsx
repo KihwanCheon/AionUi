@@ -123,6 +123,9 @@ const getProcessedItemSourceMessageIds = (item: IProcessedItem): string[] => {
   if ('type' in item && item.type === 'file_summary') {
     return item.sourceMessageIds;
   }
+  if ('type' in item && item.type === 'ask' && item.msg_id) {
+    return [item.id, item.msg_id];
+  }
   return 'id' in item ? [item.id] : [];
 };
 
