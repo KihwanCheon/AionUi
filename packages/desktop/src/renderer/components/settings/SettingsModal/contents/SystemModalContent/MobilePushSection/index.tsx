@@ -1,7 +1,7 @@
 import { Alert, Button, Input, Message, Switch, Tag } from '@arco-design/web-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { mobilePushBridge } from '@/common/platform/mobilePushBridge';
+import { mobilePushBridge } from '@/common/platform/mobilePush';
 import type { MobilePushPairing, MobilePushResult, MobilePushStatus } from '@/common/types/platform/mobilePush';
 import { isElectronDesktop, isWindows } from '@/renderer/utils/platform';
 import PreferenceRow from '../PreferenceRow';

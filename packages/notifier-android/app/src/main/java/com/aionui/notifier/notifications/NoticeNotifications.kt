@@ -45,8 +45,15 @@ class NoticeNotifications(private val context: Context) {
             ?.importance != NotificationManager.IMPORTANCE_NONE
     }
 
-    fun show(notice: PushNotice) {
-        if (!permitted()) return
+    fun show(notice: PushNotice, updateExisting: Boolean = false) {
+        if (!permitted() || notice.opened) return
+        if (
+            updateExisting &&
+                context.getSystemService(NotificationManager::class.java).activeNotifications.none {
+                    it.tag == notice.key
+                }
+        )
+            return
         val intent =
             Intent(context, MainActivity::class.java).apply {
                 action = "com.aionui.notifier.OPEN_NOTICE"
@@ -79,6 +86,7 @@ class NoticeNotifications(private val context: Context) {
                 .setContentIntent(pending)
                 .setAutoCancel(true)
                 .setOnlyAlertOnce(true)
+                .setSilent(notice.silent || updateExisting)
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .build()

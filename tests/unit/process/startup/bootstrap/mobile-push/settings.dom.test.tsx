@@ -18,7 +18,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: state.t }) }));
 vi.mock('@/renderer/utils/platform', () => ({ isElectronDesktop: () => state.desktop, isWindows: () => true }));
-vi.mock('@/common/platform/mobilePushBridge', () => ({
+vi.mock('@/common/platform/mobilePush', () => ({
   mobilePushBridge: {
     available: () => true,
     status: { invoke: state.status },

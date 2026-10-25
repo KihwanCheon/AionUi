@@ -6,7 +6,7 @@ import type {
   MobilePushPairing,
   MobilePushResult,
   MobilePushStatus,
-} from '../types/platform/mobilePush';
+} from '../../types/platform/mobilePush';
 
 type Invoke<T, P> = [P] extends [void]
   ? () => Promise<MobilePushResult<T>>

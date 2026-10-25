@@ -13,6 +13,7 @@ import {
 import { MobilePushManager } from './manager';
 import { MobilePushStore } from './store';
 import { MobilePushFault, record } from './protocol';
+import { resolveNoticeContent } from './contentResolver';
 
 let window: BrowserWindow | undefined;
 let manager: MobilePushManager | undefined;
@@ -70,6 +71,14 @@ function service(): MobilePushManager {
   );
   manager = new MobilePushManager(store, {
     startedAt,
+    resolveNotice: async (notice) => {
+      const content = await resolveNoticeContent(notice, (conversationId, messageId) =>
+        ipcBridge.database.getConversationMessage.invoke({ conversation_id: conversationId, message_id: messageId })
+      );
+      if (content.state !== 'ready' || notice.kind === 'failure') return content;
+      const conversation = await ipcBridge.conversation.get.invoke({ id: notice.conversationId });
+      return { ...content, conversationName: conversation.name };
+    },
     ownsConversation: async (id) => {
       try {
         return (await ipcBridge.conversation.get.invoke({ id }))?.id === id;

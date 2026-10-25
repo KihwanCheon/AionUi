@@ -29,7 +29,14 @@ class NotifierStore(context: Context) {
 
     @Synchronized
     fun accept(notice: PushNotice): Boolean {
-        if (!enabled.value || mutableNotices.value.any { it.key == notice.key }) return false
+        if (!enabled.value) return false
+        val previous = mutableNotices.value.find { it.key == notice.key }
+        if (previous != null) {
+            if (notice.revision <= previous.revision) return false
+            val updated = notice.copy(opened = previous.opened, createdAt = previous.createdAt)
+            save(mutableNotices.value.map { if (it.key == notice.key) updated else it })
+            return previous.title != updated.title || previous.body != updated.body
+        }
         save((listOf(notice) + mutableNotices.value).take(100))
         return true
     }
@@ -56,6 +63,9 @@ class NotifierStore(context: Context) {
                     put("markerIndex", notice.markerIndex)
                     put("webUrl", notice.webUrl)
                     put("opened", notice.opened)
+                    put("revision", notice.revision)
+                    put("updatedAt", notice.updatedAt)
+                    put("silent", notice.silent)
                 }
             )
         }
@@ -79,6 +89,9 @@ class NotifierStore(context: Context) {
                         item.optInt("markerIndex"),
                         PushNotice.safeWebUrl(item.optString("webUrl")),
                         item.optBoolean("opened"),
+                        item.optLong("revision", 0),
+                        item.optLong("updatedAt", item.getLong("createdAt")),
+                        item.optBoolean("silent", false),
                     )
                 }
             }

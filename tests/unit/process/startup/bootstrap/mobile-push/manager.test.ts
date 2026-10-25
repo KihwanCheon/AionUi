@@ -32,6 +32,7 @@ const device = (id = 'phone-1'): LinkedDevice => ({
 let root: string, store: MobilePushStore, manager: MobilePushManager, now: number;
 const api = { devices: vi.fn(), pair: vi.fn(), unlink: vi.fn(), send: vi.fn() };
 const owns = vi.fn();
+const resolveContentMock = vi.fn();
 const protection = {
   available: vi.fn(() => true),
   encrypt: (value: string) => `protected:${Buffer.from(value).toString('base64')}`,
@@ -67,10 +68,12 @@ beforeEach(() => {
   api.send.mockResolvedValue(undefined);
   api.unlink.mockResolvedValue(undefined);
   owns.mockResolvedValue(true);
+  resolveContentMock.mockResolvedValue({ state: 'ready' });
   manager = new MobilePushManager(store, {
     now: () => now,
     client: () => api,
     ownsConversation: owns,
+    resolveNotice: resolveContentMock,
     changed: vi.fn(),
   });
 });
@@ -130,6 +133,53 @@ describe('new attention notifications', () => {
     manager.sync('owner', [notice()], text);
     await flush();
     expect(api.send.mock.calls[0][1].body).toBe('Private question');
+  });
+  it('waits for completion even when a partial preview has already been registered', async () => {
+    await enable();
+    await manager.options('owner', { includePreview: true });
+    resolveContentMock.mockResolvedValue({ state: 'pending' });
+    const initial = notice({ preview: '이 수정본을 같은 설정(a62cdd' });
+    manager.sync('owner', [initial], text);
+    await flush();
+    expect(api.send).not.toHaveBeenCalled();
+    resolveContentMock.mockResolvedValue({
+      state: 'ready',
+      detail: '이 수정본을 같은 설정(a62cdd)으로 다시 실행할까요?\n\n- 진행\n- 보류',
+    });
+    now += 1000;
+    await manager.flush();
+    expect(api.send).toHaveBeenCalledTimes(1);
+    expect(api.send.mock.calls[0][1].body).toContain('- 보류');
+  });
+  it('silently updates the same request once while ignoring an identical replay', async () => {
+    await enable();
+    await manager.options('owner', { includePreview: true });
+    const initial = notice();
+    manager.sync('owner', [initial], text);
+    await flush();
+    const updated = { ...initial, preview: '완성된 질문과 선택지' };
+    manager.sync('owner', [updated], text);
+    await flush();
+    manager.sync('owner', [updated], text);
+    await flush();
+    expect(api.send).toHaveBeenCalledTimes(2);
+    expect(api.send.mock.calls[1][1]).toMatchObject({
+      noticeId: api.send.mock.calls[0][1].noticeId,
+      revision: '2',
+      silent: 'true',
+      body: updated.preview,
+    });
+  });
+  it('cancels pending completion work if the notification is dismissed', async () => {
+    await enable();
+    resolveContentMock.mockResolvedValue({ state: 'pending' });
+    manager.sync('owner', [notice()], text);
+    await flush();
+    manager.sync('owner', [], text);
+    resolveContentMock.mockResolvedValue({ state: 'ready', detail: '완성' });
+    now += 2000;
+    await manager.flush();
+    expect(api.send).not.toHaveBeenCalled();
   });
   it('ignores old history while allowing a new request alongside a zero-date history item', async () => {
     await enable();

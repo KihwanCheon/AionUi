@@ -20,6 +20,7 @@ export type LinkedDevice = {
   updateTime?: string;
 };
 export type FcmData = Record<string, string>;
+export type DeliveryNotice = MobilePushNotice & { detail?: string; conversationName?: string };
 export const MAX_AGE_MS = 15 * 60_000;
 
 export function record(value: unknown): Record<string, unknown> {
@@ -79,28 +80,55 @@ export function labels(value: unknown): MobilePushLabels {
 
 export function payload(
   sourceId: string,
-  notice: MobilePushNotice,
+  notice: DeliveryNotice,
   text: MobilePushLabels,
   includePreview: boolean,
-  now: number
+  now: number,
+  revision = 1,
+  silent = false
 ): FcmData {
   const failure = notice.kind === 'failure';
-  return {
+  const title = failure ? text.failureTitle : text.choiceTitle;
+  const data: FcmData = {
     v: '1',
     type: 'user_choice',
     sourceId,
     noticeId: createHash('sha256').update(notice.key).digest('hex'),
-    title: (failure ? text.failureTitle : text.choiceTitle).slice(0, 120),
-    body: (includePreview && notice.preview?.trim()
-      ? notice.preview.trim()
-      : failure
-        ? text.failureBody
-        : text.choiceBody
-    ).slice(0, 320),
+    title: Array.from(includePreview && notice.conversationName ? `${notice.conversationName} · ${title}` : title)
+      .slice(0, 120)
+      .join(''),
+    body: '',
     conversationId: notice.conversationId,
     messageId: notice.messageId ?? '',
     markerIndex: String(notice.markerIndex ?? 0),
-    createdAt: String(now),
+    createdAt: String(notice.createdAt),
     expiresAt: String(now + MAX_AGE_MS),
+    updatedAt: String(now),
+    revision: String(revision),
+    silent: String(silent),
   };
+  const body =
+    includePreview && (notice.detail?.trim() || notice.preview?.trim())
+      ? notice.detail?.trim() || notice.preview!.trim()
+      : failure
+        ? text.failureBody
+        : text.choiceBody;
+  const characters = Array.from(body.slice(0, 16384));
+  let low = 0,
+    high = characters.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    data.body = characters.slice(0, middle).join('') + (middle < characters.length || body.length > 16384 ? '…' : '');
+    if (Buffer.byteLength(JSON.stringify(data), 'utf8') <= 3800) low = middle;
+    else high = middle - 1;
+  }
+  data.body = characters.slice(0, low).join('') + (low < characters.length || body.length > 16384 ? '…' : '');
+  return data;
+}
+
+/** Exclude transport timestamps and revisions when comparing the displayed content. */
+export function contentFingerprint(data: FcmData): string {
+  return createHash('sha256')
+    .update(JSON.stringify([data.title, data.body, data.conversationId, data.messageId, data.markerIndex]))
+    .digest('hex');
 }

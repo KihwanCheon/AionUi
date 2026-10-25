@@ -43,6 +43,30 @@ class NotifierStoreTest {
     }
 
     @Test
+    fun updatesAnExistingRequestWithoutAddingAnotherRowAndPreservesReadState() {
+        val store = NotifierStore(context).apply { setEnabled(true) }
+        store.accept(notice().copy(revision = 1))
+        store.open(notice().key)
+        assertTrue(
+            store.accept(
+                notice().copy(body = "완성된 질문과 선택지", revision = 2, updatedAt = 200, silent = true)
+            )
+        )
+        val restarted = NotifierStore(context)
+        assertEquals(1, restarted.notices.value.size)
+        assertEquals("완성된 질문과 선택지", restarted.notices.value.single().body)
+        assertTrue(restarted.notices.value.single().opened)
+    }
+
+    @Test
+    fun rejectsAnOlderRevisionArrivingAfterTheUpdatedContent() {
+        val store = NotifierStore(context).apply { setEnabled(true) }
+        store.accept(notice().copy(body = "완성된 본문", revision = 2))
+        assertFalse(store.accept(notice().copy(body = "작성 중", revision = 1)))
+        assertEquals("완성된 본문", store.notices.value.single().body)
+    }
+
+    @Test
     fun doesNotMergeDifferentPcsWithTheSameNoticeId() {
         val store = NotifierStore(context).apply { setEnabled(true) }
         store.accept(notice())

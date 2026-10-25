@@ -7,6 +7,9 @@
   "body": "AionUi에서 요청 내용을 확인해 주세요.",
   "createdAt": "1792760400000",
   "expiresAt": "1792764000000",
+  "revision": "1",
+  "updatedAt": "1792760400000",
+  "silent": "false",
   "conversationId": "conversation-id",
   "messageId": "message-id",
   "markerIndex": "0"

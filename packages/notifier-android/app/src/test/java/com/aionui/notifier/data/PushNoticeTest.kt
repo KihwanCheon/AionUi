@@ -30,6 +30,25 @@ class PushNoticeTest {
     }
 
     @Test
+    fun preservesLongBodiesAndUpdateMetadata() {
+        val body = "완성된 질문과 선택지입니다. ".repeat(100)
+        val notice =
+            PushNotice.fromData(
+                payload() +
+                    mapOf(
+                        "body" to body,
+                        "revision" to "2",
+                        "silent" to "true",
+                        "updatedAt" to "${now + 10}",
+                    ),
+                now,
+            )!!
+        assertEquals(body, notice.body)
+        assertEquals(2L, notice.revision)
+        assertTrue(notice.silent)
+    }
+
+    @Test
     fun rejectsExpiredAndMalformedMessages() {
         val invalid =
             listOf(

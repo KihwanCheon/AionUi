@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.lifecycle.Lifecycle
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -14,6 +15,7 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -34,6 +36,14 @@ class FirebasePushTest {
         val sourceId = "smoke-${UUID.randomUUID()}"
         try {
             app.store.setEnabled(true)
+            val managed =
+                InstrumentationRegistry.getArguments().getString("managedSender") == "true"
+            fun id(name: String) =
+                if (managed)
+                    java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(name.toByteArray())
+                        .joinToString("") { "%02x".format(it) }
+                else name
             FirebaseMessaging.getInstance().isAutoInitEnabled = true
             val token = Tasks.await(FirebaseMessaging.getInstance().token, 45, TimeUnit.SECONDS)
             fun ready(phase: String) {
@@ -48,7 +58,7 @@ class FirebasePushTest {
             ready("foreground")
             compose.waitUntil(120_000) {
                 app.store.notices.value.any {
-                    it.sourceId == sourceId && it.noticeId == "firebase-foreground-test"
+                    it.sourceId == sourceId && it.noticeId == id("firebase-foreground-test")
                 }
             }
             compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
@@ -57,12 +67,12 @@ class FirebasePushTest {
             while (
                 System.nanoTime() < deadline &&
                     app.store.notices.value.none {
-                        it.sourceId == sourceId && it.noticeId == "firebase-background-test"
+                        it.sourceId == sourceId && it.noticeId == id("firebase-background-test")
                     }
             ) Thread.sleep(200)
             val notice =
                 app.store.notices.value.find {
-                    it.sourceId == sourceId && it.noticeId == "firebase-background-test"
+                    it.sourceId == sourceId && it.noticeId == id("firebase-background-test")
                 }
             assertTrue("백그라운드 푸시 수신", notice != null)
             val posted =
@@ -70,9 +80,43 @@ class FirebasePushTest {
                     it.tag == notice!!.key
                 }
             assertTrue("Android 알림 표시", posted != null)
+            if (managed) {
+                ready("update")
+                val updateDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(120)
+                while (
+                    System.nanoTime() < updateDeadline &&
+                        app.store.notices.value.none {
+                            it.key == notice!!.key &&
+                                it.revision == 2L &&
+                                it.body.startsWith("수정된 최종 본문")
+                        }
+                ) Thread.sleep(200)
+                val updated = app.store.notices.value.single { it.key == notice!!.key }
+                assertEquals(2L, updated.revision)
+                assertTrue("긴 본문 수신", updated.body.length > 320)
+                val active =
+                    app.getSystemService(NotificationManager::class.java)
+                        .activeNotifications
+                        .filter { it.tag == updated.key }
+                assertEquals(1, active.size)
+                assertEquals(
+                    updated.body,
+                    active
+                        .single()
+                        .notification
+                        .extras
+                        .getCharSequence(android.app.Notification.EXTRA_BIG_TEXT),
+                )
+                assertTrue("갱신 알림 무음", active.single().notification.sound == null)
+                ready("verified")
+            }
             posted!!.notification.contentIntent.send()
             compose.waitForIdle()
             compose.onNodeWithTag("notice-detail").assertIsDisplayed()
+            if (managed) {
+                val body = app.store.notices.value.single { it.key == notice!!.key }.body
+                compose.onNodeWithText(body).assertIsDisplayed()
+            }
         } finally {
             fixture.delete()
             app.store.setEnabled(false)

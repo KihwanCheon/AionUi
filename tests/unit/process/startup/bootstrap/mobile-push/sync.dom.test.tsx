@@ -17,7 +17,7 @@ vi.mock('@/renderer/utils/platform', () => ({ isElectronDesktop: () => state.des
 vi.mock('@/renderer/hooks/context/UserChoiceNotifications/useAttentionNotifications', () => ({
   useAttentionNotifications: () => ({ notices: state.notices }),
 }));
-vi.mock('@/common/platform/mobilePushBridge', () => ({
+vi.mock('@/common/platform/mobilePush', () => ({
   mobilePushBridge: {
     available: () => true,
     status: { invoke: state.status },

@@ -14,6 +14,9 @@ data class PushNotice(
     val markerIndex: Int = 0,
     val webUrl: String? = null,
     val opened: Boolean = false,
+    val revision: Long = 0,
+    val updatedAt: Long = createdAt,
+    val silent: Boolean = false,
 ) {
     val key: String
         get() = "$sourceId:$noticeId"
@@ -33,16 +36,21 @@ data class PushNotice(
             if (expiresAt <= now || expiresAt < timestamp) return null
             val markerIndex = data["markerIndex"]?.toIntOrNull() ?: 0
             if (markerIndex < 0) return null
+            val revision = data["revision"]?.toLongOrNull() ?: 0
+            if (revision < 0) return null
             return PushNotice(
                 sourceId,
                 noticeId,
                 data["title"].orEmpty().take(160),
-                data["body"].orEmpty().take(1500),
+                data["body"].orEmpty().take(4096),
                 timestamp,
                 data["conversationId"].orEmpty().take(160),
                 data["messageId"].orEmpty().take(160),
                 markerIndex,
                 safeWebUrl(data["webUrl"]),
+                revision = revision,
+                updatedAt = data["updatedAt"]?.toLongOrNull() ?: timestamp,
+                silent = data["silent"] == "true",
             )
         }
 

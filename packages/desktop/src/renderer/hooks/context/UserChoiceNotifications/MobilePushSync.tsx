@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { mobilePushBridge } from '@/common/platform/mobilePushBridge';
+import { mobilePushBridge } from '@/common/platform/mobilePush';
 import { isElectronDesktop, isWindows } from '@/renderer/utils/platform';
 import { useAttentionNotifications } from './useAttentionNotifications';
 

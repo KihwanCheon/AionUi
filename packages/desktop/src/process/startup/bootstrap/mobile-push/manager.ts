@@ -10,14 +10,17 @@ import type {
 import { FirebasePushClient } from './firebaseClient';
 import { labels, MAX_AGE_MS, MobilePushFault, payload, validNotice, type LinkedDevice } from './protocol';
 import type { MobilePushStore } from './store';
+import type { NoticeContent } from '@/common/platform/mobilePush/noticeContent';
+import { contentFingerprint } from './protocol';
 
 type PushClient = Pick<FirebasePushClient, 'devices' | 'pair' | 'unlink' | 'send'>;
-type Job = { notice: MobilePushNotice; attempts: number; due: number };
+type Job = { notice: MobilePushNotice; attempts: number; due: number; version: number };
 type ManagerDependencies = {
   now?: () => number;
   startedAt?: number;
   client?: (userId: string) => PushClient;
   ownsConversation: (conversationId: string) => Promise<boolean>;
+  resolveNotice?: (notice: MobilePushNotice) => Promise<NoticeContent>;
   changed: () => void;
 };
 
@@ -36,7 +39,6 @@ export class MobilePushManager {
   private working?: Promise<void>;
   private jobs = new Map<string, Job>();
   private failed = new Set<string>();
-  private completed = new Set<string>();
   private invalidTokens = new Set<string>();
   private text?: MobilePushLabels;
   private lastError?: MobilePushError;
@@ -59,7 +61,6 @@ export class MobilePushManager {
     this.devicesAt = 0;
     this.lastError = undefined;
     this.failed.clear();
-    this.completed.clear();
     this.invalidTokens.clear();
   }
 
@@ -196,16 +197,12 @@ export class MobilePushManager {
     if (!profile.enabled) return;
     const cutoff = Math.max(this.activeAt, profile.enabledAt, this.now() - MAX_AGE_MS);
     for (const notice of usable) {
-      if (
-        notice.createdAt < cutoff ||
-        notice.createdAt > this.now() + 300_000 ||
-        this.failed.has(notice.key) ||
-        this.completed.has(notice.key)
-      )
-        continue;
+      if (notice.createdAt < cutoff || notice.createdAt > this.now() + 300_000 || this.failed.has(notice.key)) continue;
       const existing = this.jobs.get(notice.key);
-      if (existing) existing.notice = notice;
-      else this.jobs.set(notice.key, { notice, attempts: 0, due: this.now() + 500 });
+      if (existing) {
+        if (existing.notice.preview !== notice.preview) existing.version++;
+        existing.notice = notice;
+      } else this.jobs.set(notice.key, { notice, attempts: 0, due: this.now() + 500, version: 0 });
     }
     this.schedule();
   }
@@ -244,6 +241,7 @@ export class MobilePushManager {
     for (const [key, job] of this.jobs) {
       if (signal.aborted || !profile.enabled || !this.text) return;
       if (job.due > this.now()) continue;
+      const version = job.version;
       if (job.notice.createdAt < this.now() - MAX_AGE_MS) {
         this.jobs.delete(key);
         continue;
@@ -254,6 +252,17 @@ export class MobilePushManager {
           continue;
         }
         if (signal.aborted || !profile.enabled || !this.jobs.has(key)) continue;
+        const content = (await this.dependencies.resolveNotice?.(job.notice)) ?? { state: 'ready' as const };
+        if (signal.aborted || !profile.enabled || !this.jobs.has(key)) continue;
+        if (content.state === 'ignored') {
+          this.jobs.delete(key);
+          continue;
+        }
+        if (content.state === 'pending') {
+          job.due = this.now() + 1000;
+          continue;
+        }
+        const notice = { ...job.notice, detail: content.detail, conversationName: content.conversationName };
         if (!this.devicesAt || this.now() - this.devicesAt > 10_000) {
           const refreshed = await this.api(userId).devices(profile.sourceId, signal);
           if (signal.aborted || this.userId !== userId) return;
@@ -269,14 +278,21 @@ export class MobilePushManager {
           const deliveryKey = createHash('sha256')
             .update(JSON.stringify([key, device.id]))
             .digest('hex');
-          if (profile.sent[deliveryKey]) continue;
+          const receipt = profile.receipts[deliveryKey];
+          const data = payload(
+            profile.sourceId,
+            notice,
+            this.text,
+            profile.includePreview,
+            this.now(),
+            (receipt?.revision ?? 0) + 1,
+            Boolean(receipt)
+          );
+          const fingerprint = contentFingerprint(data);
+          if (receipt?.fingerprint === fingerprint || (!receipt && profile.sent[deliveryKey])) continue;
           if (signal.aborted || !profile.enabled || !this.jobs.has(key)) break;
           try {
-            await this.api(userId).send(
-              device,
-              payload(profile.sourceId, job.notice, this.text, profile.includePreview, this.now()),
-              signal
-            );
+            await this.api(userId).send(device, data, signal);
           } catch (error) {
             if (error instanceof MobilePushFault && error.code === 'device') {
               this.invalidTokens.add(device.token);
@@ -287,19 +303,23 @@ export class MobilePushManager {
           }
           if (signal.aborted || this.userId !== userId) return;
           profile.sent[deliveryKey] = this.now();
+          profile.receipts[deliveryKey] = { fingerprint, revision: Number(data.revision) };
           profile.lastSentAt = this.now();
           profile.sent = Object.fromEntries(
             Object.entries(profile.sent)
               .toSorted((a, b) => b[1] - a[1])
               .slice(0, 2000)
           );
+          profile.receipts = Object.fromEntries(
+            Object.entries(profile.receipts).filter(([id]) => profile.sent[id] !== undefined)
+          );
           await this.store.save();
           this.lastError = undefined;
           this.dependencies.changed();
         }
         if (signal.aborted || this.userId !== userId) return;
-        this.jobs.delete(key);
-        this.completed.add(key);
+        if (job.version === version) this.jobs.delete(key);
+        else job.due = this.now() + 500;
       } catch (error) {
         if (signal.aborted) return;
         this.lastError = error instanceof MobilePushFault ? error.code : 'firebase';

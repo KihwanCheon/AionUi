@@ -46,4 +46,44 @@ class NoticeNotificationsTest {
             context.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty()
         )
     }
+
+    @Test
+    fun replacesAnActiveNotificationSilentlyWithoutCreatingAnother() {
+        val notifications = NoticeNotifications(context)
+        notifications.createChannel()
+        val original = PushNotice("pc", "request", "제목", "작성 중", 100, revision = 1)
+        notifications.show(original)
+        notifications.show(
+            original.copy(body = "완성된 질문", revision = 2, silent = true),
+            updateExisting = true,
+        )
+        val active = context.getSystemService(NotificationManager::class.java).activeNotifications
+        assertEquals(1, active.size)
+        assertEquals(
+            "완성된 질문",
+            active
+                .single()
+                .notification
+                .extras
+                .getCharSequence(android.app.Notification.EXTRA_BIG_TEXT),
+        )
+        assertTrue(
+            active.single().notification.flags and android.app.Notification.FLAG_ONLY_ALERT_ONCE !=
+                0
+        )
+    }
+
+    @Test
+    fun updatesDoNotRecreateDismissedOrOpenedNotifications() {
+        val notifications = NoticeNotifications(context)
+        notifications.createChannel()
+        val notice = PushNotice("pc", "request", "제목", "본문", 100)
+        notifications.show(notice)
+        notifications.cancelAll()
+        notifications.show(notice.copy(revision = 2, silent = true), updateExisting = true)
+        notifications.show(notice.copy(opened = true))
+        assertTrue(
+            context.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty()
+        )
+    }
 }

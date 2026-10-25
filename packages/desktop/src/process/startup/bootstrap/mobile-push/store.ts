@@ -15,6 +15,7 @@ export type PushProfile = {
   projectId?: string;
   lastSentAt?: number;
   sent: Record<string, number>;
+  receipts: Record<string, { fingerprint: string; revision: number }>;
 };
 
 export type PushProtection = {
@@ -57,6 +58,18 @@ export class MobilePushStore {
               ([id, time]) => /^[a-f0-9]{64}$/.test(id) && typeof time === 'number'
             )
           ) as Record<string, number>,
+          receipts: Object.fromEntries(
+            Object.entries(record(item.receipts)).flatMap(([id, rawReceipt]) => {
+              const receipt = record(rawReceipt);
+              return /^[a-f0-9]{64}$/.test(id) &&
+                typeof receipt.fingerprint === 'string' &&
+                /^[a-f0-9]{64}$/.test(receipt.fingerprint) &&
+                Number.isSafeInteger(receipt.revision) &&
+                Number(receipt.revision) > 0
+                ? [[id, { fingerprint: receipt.fingerprint, revision: Number(receipt.revision) }]]
+                : [];
+            })
+          ),
         };
       }
     } catch {
@@ -75,6 +88,7 @@ export class MobilePushStore {
       enabledAt: 0,
       credentialPath: this.defaultCredentialPath,
       sent: {},
+      receipts: {},
     });
   }
 
