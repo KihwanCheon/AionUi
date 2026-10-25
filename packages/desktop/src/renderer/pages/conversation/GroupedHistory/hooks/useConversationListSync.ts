@@ -363,7 +363,15 @@ export const getSnapshotConversationName = (conversation_id: string): string | u
   return name ? name : undefined;
 };
 
+let conversationRefreshInFlight = false;
+let conversationRefreshQueued = false;
+
 const refreshConversations = () => {
+  if (conversationRefreshInFlight) {
+    conversationRefreshQueued = true;
+    return;
+  }
+  conversationRefreshInFlight = true;
   void ipcBridge.database.getUserConversations
     .invoke({ limit: 10000 })
     .then((result) => {
@@ -400,6 +408,14 @@ const refreshConversations = () => {
       conversation_idsState = new Set();
       projectIdByIdState = new Map();
       emitStoreChange();
+    })
+    .finally(() => {
+      conversationRefreshInFlight = false;
+      // Changes received during the request must be fetched after its snapshot.
+      if (conversationRefreshQueued) {
+        conversationRefreshQueued = false;
+        refreshConversations();
+      }
     });
 };
 
