@@ -833,5 +833,8 @@
     "running": "執行中",
     "noConfirmed": "沒有已確認未關聯的對話。請重試查詢失敗的項目。",
     "empty": "此群組中沒有未關聯 MnP 的對話。"
+  },
+  "claudeAccount": {
+    "badgeTooltip": "Claude 帳號 {{number}} · {{label}}"
   }
 }

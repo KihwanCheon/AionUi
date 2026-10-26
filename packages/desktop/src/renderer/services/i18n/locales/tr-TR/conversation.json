@@ -835,5 +835,8 @@
     "running": "Çalışıyor",
     "noConfirmed": "Bağlantısız olduğu doğrulanmış konuşma yok. Başarısız kontrolleri yeniden deneyin.",
     "empty": "Bu grupta MnP bağlantısı olmayan konuşma yok."
+  },
+  "claudeAccount": {
+    "badgeTooltip": "Claude hesabı {{number}} · {{label}}"
   }
 }

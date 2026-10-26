@@ -315,3 +315,107 @@ describe('SubscriptionUsagePublisher background refresh', () => {
     publisher.stop();
   });
 });
+
+describe('SubscriptionUsagePublisher Claude accounts', () => {
+  const accounts = [
+    { id: 'default', number: 1, label: 'Team', is_default: true, share_default_settings: true },
+    { id: 'max', number: 2, label: 'Max', is_default: false, share_default_settings: true, config_dir: 'C:\\max' },
+  ];
+  const maxUsage: ClaudeUsageSnapshot = {
+    session: { utilization: 7, resetsAt: 1_800_000_500 },
+    weekly: { utilization: 12, resetsAt: 1_800_100_500 },
+    updatedAt: 1_700_000_003_000,
+    accountId: 'max',
+  };
+
+  const createPublisher = (options: {
+    accountsList: typeof accounts;
+    getClaudeUsage: (cwd: string, accountId?: string) => Promise<ClaudeUsageSnapshot | null>;
+    onClaudeUsage?: (usage: ClaudeUsageSnapshot) => void;
+  }) => {
+    const capture = captureSnapshots();
+    const publisher = new SubscriptionUsagePublisher({
+      clearSnapshot: () => {},
+      getClaudeAccounts: async () => options.accountsList,
+      getClaudeUsage: options.getClaudeUsage,
+      getCodexUsage: async () => codexUsage,
+      initialRefreshDelayMs: 0,
+      isDirectory: () => true,
+      listConversations: async () => [
+        conversation,
+        { ...conversation, id: 'max-conversation', workspace: 'C:\\max-workspace', claudeAccountId: 'max' },
+      ],
+      now: () => new Date('2026-07-31T12:34:50.000Z'),
+      onClaudeUsage: options.onClaudeUsage ?? (() => {}),
+      onCodexUsage: () => {},
+      onProcessExit: () => {},
+      writeSnapshot: capture.writeSnapshot,
+    });
+    return { publisher, capture };
+  };
+
+  it('keeps the single-account snapshot shape when only one account exists', async () => {
+    vi.useFakeTimers();
+    const getClaudeUsage = vi.fn(async () => claudeUsage);
+    const { publisher, capture } = createPublisher({ accountsList: accounts.slice(0, 1), getClaudeUsage });
+
+    publisher.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await flushPromises();
+
+    expect(capture.snapshots.at(-1)?.claudeAccounts).toBeUndefined();
+    expect(getClaudeUsage).toHaveBeenCalledTimes(1);
+    expect(getClaudeUsage.mock.calls[0]).toEqual(['C:\\private-workspace']);
+    publisher.stop();
+  });
+
+  it('probes each account from its own conversation and keeps claude as the default account', async () => {
+    vi.useFakeTimers();
+    const getClaudeUsage = vi.fn(async (_cwd: string, accountId?: string) =>
+      accountId === 'max' ? maxUsage : claudeUsage
+    );
+    const { publisher, capture } = createPublisher({ accountsList: accounts, getClaudeUsage });
+
+    publisher.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await flushPromises();
+
+    expect(getClaudeUsage).toHaveBeenCalledWith('C:\\max-workspace', 'max');
+    const snapshot = capture.snapshots.at(-1)!;
+    expect(snapshot.claude.session?.usedPercent).toBe(23);
+    expect(snapshot.claudeAccounts?.map((account) => [account.number, account.session?.usedPercent])).toEqual([
+      [1, 23],
+      [2, 7],
+    ]);
+    publisher.stop();
+  });
+
+  it('tags account usage for renderer listeners and never overwrites the default account', async () => {
+    const onClaudeUsage = vi.fn();
+    const { publisher, capture } = createPublisher({
+      accountsList: accounts,
+      getClaudeUsage: async () => maxUsage,
+      onClaudeUsage,
+    });
+    publisher.start();
+
+    await publisher.readClaudeUsage('C:\\max-workspace', 'max');
+
+    expect(onClaudeUsage).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'max' }));
+    expect(capture.snapshots.at(-1)?.claude.state).toBe('loading');
+    publisher.stop();
+  });
+
+  it('marks a failing account unavailable without touching the default account', async () => {
+    const { publisher, capture } = createPublisher({
+      accountsList: accounts,
+      getClaudeUsage: async () => null,
+    });
+    publisher.start();
+
+    await publisher.readClaudeUsage('C:\\max-workspace', 'max');
+
+    expect(capture.snapshots.at(-1)?.claude.state).toBe('loading');
+    publisher.stop();
+  });
+});

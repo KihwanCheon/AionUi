@@ -22,5 +22,8 @@
     "specifyWorkspace": "选择项目文件夹",
     "searchPlaceholder": "搜索项目…",
     "noProject": "不使用项目"
+  },
+  "claudeAccount": {
+    "label": "Claude 账号"
   }
 }

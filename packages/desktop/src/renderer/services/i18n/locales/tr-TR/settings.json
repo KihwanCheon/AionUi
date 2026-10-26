@@ -1562,5 +1562,32 @@
       "invalidInput": "Girdiğiniz ayarları kontrol edin.",
       "firebase": "Firebase ve AionUi bağlantılarını kontrol edip tekrar deneyin."
     }
+  },
+  "claudeAccounts": {
+    "title": "Claude hesapları",
+    "description": "Bu bilgisayarda birden fazla Claude hesabı kullanabilirsiniz. İki veya daha fazla hesap olduğunda yeni konuşmalarda hesap seçilebilir ve konuşma listesinde hesabın numarası gösterilir.",
+    "add": "Hesap ekle",
+    "defaultDir": "Varsayılan Claude klasörü",
+    "labelLabel": "Hesap adı",
+    "labelPlaceholder": "örn. Kişisel Max",
+    "configDirLabel": "Claude yapılandırma klasörü",
+    "configDirPlaceholder": "örn. C:\\Users\\me\\.claude-max",
+    "defaultLabelLabel": "Mevcut varsayılan hesabın adı",
+    "defaultLabelPlaceholder": "örn. Şirket Team",
+    "shareSettings": "Varsayılan hesabın settings.json dosyasını da yükle (hook'lar, izinler)",
+    "checkLogin": "Girişi kontrol et",
+    "loggedIn": "Giriş yapıldı ({{plan}})",
+    "loggedInNoPlan": "Giriş yapıldı",
+    "loggedOut": "Giriş yapılmadı",
+    "loginHint": "PowerShell'den giriş yapın, ardından tekrar kontrol edin:",
+    "moveUp": "Yukarı taşı",
+    "moveDown": "Aşağı taşı",
+    "delete": "Hesabı sil",
+    "deleteConfirm": "Bu hesap AionUi'den silinsin mi? Yapılandırma klasörünün kendisi silinmez.",
+    "deleteInUse": "Bu hesabı kullanan konuşmalar olduğu için silinemez.",
+    "duplicateDir": "Bu yapılandırma klasörü zaten kayıtlı.",
+    "invalidInput": "Hesap adını kontrol edin ve var olan bir klasörün mutlak yolunu girin.",
+    "saveFailed": "Claude hesabı kaydedilemedi.",
+    "created": "Claude hesabı eklendi."
   }
 }

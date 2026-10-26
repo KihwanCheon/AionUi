@@ -1565,5 +1565,32 @@
       "invalidInput": "Verifique as configurações inseridas.",
       "firebase": "Verifique as conexões do Firebase e do AionUi e tente novamente."
     }
+  },
+  "claudeAccounts": {
+    "title": "Contas do Claude",
+    "description": "Você pode usar várias contas do Claude neste computador. Com duas ou mais contas, as novas conversas permitem escolher a conta e a lista de conversas mostra o número dela.",
+    "add": "Adicionar conta",
+    "defaultDir": "Pasta padrão do Claude",
+    "labelLabel": "Nome da conta",
+    "labelPlaceholder": "ex.: Pessoal Max",
+    "configDirLabel": "Pasta de configuração do Claude",
+    "configDirPlaceholder": "ex.: C:\\Users\\me\\.claude-max",
+    "defaultLabelLabel": "Nome da conta padrão atual",
+    "defaultLabelPlaceholder": "ex.: Empresa Team",
+    "shareSettings": "Também carregar o settings.json da conta padrão (hooks, permissões)",
+    "checkLogin": "Verificar login",
+    "loggedIn": "Conectado ({{plan}})",
+    "loggedInNoPlan": "Conectado",
+    "loggedOut": "Não conectado",
+    "loginHint": "Faça login pelo PowerShell e verifique novamente:",
+    "moveUp": "Mover para cima",
+    "moveDown": "Mover para baixo",
+    "delete": "Excluir conta",
+    "deleteConfirm": "Excluir esta conta do AionUi? A pasta de configuração não é excluída.",
+    "deleteInUse": "Há conversas usando esta conta, então ela não pode ser excluída.",
+    "duplicateDir": "Esta pasta de configuração já está registrada.",
+    "invalidInput": "Verifique o nome da conta e informe o caminho absoluto de uma pasta existente.",
+    "saveFailed": "Não foi possível salvar a conta do Claude.",
+    "created": "Conta do Claude adicionada."
   }
 }

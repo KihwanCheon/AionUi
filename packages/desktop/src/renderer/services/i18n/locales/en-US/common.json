@@ -211,6 +211,7 @@
     "resets": "Resets {{time}}",
     "reached": "Usage limit reached",
     "ok": "Within limit",
-    "approaching": "Approaching limit"
+    "approaching": "Approaching limit",
+    "noData": "No usage data yet"
   }
 }

@@ -211,6 +211,7 @@
     "resets": "{{time}} 초기화",
     "reached": "사용 한도 도달",
     "ok": "여유 있음",
-    "approaching": "한도 근접"
+    "approaching": "한도 근접",
+    "noData": "사용량 정보 없음"
   }
 }

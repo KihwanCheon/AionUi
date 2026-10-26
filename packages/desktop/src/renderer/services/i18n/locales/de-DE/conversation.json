@@ -834,5 +834,8 @@
     "running": "Läuft",
     "noConfirmed": "Keine Unterhaltung wurde als unverknüpft bestätigt. Fehlgeschlagene Abfragen erneut versuchen.",
     "empty": "Alle Unterhaltungen dieser Gruppe sind mit MnP verknüpft."
+  },
+  "claudeAccount": {
+    "badgeTooltip": "Claude-Konto {{number}} · {{label}}"
   }
 }

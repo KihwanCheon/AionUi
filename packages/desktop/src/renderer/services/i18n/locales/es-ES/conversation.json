@@ -834,5 +834,8 @@
     "running": "En curso",
     "noConfirmed": "No hay conversaciones confirmadas sin vínculo. Reintenta las consultas fallidas.",
     "empty": "No hay conversaciones sin vincular a MnP en este grupo."
+  },
+  "claudeAccount": {
+    "badgeTooltip": "Cuenta de Claude {{number}} · {{label}}"
   }
 }

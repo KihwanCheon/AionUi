@@ -833,5 +833,8 @@
     "running": "运行中",
     "noConfirmed": "没有已确认未关联的对话。请重试查询失败的项目。",
     "empty": "此分组中没有未关联 MnP 的对话。"
+  },
+  "claudeAccount": {
+    "badgeTooltip": "Claude 账号 {{number}} · {{label}}"
   }
 }

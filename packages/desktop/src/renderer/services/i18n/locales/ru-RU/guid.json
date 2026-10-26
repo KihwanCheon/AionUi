@@ -22,5 +22,8 @@
     "specifyWorkspace": "Выбрать папку проекта",
     "searchPlaceholder": "Поиск проектов…",
     "noProject": "Без проекта"
+  },
+  "claudeAccount": {
+    "label": "Аккаунт Claude"
   }
 }

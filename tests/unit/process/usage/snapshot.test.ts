@@ -137,3 +137,38 @@ describe('subscription usage state derivation', () => {
     expect(snapshot.retryAfterMs).toBeNull();
   });
 });
+
+describe('subscription usage Claude accounts', () => {
+  const now = new Date('2026-07-31T12:34:50.000Z');
+  const accountUsage = (id: string, number: number) => ({
+    ...createClaudeProviderState('unavailable'),
+    id,
+    number,
+    label: id,
+  });
+
+  it('omits the account list for a single account so the published shape is unchanged', () => {
+    const snapshot = createSubscriptionUsageSnapshot(
+      createClaudeProviderState('unavailable'),
+      createCodexProviderState('unavailable'),
+      now,
+      2_000,
+      [accountUsage('default', 1)]
+    );
+
+    expect('claudeAccounts' in snapshot).toBe(false);
+    expect(snapshot.schemaVersion).toBe(1);
+  });
+
+  it('adds every account in shared order with two or more accounts', () => {
+    const snapshot = createSubscriptionUsageSnapshot(
+      createClaudeProviderState('unavailable'),
+      createCodexProviderState('unavailable'),
+      now,
+      2_000,
+      [accountUsage('default', 1), accountUsage('max', 2)]
+    );
+
+    expect(snapshot.claudeAccounts?.map((account) => account.number)).toEqual([1, 2]);
+  });
+});

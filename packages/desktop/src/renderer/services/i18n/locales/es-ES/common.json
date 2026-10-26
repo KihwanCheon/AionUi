@@ -211,6 +211,7 @@
     "resets": "Se restablece {{time}}",
     "reached": "Límite de uso alcanzado",
     "ok": "Dentro del límite",
-    "approaching": "Cerca del límite"
+    "approaching": "Cerca del límite",
+    "noData": "Aún no hay datos de uso"
   }
 }

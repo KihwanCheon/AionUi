@@ -211,6 +211,7 @@
     "resets": "{{time}} 重置",
     "reached": "已达使用上限",
     "ok": "额度充足",
-    "approaching": "接近上限"
+    "approaching": "接近上限",
+    "noData": "暂无用量数据"
   }
 }

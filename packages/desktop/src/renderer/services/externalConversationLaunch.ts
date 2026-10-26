@@ -26,6 +26,8 @@ export type ExternalConversationLaunch = {
   mcpIds?: string[];
   workspace?: string;
   autoSend?: boolean;
+  /** Fork: non-default Claude account requested by the launcher. */
+  claudeAccountId?: string;
 };
 
 export type ExternalConversationLaunchSession = {
@@ -107,6 +109,10 @@ export function parseExternalConversationLaunch(value: string | undefined): Exte
         : undefined,
       workspace: typeof parsed.workspace === 'string' ? parsed.workspace : undefined,
       autoSend: parsed.autoSend === true,
+      claudeAccountId:
+        typeof parsed.claudeAccountId === 'string' && parsed.claudeAccountId.trim()
+          ? parsed.claudeAccountId.trim()
+          : undefined,
     };
   } catch {
     return null;

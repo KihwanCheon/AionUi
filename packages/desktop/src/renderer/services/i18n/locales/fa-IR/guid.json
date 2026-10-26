@@ -22,5 +22,8 @@
     "specifyWorkspace": "انتخاب پوشه پروژه",
     "searchPlaceholder": "جستجوی پروژه‌ها…",
     "noProject": "بدون پروژه"
+  },
+  "claudeAccount": {
+    "label": "حساب Claude"
   }
 }

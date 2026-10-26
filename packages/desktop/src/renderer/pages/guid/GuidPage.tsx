@@ -27,6 +27,7 @@ import { resolveAssistantSelectionKey, useGuidAssistantSelection } from './hooks
 import { useGuidInput } from './hooks/useGuidInput';
 import { useGuidModelSelection } from './hooks/useGuidModelSelection';
 import { useGuidSend } from './hooks/useGuidSend';
+import { useGuidClaudeAccountSelection } from '@/renderer/pages/conversation/platforms/acp/claudeAccounts';
 import { useExternalConversationLaunch } from './hooks/useExternalConversationLaunch';
 import { useExternalConversationLaunchSession } from './hooks/useExternalConversationLaunchSession';
 import { useTypewriterPlaceholder } from './hooks/useTypewriterPlaceholder';
@@ -267,6 +268,12 @@ const GuidPage: React.FC = () => {
     [slashController.filteredCommands, slashController.query]
   );
 
+  // Fork: Claude account choice; inert (no selector, no extra) with a single account.
+  const claudeAccount = useGuidClaudeAccountSelection({
+    backend: agentSelection.selectedAssistantBackend,
+    requestedAccountId: externalConversation?.launch.claudeAccountId,
+  });
+
   const send = useGuidSend({
     // Input state
     input: guidInput.input,
@@ -287,6 +294,7 @@ const GuidPage: React.FC = () => {
     selectedAcpModel: agentSelection.selectedAcpModel,
     selectedThoughtLevelValue: agentSelection.selectedThoughtLevelValue,
     current_model: modelSelection.current_model,
+    claudeAccountId: claudeAccount.accountId,
 
     guidDisabledBuiltinSkills,
     guidEnabledSkills,
@@ -650,7 +658,7 @@ const GuidPage: React.FC = () => {
 
   // Build the mention dropdown node
   // Build the model selector node
-  const modelSelectorNode = (
+  const guidModelSelectorNode = (
     <GuidModelSelector
       isGeminiMode={isGeminiMode}
       modelList={modelSelection.modelList}
@@ -662,6 +670,14 @@ const GuidPage: React.FC = () => {
       thoughtLevelOption={isGeminiMode ? null : agentSelection.currentThoughtLevelOption}
       onThoughtLevelSelect={setGuidSelectedThoughtLevel}
     />
+  );
+  const modelSelectorNode = claudeAccount.selectorNode ? (
+    <>
+      {claudeAccount.selectorNode}
+      {guidModelSelectorNode}
+    </>
+  ) : (
+    guidModelSelectorNode
   );
 
   const handleSpeechTranscript = useCallback(

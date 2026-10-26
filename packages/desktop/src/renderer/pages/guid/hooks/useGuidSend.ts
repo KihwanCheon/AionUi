@@ -16,6 +16,7 @@ import { type TFunction } from 'i18next';
 import type { NavigateFunction } from 'react-router-dom';
 import { mutate as swrMutate } from 'swr';
 import { getConversationCreateErrorMessage } from '@/renderer/pages/conversation/utils/conversationCreateError';
+import { claudeAccountExtra } from '@/renderer/pages/conversation/platforms/acp/claudeAccounts/useClaudeAccounts';
 
 export type GuidSendDeps = {
   // Input state
@@ -37,6 +38,8 @@ export type GuidSendDeps = {
   selectedAcpModel: string | null;
   selectedThoughtLevelValue?: string;
   current_model: TProviderWithModel | undefined;
+  /** Fork: non-default Claude account; `null`/absent keeps the single-account payload. */
+  claudeAccountId?: string | null;
 
   guidDisabledBuiltinSkills: string[] | undefined;
   guidEnabledSkills: string[] | undefined;
@@ -115,6 +118,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     selectedAcpModel,
     selectedThoughtLevelValue,
     current_model,
+    claudeAccountId,
     guidDisabledBuiltinSkills,
     guidEnabledSkills,
     assistantDefaultSkillIds,
@@ -282,6 +286,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
           selected_mcp_server_ids: selectedUserMcpServerIdsToSend,
           selected_session_mcp_servers:
             selectedMcpServerIds !== undefined ? selectedSessionMcpServers : selectedSessionMcpServersToSend,
+          ...claudeAccountExtra(claudeAccountId),
         },
       });
       if (!conversation || !conversation.id) {
@@ -333,6 +338,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     selectedAcpModel,
     selectedThoughtLevelValue,
     current_model,
+    claudeAccountId,
     guidDisabledBuiltinSkills,
     guidEnabledSkills,
     assistantDefaultSkillIds,

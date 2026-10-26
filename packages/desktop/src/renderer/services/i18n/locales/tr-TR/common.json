@@ -211,6 +211,7 @@
     "resets": "{{time}} sıfırlanır",
     "reached": "Kullanım sınırına ulaşıldı",
     "ok": "Sınır içinde",
-    "approaching": "Sınıra yaklaşıyor"
+    "approaching": "Sınıra yaklaşıyor",
+    "noData": "Henüz kullanım verisi yok"
   }
 }

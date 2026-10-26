@@ -22,5 +22,8 @@
     "specifyWorkspace": "Proje klasörü seç",
     "searchPlaceholder": "Proje ara…",
     "noProject": "Proje Yok"
+  },
+  "claudeAccount": {
+    "label": "Claude hesabı"
   }
 }

@@ -211,6 +211,7 @@
     "resets": "Zurücksetzung um {{time}}",
     "reached": "Nutzungslimit erreicht",
     "ok": "Im Limit",
-    "approaching": "Limit fast erreicht"
+    "approaching": "Limit fast erreicht",
+    "noData": "Noch keine Nutzungsdaten"
   }
 }

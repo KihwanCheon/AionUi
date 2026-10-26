@@ -39,4 +39,15 @@ export type SubscriptionUsageSnapshot = {
   retryAfterMs: number | null;
   claude: ClaudeSubscriptionUsage;
   codex: CodexSubscriptionUsage;
+  /**
+   * Fork: every Claude account in shared order, present only with two or more
+   * accounts. `claude` above always remains the default account.
+   */
+  claudeAccounts?: ClaudeAccountSubscriptionUsage[];
+};
+
+export type ClaudeAccountSubscriptionUsage = ClaudeSubscriptionUsage & {
+  id: string;
+  number: number;
+  label: string;
 };

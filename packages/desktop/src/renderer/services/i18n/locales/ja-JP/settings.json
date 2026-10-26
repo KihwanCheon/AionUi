@@ -1564,5 +1564,32 @@
       "invalidInput": "入力した設定を確認してください。",
       "firebase": "Firebase と AionUi の接続を確認して再試行してください。"
     }
+  },
+  "claudeAccounts": {
+    "title": "Claude アカウント",
+    "description": "このPCで複数の Claude アカウントを使えます。アカウントが2つ以上あると、新しい会話でアカウントを選択でき、会話一覧にアカウント番号が表示されます。",
+    "add": "アカウントを追加",
+    "defaultDir": "既定の Claude フォルダー",
+    "labelLabel": "アカウント名",
+    "labelPlaceholder": "例: 個人 Max",
+    "configDirLabel": "Claude 設定フォルダー",
+    "configDirPlaceholder": "例: C:\\Users\\me\\.claude-max",
+    "defaultLabelLabel": "現在の既定アカウントの名前",
+    "defaultLabelPlaceholder": "例: 会社 Team",
+    "shareSettings": "既定アカウントの settings.json（hooks、権限）も読み込む",
+    "checkLogin": "ログインを確認",
+    "loggedIn": "ログイン済み（{{plan}}）",
+    "loggedInNoPlan": "ログイン済み",
+    "loggedOut": "未ログイン",
+    "loginHint": "PowerShell でログインしてから、もう一度確認してください:",
+    "moveUp": "上へ移動",
+    "moveDown": "下へ移動",
+    "delete": "アカウントを削除",
+    "deleteConfirm": "このアカウントを AionUi から削除しますか？設定フォルダー自体は削除されません。",
+    "deleteInUse": "このアカウントを使っている会話があるため削除できません。",
+    "duplicateDir": "この設定フォルダーはすでに登録されています。",
+    "invalidInput": "アカウント名を確認し、存在するフォルダーの絶対パスを入力してください。",
+    "saveFailed": "Claude アカウントを保存できませんでした。",
+    "created": "Claude アカウントを追加しました。"
   }
 }

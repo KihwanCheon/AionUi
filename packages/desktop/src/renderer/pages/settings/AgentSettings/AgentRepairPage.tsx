@@ -14,6 +14,7 @@ import { useManagedAgents } from '@/renderer/hooks/agent/useManagedAgents';
 import { formatManagedAgentDiagnosticMessage } from '@/renderer/utils/model/agentTypes';
 import AgentRepairPanel from './AgentRepairPanel';
 import { BoundAssistantList, getBoundAssistants, useAssistantsForAgents } from './BoundAssistants';
+import { ClaudeAccountsSection } from '@/renderer/pages/conversation/platforms/acp/claudeAccounts';
 
 const OPEN_ASSISTANT_EDITOR_INTENT_KEY = 'guid.openAssistantEditorIntent';
 
@@ -146,6 +147,8 @@ const AgentRepairPage: React.FC = () => {
             </Typography.Text>
             <BoundAssistantList assistants={boundAssistants} onOpenAssistant={handleOpenAssistant} />
           </div>
+
+          <ClaudeAccountsSection agent={agent} onChanged={refreshCatalog} />
         </div>
       </div>
     </div>

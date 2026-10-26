@@ -40,5 +40,8 @@
     "statusTesting": "Latenz wird gemessen...",
     "statusUnreachable": "Nicht erreichbar",
     "statusAvailable": "Verfügbar"
+  },
+  "claudeAccount": {
+    "label": "Claude-Konto"
   }
 }

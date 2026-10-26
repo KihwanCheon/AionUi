@@ -1564,5 +1564,32 @@
       "invalidInput": "請檢查輸入的設定。",
       "firebase": "請檢查 Firebase 和 AionUi 連線後再試。"
     }
+  },
+  "claudeAccounts": {
+    "title": "Claude 帳號",
+    "description": "可在這台電腦上使用多個 Claude 帳號。帳號達到兩個以上時，新對話可選擇帳號，對話列表會顯示帳號編號。",
+    "add": "新增帳號",
+    "defaultDir": "預設 Claude 資料夾",
+    "labelLabel": "帳號名稱",
+    "labelPlaceholder": "例如：個人 Max",
+    "configDirLabel": "Claude 設定資料夾",
+    "configDirPlaceholder": "例如：C:\\Users\\me\\.claude-max",
+    "defaultLabelLabel": "目前預設帳號的名稱",
+    "defaultLabelPlaceholder": "例如：公司 Team",
+    "shareSettings": "同時載入預設帳號的 settings.json（hooks、權限）",
+    "checkLogin": "檢查登入",
+    "loggedIn": "已登入（{{plan}}）",
+    "loggedInNoPlan": "已登入",
+    "loggedOut": "尚未登入",
+    "loginHint": "請在 PowerShell 中登入後再次檢查：",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "delete": "刪除帳號",
+    "deleteConfirm": "要從 AionUi 刪除此帳號嗎？設定資料夾本身不會被刪除。",
+    "deleteInUse": "有對話正在使用此帳號，無法刪除。",
+    "duplicateDir": "此設定資料夾已註冊。",
+    "invalidInput": "請確認帳號名稱，並輸入現有資料夾的絕對路徑。",
+    "saveFailed": "無法儲存 Claude 帳號。",
+    "created": "已新增 Claude 帳號。"
   }
 }

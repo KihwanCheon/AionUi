@@ -1563,5 +1563,32 @@
       "invalidInput": "请检查输入的设置。",
       "firebase": "请检查 Firebase 和 AionUi 连接后重试。"
     }
+  },
+  "claudeAccounts": {
+    "title": "Claude 账号",
+    "description": "可在此电脑上使用多个 Claude 账号。账号达到两个及以上时，新建对话可选择账号，对话列表会显示账号编号。",
+    "add": "添加账号",
+    "defaultDir": "默认 Claude 文件夹",
+    "labelLabel": "账号名称",
+    "labelPlaceholder": "例如：个人 Max",
+    "configDirLabel": "Claude 配置文件夹",
+    "configDirPlaceholder": "例如：C:\\Users\\me\\.claude-max",
+    "defaultLabelLabel": "当前默认账号的名称",
+    "defaultLabelPlaceholder": "例如：公司 Team",
+    "shareSettings": "同时加载默认账号的 settings.json（hooks、权限）",
+    "checkLogin": "检查登录",
+    "loggedIn": "已登录（{{plan}}）",
+    "loggedInNoPlan": "已登录",
+    "loggedOut": "未登录",
+    "loginHint": "请在 PowerShell 中登录后再次检查：",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "delete": "删除账号",
+    "deleteConfirm": "要从 AionUi 中删除此账号吗？配置文件夹本身不会被删除。",
+    "deleteInUse": "有对话正在使用此账号，无法删除。",
+    "duplicateDir": "该配置文件夹已注册。",
+    "invalidInput": "请检查账号名称，并填写已存在文件夹的绝对路径。",
+    "saveFailed": "保存 Claude 账号失败。",
+    "created": "已添加 Claude 账号。"
   }
 }

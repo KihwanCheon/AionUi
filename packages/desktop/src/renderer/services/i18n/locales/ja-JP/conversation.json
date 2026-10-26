@@ -833,5 +833,8 @@
     "running": "実行中",
     "noConfirmed": "未接続と確認できた会話はありません。確認に失敗した項目を再試行してください。",
     "empty": "このグループにMnP未接続の会話はありません。"
+  },
+  "claudeAccount": {
+    "badgeTooltip": "Claude アカウント {{number}} · {{label}}"
   }
 }

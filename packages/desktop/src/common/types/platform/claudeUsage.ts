@@ -29,6 +29,8 @@ export type ClaudeUsageSnapshot = {
   session?: ClaudeRateLimitInfo;
   weekly?: ClaudeRateLimitInfo;
   updatedAt: number;
+  /** Fork: non-default Claude account the usage belongs to; absent = default account. */
+  accountId?: string;
 };
 
 export type ClaudeUsageRequest = {

@@ -211,6 +211,7 @@
     "resets": "Redefine em {{time}}",
     "reached": "Limite de uso atingido",
     "ok": "Dentro do limite",
-    "approaching": "Perto do limite"
+    "approaching": "Perto do limite",
+    "noData": "Ainda não há dados de uso"
   }
 }

@@ -1562,5 +1562,32 @@
       "invalidInput": "Comprueba los ajustes introducidos.",
       "firebase": "Comprueba las conexiones de Firebase y AionUi y vuelve a intentarlo."
     }
+  },
+  "claudeAccounts": {
+    "title": "Cuentas de Claude",
+    "description": "Puedes usar varias cuentas de Claude en este equipo. Con dos o más cuentas, las conversaciones nuevas permiten elegir la cuenta y la lista de conversaciones muestra su número.",
+    "add": "Añadir cuenta",
+    "defaultDir": "Carpeta de Claude predeterminada",
+    "labelLabel": "Nombre de la cuenta",
+    "labelPlaceholder": "p. ej., Personal Max",
+    "configDirLabel": "Carpeta de configuración de Claude",
+    "configDirPlaceholder": "p. ej., C:\\Users\\me\\.claude-max",
+    "defaultLabelLabel": "Nombre de la cuenta predeterminada actual",
+    "defaultLabelPlaceholder": "p. ej., Empresa Team",
+    "shareSettings": "Cargar también el settings.json de la cuenta predeterminada (hooks, permisos)",
+    "checkLogin": "Comprobar inicio de sesión",
+    "loggedIn": "Sesión iniciada ({{plan}})",
+    "loggedInNoPlan": "Sesión iniciada",
+    "loggedOut": "Sin sesión iniciada",
+    "loginHint": "Inicia sesión desde PowerShell y vuelve a comprobarlo:",
+    "moveUp": "Subir",
+    "moveDown": "Bajar",
+    "delete": "Eliminar cuenta",
+    "deleteConfirm": "¿Eliminar esta cuenta de AionUi? La carpeta de configuración no se elimina.",
+    "deleteInUse": "Hay conversaciones que usan esta cuenta, así que no se puede eliminar.",
+    "duplicateDir": "Esta carpeta de configuración ya está registrada.",
+    "invalidInput": "Revisa el nombre de la cuenta e indica la ruta absoluta de una carpeta existente.",
+    "saveFailed": "No se pudo guardar la cuenta de Claude.",
+    "created": "Cuenta de Claude añadida."
   }
 }

@@ -1564,5 +1564,32 @@
       "invalidInput": "입력한 설정을 확인해 주세요.",
       "firebase": "Firebase와 AionUi 연결을 확인한 뒤 다시 시도해 주세요."
     }
+  },
+  "claudeAccounts": {
+    "title": "Claude 계정",
+    "description": "이 PC에서 여러 Claude 계정을 사용할 수 있습니다. 계정이 2개 이상이면 새 대화에서 계정을 선택할 수 있고, 대화 목록에 계정 번호가 표시됩니다.",
+    "add": "계정 추가",
+    "defaultDir": "기본 Claude 폴더",
+    "labelLabel": "계정 이름",
+    "labelPlaceholder": "예: 개인 Max",
+    "configDirLabel": "Claude 설정 폴더",
+    "configDirPlaceholder": "예: C:\\Users\\me\\.claude-max",
+    "defaultLabelLabel": "현재 기본 계정의 이름",
+    "defaultLabelPlaceholder": "예: 회사 Team",
+    "shareSettings": "기본 계정의 settings.json(hooks, 권한)도 함께 사용",
+    "checkLogin": "로그인 확인",
+    "loggedIn": "로그인됨 ({{plan}})",
+    "loggedInNoPlan": "로그인됨",
+    "loggedOut": "로그인 필요",
+    "loginHint": "PowerShell에서 로그인한 뒤 다시 확인하세요:",
+    "moveUp": "위로 이동",
+    "moveDown": "아래로 이동",
+    "delete": "계정 삭제",
+    "deleteConfirm": "AionUi에서 이 계정을 삭제할까요? 설정 폴더 자체는 삭제되지 않습니다.",
+    "deleteInUse": "이 계정을 사용하는 대화가 있어 삭제할 수 없습니다.",
+    "duplicateDir": "이미 등록된 설정 폴더입니다.",
+    "invalidInput": "계정 이름을 확인하고, 실제로 있는 폴더의 절대 경로를 입력하세요.",
+    "saveFailed": "Claude 계정을 저장하지 못했습니다.",
+    "created": "Claude 계정을 추가했습니다."
   }
 }

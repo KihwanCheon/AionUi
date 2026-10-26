@@ -156,6 +156,8 @@ export type ManagedAgent = Omit<AgentMetadata, 'available' | 'handshake'> & {
   available_models?: unknown;
   available_commands?: unknown;
   handshake?: AgentHandshake;
+  /** Fork: shared Claude account order; present on Claude rows only when 2+ accounts exist. */
+  claude_accounts?: import('@/common/types/platform/claudeAccount').ClaudeAccountSummary[];
 };
 
 /**

@@ -22,5 +22,8 @@
     "specifyWorkspace": "Select project folder",
     "searchPlaceholder": "Search projects…",
     "noProject": "No Project"
+  },
+  "claudeAccount": {
+    "label": "Claude account"
   }
 }

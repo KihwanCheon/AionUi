@@ -7,6 +7,7 @@
 import type { ClaudeUsageSnapshot, ClaudeUtilizationUnit } from '@/common/types/platform/claudeUsage';
 import type { CodexUsageSnapshot } from '@/common/types/platform/codexUsage';
 import type {
+  ClaudeAccountSubscriptionUsage,
   ClaudeSubscriptionUsage,
   CodexSubscriptionUsage,
   ProviderUsageState,
@@ -109,7 +110,8 @@ export const createSubscriptionUsageSnapshot = (
   claude: ClaudeSubscriptionUsage,
   codex: CodexSubscriptionUsage,
   generatedAt: Date,
-  loadingRetryAfterMs: number
+  loadingRetryAfterMs: number,
+  claudeAccounts?: ClaudeAccountSubscriptionUsage[]
 ): SubscriptionUsageSnapshot => {
   const updatedAt = [claude.updatedAt, codex.updatedAt]
     .filter((value): value is string => Boolean(value))
@@ -125,5 +127,7 @@ export const createSubscriptionUsageSnapshot = (
     retryAfterMs: claude.state === 'loading' || codex.state === 'loading' ? loadingRetryAfterMs : null,
     claude,
     codex,
+    // Fork: additive only with two or more Claude accounts; schemaVersion stays 1.
+    ...(claudeAccounts && claudeAccounts.length >= 2 ? { claudeAccounts } : {}),
   };
 };

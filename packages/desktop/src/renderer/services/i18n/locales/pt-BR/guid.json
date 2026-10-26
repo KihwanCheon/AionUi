@@ -22,5 +22,8 @@
     "specifyWorkspace": "Selecionar pasta do projeto",
     "searchPlaceholder": "Procurar projetos…",
     "noProject": "Nenhum Projeto"
+  },
+  "claudeAccount": {
+    "label": "Conta do Claude"
   }
 }

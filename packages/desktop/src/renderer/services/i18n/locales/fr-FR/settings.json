@@ -1562,5 +1562,32 @@
       "invalidInput": "Vérifiez les paramètres saisis.",
       "firebase": "Vérifiez les connexions Firebase et AionUi, puis réessayez."
     }
+  },
+  "claudeAccounts": {
+    "title": "Comptes Claude",
+    "description": "Vous pouvez utiliser plusieurs comptes Claude sur cet ordinateur. À partir de deux comptes, les nouvelles conversations permettent de choisir le compte et la liste des conversations affiche son numéro.",
+    "add": "Ajouter un compte",
+    "defaultDir": "Dossier Claude par défaut",
+    "labelLabel": "Nom du compte",
+    "labelPlaceholder": "ex. Personnel Max",
+    "configDirLabel": "Dossier de configuration Claude",
+    "configDirPlaceholder": "ex. C:\\Users\\me\\.claude-max",
+    "defaultLabelLabel": "Nom du compte par défaut actuel",
+    "defaultLabelPlaceholder": "ex. Entreprise Team",
+    "shareSettings": "Charger aussi le settings.json du compte par défaut (hooks, autorisations)",
+    "checkLogin": "Vérifier la connexion",
+    "loggedIn": "Connecté ({{plan}})",
+    "loggedInNoPlan": "Connecté",
+    "loggedOut": "Non connecté",
+    "loginHint": "Connectez-vous depuis PowerShell, puis vérifiez à nouveau :",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "delete": "Supprimer le compte",
+    "deleteConfirm": "Supprimer ce compte d'AionUi ? Le dossier de configuration n'est pas supprimé.",
+    "deleteInUse": "Ce compte est utilisé par des conversations et ne peut pas être supprimé.",
+    "duplicateDir": "Ce dossier de configuration est déjà enregistré.",
+    "invalidInput": "Vérifiez le nom du compte et indiquez le chemin absolu d'un dossier existant.",
+    "saveFailed": "Impossible d'enregistrer le compte Claude.",
+    "created": "Compte Claude ajouté."
   }
 }

@@ -833,5 +833,8 @@
     "running": "Running",
     "noConfirmed": "No conversations are confirmed as unlinked. Retry the failed lookups.",
     "empty": "No conversations in this group are unlinked from MnP."
+  },
+  "claudeAccount": {
+    "badgeTooltip": "Claude account {{number}} · {{label}}"
   }
 }

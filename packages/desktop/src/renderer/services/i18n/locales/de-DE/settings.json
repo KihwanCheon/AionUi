@@ -1562,5 +1562,32 @@
       "invalidInput": "Prüfen Sie die eingegebenen Einstellungen.",
       "firebase": "Prüfen Sie die Verbindungen zu Firebase und AionUi und versuchen Sie es erneut."
     }
+  },
+  "claudeAccounts": {
+    "title": "Claude-Konten",
+    "description": "Auf diesem Computer können mehrere Claude-Konten verwendet werden. Ab zwei Konten lässt sich das Konto bei neuen Unterhaltungen auswählen, und die Unterhaltungsliste zeigt seine Nummer.",
+    "add": "Konto hinzufügen",
+    "defaultDir": "Standard-Claude-Ordner",
+    "labelLabel": "Kontoname",
+    "labelPlaceholder": "z. B. Privat Max",
+    "configDirLabel": "Claude-Konfigurationsordner",
+    "configDirPlaceholder": "z. B. C:\\Users\\me\\.claude-max",
+    "defaultLabelLabel": "Name des aktuellen Standardkontos",
+    "defaultLabelPlaceholder": "z. B. Firma Team",
+    "shareSettings": "Auch die settings.json des Standardkontos laden (Hooks, Berechtigungen)",
+    "checkLogin": "Anmeldung prüfen",
+    "loggedIn": "Angemeldet ({{plan}})",
+    "loggedInNoPlan": "Angemeldet",
+    "loggedOut": "Nicht angemeldet",
+    "loginHint": "Melde dich in PowerShell an und prüfe dann erneut:",
+    "moveUp": "Nach oben",
+    "moveDown": "Nach unten",
+    "delete": "Konto löschen",
+    "deleteConfirm": "Dieses Konto aus AionUi löschen? Der Konfigurationsordner selbst wird nicht gelöscht.",
+    "deleteInUse": "Dieses Konto wird von Unterhaltungen verwendet und kann nicht gelöscht werden.",
+    "duplicateDir": "Dieser Konfigurationsordner ist bereits registriert.",
+    "invalidInput": "Prüfe den Kontonamen und gib den absoluten Pfad eines vorhandenen Ordners an.",
+    "saveFailed": "Das Claude-Konto konnte nicht gespeichert werden.",
+    "created": "Claude-Konto hinzugefügt."
   }
 }

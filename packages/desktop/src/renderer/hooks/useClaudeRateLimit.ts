@@ -5,6 +5,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { DEFAULT_CLAUDE_ACCOUNT_ID } from '@/common/types/platform/claudeAccount';
 import type {
   ClaudeRateLimitInfo,
   ClaudeRateLimitType,
@@ -32,11 +33,21 @@ export type ClaudeRateLimitState = {
   updatedAt: number;
 };
 
-// Module-level store keyed by rateLimitType so the latest value for each window
-// survives component remounts (the titlebar widget can unmount/remount freely).
-const store = new Map<ClaudeRateLimitType, ClaudeRateLimitInfo>();
+// Module-level stores keyed by Claude account, then by rateLimitType, so the
+// latest value for each window survives component remounts (the titlebar widget
+// can unmount/remount freely). Fork: one store per account; a single-account
+// setup only ever uses the default key.
+type AccountStore = {
+  windows: Map<ClaudeRateLimitType, ClaudeRateLimitInfo>;
+  updatedAt: number;
+  snapshot: ClaudeRateLimitState;
+};
+
+const stores = new Map<string, AccountStore>();
 const listeners = new Set<() => void>();
-let updatedAt = 0;
+const EMPTY_STATE: ClaudeRateLimitState = { updatedAt: 0 };
+// Bumped on every store update so a multi-account reader re-renders.
+let storesVersion = 0;
 
 const WEEKLY_PRIORITY: ClaudeRateLimitType[] = [
   'seven_day',
@@ -46,44 +57,56 @@ const WEEKLY_PRIORITY: ClaudeRateLimitType[] = [
   'overage',
 ];
 
-const derive = (): ClaudeRateLimitState => ({
-  session: store.get('five_hour'),
-  weekly: WEEKLY_PRIORITY.map((key) => store.get(key)).find(Boolean),
-  updatedAt,
+const accountKey = (accountId: string | undefined): string => accountId || DEFAULT_CLAUDE_ACCOUNT_ID;
+
+const storeFor = (key: string): AccountStore => {
+  let store = stores.get(key);
+  if (!store) {
+    store = { windows: new Map(), updatedAt: 0, snapshot: EMPTY_STATE };
+    stores.set(key, store);
+  }
+  return store;
+};
+
+const derive = (store: AccountStore): ClaudeRateLimitState => ({
+  session: store.windows.get('five_hour'),
+  weekly: WEEKLY_PRIORITY.map((key) => store.windows.get(key)).find(Boolean),
+  updatedAt: store.updatedAt,
 });
 
-// Cached snapshot kept referentially stable between updates so useSyncExternalStore
-// does not loop (getSnapshot must return the same reference when nothing changed).
-let snapshot: ClaudeRateLimitState = derive();
-
-const mergeRateLimit = (info: ClaudeRateLimitInfo | undefined): boolean => {
+const mergeRateLimit = (store: AccountStore, info: ClaudeRateLimitInfo | undefined): boolean => {
   if (!info?.rateLimitType) return false;
-  store.set(info.rateLimitType, { ...store.get(info.rateLimitType), ...info });
+  store.windows.set(info.rateLimitType, { ...store.windows.get(info.rateLimitType), ...info });
   return true;
 };
 
-const publishSnapshot = (nextUpdatedAt: number): void => {
-  updatedAt = nextUpdatedAt;
-  snapshot = derive();
+const publishSnapshot = (store: AccountStore, nextUpdatedAt: number): void => {
+  store.updatedAt = nextUpdatedAt;
+  // Cached snapshot kept referentially stable between updates so useSyncExternalStore
+  // does not loop (getSnapshot must return the same reference when nothing changed).
+  store.snapshot = derive(store);
+  storesVersion += 1;
   for (const listener of listeners) listener();
 };
 
 /**
- * Feed a rate-limit info object into the global store. Called from the ACP
- * message stream handler when `_meta["_claude/rateLimit"]` is present.
+ * Feed a rate-limit info object into the default account's store. Called from
+ * the ACP message stream handler when `_meta["_claude/rateLimit"]` is present.
  */
-export const pushClaudeRateLimit = (info: ClaudeRateLimitInfo | undefined | null): void => {
-  if (!mergeRateLimit(info ?? undefined)) return;
-  publishSnapshot(Date.now());
+export const pushClaudeRateLimit = (info: ClaudeRateLimitInfo | undefined | null, accountId?: string): void => {
+  const store = storeFor(accountKey(accountId));
+  if (!mergeRateLimit(store, info ?? undefined)) return;
+  publishSnapshot(store, Date.now());
 };
 
 /** Merge the account-wide snapshot returned by the desktop Claude usage probe. */
 export const pushClaudeUsageSnapshot = (usage: ClaudeUsageSnapshot | undefined | null): void => {
   if (!usage) return;
-  const sessionChanged = mergeRateLimit(usage.session);
-  const weeklyChanged = mergeRateLimit(usage.weekly);
+  const store = storeFor(accountKey(usage.accountId));
+  const sessionChanged = mergeRateLimit(store, usage.session);
+  const weeklyChanged = mergeRateLimit(store, usage.weekly);
   if (!sessionChanged && !weeklyChanged) return;
-  publishSnapshot(usage.updatedAt);
+  publishSnapshot(store, usage.updatedAt);
 };
 
 const subscribe = (onChange: () => void): (() => void) => {
@@ -93,10 +116,20 @@ const subscribe = (onChange: () => void): (() => void) => {
   };
 };
 
-const getSnapshot = (): ClaudeRateLimitState => snapshot;
-
 /** Non-reactive read of the current state, for tests and non-React consumers. */
-export const getClaudeRateLimitSnapshot = (): ClaudeRateLimitState => snapshot;
+export const getClaudeRateLimitSnapshot = (accountId?: string): ClaudeRateLimitState =>
+  stores.get(accountKey(accountId))?.snapshot ?? EMPTY_STATE;
 
-/** Subscribe to the latest Claude subscription usage/limit state. */
-export const useClaudeRateLimit = (): ClaudeRateLimitState => useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+/** Subscribe to the latest Claude subscription usage/limit state of one account (default account by default). */
+export const useClaudeRateLimit = (accountId?: string): ClaudeRateLimitState => {
+  const getSnapshot = (): ClaudeRateLimitState => getClaudeRateLimitSnapshot(accountId);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+};
+
+const getStoresVersion = (): number => storesVersion;
+
+/** Fork: latest state of several Claude accounts, in the given order. */
+export const useClaudeRateLimits = (accountIds: readonly string[]): ClaudeRateLimitState[] => {
+  useSyncExternalStore(subscribe, getStoresVersion, getStoresVersion);
+  return accountIds.map((accountId) => getClaudeRateLimitSnapshot(accountId));
+};

@@ -16,6 +16,7 @@ Documentation is organized by reader intent, not by document type.
 - New to the project? Start with [`architecture/overview.md`](architecture/overview.md).
 - Setting up a dev environment? See [`contributing/development.md`](contributing/development.md).
 - Connecting this fork as a MindNProgress sub-machine? See [`guides/mindnprogress-runner.md`](guides/mindnprogress-runner.md).
+- Using more than one Claude subscription (for example Team and Max) on this fork? See [`guides/claude-accounts.md`](guides/claude-accounts.md).
 - Writing code? The entry point for code-style, linting, formatting, and commit rules is [`AGENTS.md`](../AGENTS.md) at the repo root.
 - Deploying a server? [`guides/deploy-server.md`](guides/deploy-server.md).
 

@@ -35,6 +35,7 @@ import { useAionrsModelSelection } from '../platforms/aionrs/useAionrsModelSelec
 import { useConversationRuntimeView } from '../runtime/useConversationRuntimeView';
 import { isLegacyReadOnlyConversationType } from '../utils/conversationRuntime';
 import { resolveConversationBackend } from '../utils/conversationAssistantIdentity';
+import { ConversationClaudeAccountBadge } from '../platforms/acp/claudeAccounts';
 import LegacyReadOnlyConversation from '../platforms/legacy/LegacyReadOnlyConversation';
 import SingleChatEmptyState from './SingleChatEmptyState';
 import { useActiveLease } from '../hooks/useActiveLease';
@@ -411,6 +412,9 @@ const ChatConversation: React.FC<{
         <div className='shrink-0'>
           <CronJobManager conversation_id={conversation.id} cron_job_id={cronJobId} />
         </div>
+      )}
+      {conversation && conversation.type === 'acp' && !isMobile && (
+        <ConversationClaudeAccountBadge conversation={conversation} variant='tag' />
       )}
       {modelSelector && <div className='shrink-0'>{modelSelector}</div>}
       {conversation && conversation.type === 'acp' && !isMobile && !isLegacyReadOnlyConversation && (

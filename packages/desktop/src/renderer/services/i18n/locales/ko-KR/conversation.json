@@ -833,5 +833,8 @@
     "running": "실행 중",
     "noConfirmed": "미연결로 확인된 대화가 없습니다. 조회 실패 항목을 다시 확인해 주세요.",
     "empty": "이 그룹에 MnP 미연결 대화가 없습니다."
+  },
+  "claudeAccount": {
+    "badgeTooltip": "Claude 계정 {{number}} · {{label}}"
   }
 }

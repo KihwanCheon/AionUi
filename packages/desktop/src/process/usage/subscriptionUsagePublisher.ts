@@ -7,14 +7,17 @@
 import { statSync } from 'node:fs';
 import { ipcBridge } from '@/common';
 import { subscriptionUsageBridge } from '@/common/platform/subscriptionUsageBridge';
+import { DEFAULT_CLAUDE_ACCOUNT_ID, type ClaudeAccount } from '@/common/types/platform/claudeAccount';
 import type { ClaudeUsageSnapshot } from '@/common/types/platform/claudeUsage';
 import type { CodexUsageSnapshot } from '@/common/types/platform/codexUsage';
 import type {
+  ClaudeAccountSubscriptionUsage,
   ClaudeSubscriptionUsage,
   CodexSubscriptionUsage,
   SubscriptionUsageSnapshot,
 } from '@/common/types/platform/subscriptionUsage';
 import { getClaudeUsage } from './claude';
+import { getClaudeAccounts } from './claude/claudeAccounts';
 import { getCodexUsage } from './codex';
 import {
   createClaudeProviderState,
@@ -37,11 +40,14 @@ export type SubscriptionUsageConversation = {
   modifiedAt: number;
   workspace?: string;
   isHealthCheck: boolean;
+  /** Fork: non-default Claude account bound to the conversation. */
+  claudeAccountId?: string;
 };
 
 type SubscriptionUsagePublisherOptions = {
   clearSnapshot?: (expectedContent: string | undefined) => void;
-  getClaudeUsage?: (cwd: string) => Promise<ClaudeUsageSnapshot | null>;
+  getClaudeUsage?: (cwd: string, accountId?: string) => Promise<ClaudeUsageSnapshot | null>;
+  getClaudeAccounts?: () => Promise<ClaudeAccount[]>;
   getCodexUsage?: () => Promise<CodexUsageSnapshot | null>;
   initialRefreshDelayMs?: number;
   isDirectory?: (path: string) => boolean;
@@ -60,7 +66,9 @@ type SubscriptionUsagePublisherOptions = {
 const defaultListConversations = async (): Promise<SubscriptionUsageConversation[]> => {
   const result = await ipcBridge.database.getUserConversations.invoke({ limit: CONVERSATION_LOOKUP_LIMIT });
   return (result.items ?? []).map((conversation) => {
-    const extra = conversation.extra as { backend?: string; is_health_check?: boolean; workspace?: string } | undefined;
+    const extra = conversation.extra as
+      | { backend?: string; is_health_check?: boolean; workspace?: string; claude_account_id?: string }
+      | undefined;
     return {
       id: conversation.id,
       type: conversation.type,
@@ -68,6 +76,7 @@ const defaultListConversations = async (): Promise<SubscriptionUsageConversation
       modifiedAt: conversation.modified_at,
       workspace: extra?.workspace,
       isHealthCheck: extra?.is_health_check === true,
+      claudeAccountId: extra?.claude_account_id,
     };
   });
 };
@@ -88,7 +97,8 @@ const updatedAtValue = (value: string | null): number => {
 
 export class SubscriptionUsagePublisher {
   readonly #clearSnapshot: (expectedContent: string | undefined) => void;
-  readonly #getClaudeUsage: (cwd: string) => Promise<ClaudeUsageSnapshot | null>;
+  readonly #getClaudeUsage: (cwd: string, accountId?: string) => Promise<ClaudeUsageSnapshot | null>;
+  readonly #getClaudeAccounts: () => Promise<ClaudeAccount[]>;
   readonly #getCodexUsage: () => Promise<CodexUsageSnapshot | null>;
   readonly #initialRefreshDelayMs: number;
   readonly #isDirectory: (path: string) => boolean;
@@ -105,6 +115,9 @@ export class SubscriptionUsagePublisher {
 
   #activeConversationId: string | undefined;
   #claude: ClaudeSubscriptionUsage = createClaudeProviderState('loading');
+  // Fork: non-default Claude accounts. Both stay empty with a single account.
+  #accounts: ClaudeAccount[] = [];
+  #claudeAccounts = new Map<string, ClaudeSubscriptionUsage>();
   #codex: CodexSubscriptionUsage = createCodexProviderState('loading');
   #lastPublishedContent: string | undefined;
   #refreshInFlight = false;
@@ -116,6 +129,7 @@ export class SubscriptionUsagePublisher {
     this.#clearSnapshot =
       options.clearSnapshot ?? ((expectedContent) => void clearSubscriptionUsageSnapshot({ expectedContent }));
     this.#getClaudeUsage = options.getClaudeUsage ?? getClaudeUsage;
+    this.#getClaudeAccounts = options.getClaudeAccounts ?? getClaudeAccounts;
     this.#getCodexUsage = options.getCodexUsage ?? getCodexUsage;
     this.#initialRefreshDelayMs = options.initialRefreshDelayMs ?? DEFAULT_INITIAL_REFRESH_DELAY_MS;
     this.#isDirectory = options.isDirectory ?? defaultIsDirectory;
@@ -151,7 +165,10 @@ export class SubscriptionUsagePublisher {
     this.#activeConversationId = conversationId;
   }
 
-  async readClaudeUsage(cwd: string): Promise<ClaudeUsageSnapshot | null> {
+  async readClaudeUsage(cwd: string, accountId?: string): Promise<ClaudeUsageSnapshot | null> {
+    if (accountId && accountId !== DEFAULT_CLAUDE_ACCOUNT_ID) {
+      return this.#readClaudeAccountUsage(cwd, accountId);
+    }
     let usage: ClaudeUsageSnapshot | null;
     try {
       usage = await this.#getClaudeUsage(cwd);
@@ -164,6 +181,37 @@ export class SubscriptionUsagePublisher {
       this.#recordClaude(usage);
     } else {
       this.#markClaudeUnavailable();
+    }
+    return usage;
+  }
+
+  async #readClaudeAccountUsage(cwd: string, accountId: string): Promise<ClaudeUsageSnapshot | null> {
+    let usage: ClaudeUsageSnapshot | null;
+    try {
+      usage = await this.#getClaudeUsage(cwd, accountId);
+    } catch {
+      this.#logWarn('[SubscriptionUsagePublisher] Claude account usage refresh failed');
+      usage = null;
+    }
+
+    const current = this.#claudeAccounts.get(accountId);
+    const normalized = usage ? normalizeClaudeSubscriptionUsage(usage, this.#now().getTime()) : null;
+    if (!usage || !normalized) {
+      if (current?.state !== 'ready') {
+        this.#claudeAccounts.set(accountId, createClaudeProviderState('unavailable'));
+        this.#publish();
+      }
+      return usage;
+    }
+    if (current?.state === 'ready' && updatedAtValue(current.updatedAt) >= updatedAtValue(normalized.updatedAt)) {
+      return usage;
+    }
+    this.#claudeAccounts.set(accountId, normalized);
+    this.#publish();
+    try {
+      this.#onClaudeUsage({ ...usage, accountId });
+    } catch {
+      this.#logWarn('[SubscriptionUsagePublisher] Unable to notify Claude usage listeners');
     }
     return usage;
   }
@@ -253,11 +301,38 @@ export class SubscriptionUsagePublisher {
 
   #publish(): void {
     if (!this.#started || this.#stopped) return;
-    const snapshot = createSubscriptionUsageSnapshot(this.#claude, this.#codex, this.#now(), this.#loadingRetryMs);
+    const snapshot = createSubscriptionUsageSnapshot(
+      this.#claude,
+      this.#codex,
+      this.#now(),
+      this.#loadingRetryMs,
+      this.#accountUsages()
+    );
     try {
       this.#lastPublishedContent = this.#writeSnapshot(snapshot);
     } catch {
       this.#logWarn('[SubscriptionUsagePublisher] Unable to publish usage snapshot');
+    }
+  }
+
+  /** Every account in shared order, or `undefined` with a single account. */
+  #accountUsages(): ClaudeAccountSubscriptionUsage[] | undefined {
+    if (this.#accounts.length < 2) return undefined;
+    return this.#accounts.map((account) => ({
+      ...(account.id === DEFAULT_CLAUDE_ACCOUNT_ID
+        ? this.#claude
+        : (this.#claudeAccounts.get(account.id) ?? createClaudeProviderState('loading'))),
+      id: account.id,
+      number: account.number,
+      label: account.label,
+    }));
+  }
+
+  async #refreshClaudeAccounts(): Promise<void> {
+    try {
+      this.#accounts = await this.#getClaudeAccounts();
+    } catch {
+      this.#accounts = [];
     }
   }
 
@@ -278,6 +353,7 @@ export class SubscriptionUsagePublisher {
     try {
       if (!this.#isRefreshReady()) return;
 
+      await this.#refreshClaudeAccounts();
       const conversations = (await this.#listConversations())
         .filter((conversation) => conversation.type === 'acp' && !conversation.isHealthCheck)
         .toSorted((left, right) => right.modifiedAt - left.modifiedAt);
@@ -309,6 +385,15 @@ export class SubscriptionUsagePublisher {
         refreshes.push(this.readClaudeUsage(workspace));
       } else {
         this.#markClaudeUnavailable();
+      }
+      // Fork: each non-default account is probed from its own most recent conversation.
+      for (const account of this.#accounts) {
+        if (account.id === DEFAULT_CLAUDE_ACCOUNT_ID) continue;
+        const accountWorkspace = preferredConversations
+          .filter((conversation) => conversation.claudeAccountId === account.id)
+          .map((conversation) => conversation.workspace?.trim())
+          .find((candidate): candidate is string => Boolean(candidate && this.#isDirectory(candidate)));
+        if (accountWorkspace) refreshes.push(this.readClaudeUsage(accountWorkspace, account.id));
       }
       await Promise.all(refreshes);
     } catch {

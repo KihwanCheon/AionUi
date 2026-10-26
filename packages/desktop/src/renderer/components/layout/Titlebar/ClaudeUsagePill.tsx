@@ -10,8 +10,14 @@ import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { subscriptionUsageBridge } from '@/common/platform/subscriptionUsageBridge';
+import { DEFAULT_CLAUDE_ACCOUNT_ID } from '@/common/types/platform/claudeAccount';
 import type { ClaudeRateLimitInfo, ClaudeUtilizationUnit } from '@/common/types/platform/claudeUsage';
-import { pushClaudeUsageSnapshot, useClaudeRateLimit } from '@/renderer/hooks/useClaudeRateLimit';
+import {
+  pushClaudeUsageSnapshot,
+  useClaudeRateLimits,
+  type ClaudeRateLimitState,
+} from '@/renderer/hooks/useClaudeRateLimit';
+import { ClaudeAccountBadge, useClaudeAccounts } from '@/renderer/pages/conversation/platforms/acp/claudeAccounts';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import styles from './SubscriptionUsageIndicator.module.css';
 import {
@@ -96,29 +102,69 @@ const usageTone = (info: ClaudeRateLimitInfo | undefined): SubscriptionUsageTone
     statusUsageFloor(info?.status)
   );
 
+// Fork: helpers for picking the account shown when two or more Claude accounts exist.
+const SINGLE_ACCOUNT_IDS = [DEFAULT_CLAUDE_ACCOUNT_ID];
+
+const windowUsage = (info: ClaudeRateLimitInfo | undefined): number =>
+  info ? Math.max(toPercent(info.utilization, info.utilizationUnit ?? 'auto') ?? 0, statusUsageFloor(info.status)) : -1;
+
+const hasFreshUsage = (state: ClaudeRateLimitState): boolean =>
+  Boolean(state.session || state.weekly) && isSubscriptionUsageFresh(state.updatedAt);
+
+/**
+ * Index of the account shown in the pill: the account whose fresh usage is
+ * highest across the session and weekly windows. Ties keep the account order.
+ */
+export const pickClaudeUsageAccountIndex = (states: readonly ClaudeRateLimitState[]): number => {
+  let picked = 0;
+  let pickedUsage = -1;
+  states.forEach((state, index) => {
+    if (!hasFreshUsage(state)) return;
+    const usage = Math.max(windowUsage(state.session), windowUsage(state.weekly));
+    if (usage > pickedUsage) {
+      picked = index;
+      pickedUsage = usage;
+    }
+  });
+  return picked;
+};
+
 const ClaudeUsagePill: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
-  const { session, weekly, updatedAt } = useClaudeRateLimit();
+  // Fork: with two or more Claude accounts the pill shows the most used account
+  // and the popover lists every account.
+  const claudeAccounts = useClaudeAccounts();
+  const hasAccounts = Boolean(claudeAccounts);
+  const accountStates = useClaudeRateLimits(claudeAccounts?.map((account) => account.id) ?? SINGLE_ACCOUNT_IDS);
+  const pickedIndex = pickClaudeUsageAccountIndex(accountStates);
+  const account = claudeAccounts?.[pickedIndex];
+  const { session, weekly, updatedAt } = accountStates[pickedIndex];
+  // Re-render when the oldest displayed snapshot goes stale.
+  const staleAnchor = accountStates.reduce(
+    (oldest, state) => (hasFreshUsage(state) ? Math.min(oldest, state.updatedAt) : oldest),
+    updatedAt
+  );
   const [, refreshFreshness] = React.useReducer((version: number) => version + 1, 0);
 
   useEffect(() => {
-    const delayMs = updatedAt + SUBSCRIPTION_USAGE_STALE_AFTER_MS - Date.now();
-    if (updatedAt <= 0 || delayMs <= 0) return;
+    const delayMs = staleAnchor + SUBSCRIPTION_USAGE_STALE_AFTER_MS - Date.now();
+    if (staleAnchor <= 0 || delayMs <= 0) return;
     const timer = window.setTimeout(refreshFreshness, delayMs);
     return () => window.clearTimeout(timer);
-  }, [updatedAt]);
+  }, [staleAnchor]);
 
   useEffect(() => {
     if (!isElectronDesktop()) return;
 
     const conversationId = location.pathname.match(/^\/conversation\/([^/]+)/)?.[1];
-    if (!conversationId) return;
+    // Fork: every account's updates matter on any route once several accounts exist.
+    if (!conversationId && !hasAccounts) return;
 
     let requestInFlight = false;
 
     const refresh = (): void => {
-      if (requestInFlight || document.visibilityState === 'hidden') return;
+      if (!conversationId || requestInFlight || document.visibilityState === 'hidden') return;
       requestInFlight = true;
       void subscriptionUsageBridge.getClaude
         .invoke({ conversationId })
@@ -144,7 +190,7 @@ const ClaudeUsagePill: React.FC = () => {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
-  }, [location.pathname]);
+  }, [hasAccounts, location.pathname]);
 
   if ((!session && !weekly) || !isSubscriptionUsageFresh(updatedAt)) return null;
 
@@ -207,13 +253,36 @@ const ClaudeUsagePill: React.FC = () => {
     formatReset(weekly?.resetsAt, true) ??
     statusText(session?.status ?? weekly?.status);
 
+  const renderWindows = (state: ClaudeRateLimitState) => (
+    <>
+      {state.session
+        ? renderRow(t('common.claudeUsage.session', { defaultValue: '5-hour limit' }), state.session, false)
+        : null}
+      {state.weekly
+        ? renderRow(t('common.claudeUsage.weekly', { defaultValue: 'Weekly (all models)' }), state.weekly, true)
+        : null}
+    </>
+  );
+
   const content = (
     <div className='flex w-200px flex-col gap-12px p-4px'>
       <span className='text-12px font-600 text-t-primary'>
         {t('common.claudeUsage.title', { defaultValue: 'Claude Usage' })}
       </span>
-      {session ? renderRow(t('common.claudeUsage.session', { defaultValue: '5-hour limit' }), session, false) : null}
-      {weekly ? renderRow(t('common.claudeUsage.weekly', { defaultValue: 'Weekly (all models)' }), weekly, true) : null}
+      {claudeAccounts
+        ? claudeAccounts.map((candidate, index) => (
+            <div key={candidate.id} className='flex flex-col gap-8px'>
+              <div className='flex'>
+                <ClaudeAccountBadge account={candidate} variant='tag' />
+              </div>
+              {hasFreshUsage(accountStates[index]) ? (
+                renderWindows(accountStates[index])
+              ) : (
+                <span className='text-11px text-t-tertiary'>{t('common.claudeUsage.noData')}</span>
+              )}
+            </div>
+          ))
+        : renderWindows({ session, weekly, updatedAt })}
     </div>
   );
 
@@ -224,6 +293,7 @@ const ClaudeUsagePill: React.FC = () => {
         aria-label={t('common.claudeUsage.title', { defaultValue: 'Claude Usage' })}
       >
         <Dashboard theme='outline' size={14} fill='currentColor' />
+        {account ? <ClaudeAccountBadge account={account} variant='mark' /> : null}
         <span className='text-12px font-600 leading-none'>{pillText}</span>
       </div>
     </Popover>

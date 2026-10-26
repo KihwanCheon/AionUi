@@ -15,6 +15,7 @@ import { useAgentLogos } from '@/renderer/utils/model/agentLogo';
 import ThemedLogo from '@/renderer/components/agent/ThemedLogo';
 import { resolveConversationLeadingMark } from '@/renderer/pages/conversation/utils/conversationAssistantIdentity';
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
+import { ConversationClaudeAccountBadge } from '@/renderer/pages/conversation/platforms/acp/claudeAccounts';
 import { blockMobileInputFocus, blurActiveElement } from '@/renderer/utils/ui/focus';
 import { isPrimaryApplicationShortcut } from '@/renderer/utils/ui/keyboardShortcuts';
 import { Button, Empty, Spin, Typography } from '@arco-design/web-react';
@@ -460,7 +461,10 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
                 <div className='flex items-start justify-between gap-8px mb-6px'>
                   <div className='min-w-0 flex-1'>
                     <div className='conversation-search-modal__result-title-row'>
-                      <ConversationAgentMark conversation={item.conversation} />
+                      <span className='relative inline-flex flex-shrink-0'>
+                        <ConversationAgentMark conversation={item.conversation} />
+                        <ConversationClaudeAccountBadge conversation={item.conversation} />
+                      </span>
                       <div className='conversation-search-modal__result-title text-15px font-600 text-t-primary truncate'>
                         <MindNProgressTitle>
                           {item.conversation.name || t('conversation.historySearch.untitled')}

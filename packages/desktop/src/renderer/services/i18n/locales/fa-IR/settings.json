@@ -1562,5 +1562,32 @@
       "invalidInput": "تنظیمات واردشده را بررسی کنید.",
       "firebase": "اتصال‌های Firebase و AionUi را بررسی کنید و دوباره تلاش کنید."
     }
+  },
+  "claudeAccounts": {
+    "title": "حساب‌های Claude",
+    "description": "می‌توانید چند حساب Claude را در این رایانه استفاده کنید. با دو حساب یا بیشتر، در گفتگوهای جدید می‌توانید حساب را انتخاب کنید و فهرست گفتگوها شمارهٔ آن را نشان می‌دهد.",
+    "add": "افزودن حساب",
+    "defaultDir": "پوشهٔ پیش‌فرض Claude",
+    "labelLabel": "نام حساب",
+    "labelPlaceholder": "مثلاً Max شخصی",
+    "configDirLabel": "پوشهٔ تنظیمات Claude",
+    "configDirPlaceholder": "مثلاً C:\\Users\\me\\.claude-max",
+    "defaultLabelLabel": "نام حساب پیش‌فرض فعلی",
+    "defaultLabelPlaceholder": "مثلاً Team شرکت",
+    "shareSettings": "settings.json حساب پیش‌فرض (hooks، مجوزها) نیز بارگذاری شود",
+    "checkLogin": "بررسی ورود",
+    "loggedIn": "وارد شده ({{plan}})",
+    "loggedInNoPlan": "وارد شده",
+    "loggedOut": "وارد نشده",
+    "loginHint": "از PowerShell وارد شوید و دوباره بررسی کنید:",
+    "moveUp": "انتقال به بالا",
+    "moveDown": "انتقال به پایین",
+    "delete": "حذف حساب",
+    "deleteConfirm": "این حساب از AionUi حذف شود؟ خود پوشهٔ تنظیمات حذف نمی‌شود.",
+    "deleteInUse": "گفتگوهایی از این حساب استفاده می‌کنند، بنابراین قابل حذف نیست.",
+    "duplicateDir": "این پوشهٔ تنظیمات قبلاً ثبت شده است.",
+    "invalidInput": "نام حساب را بررسی کنید و مسیر مطلق یک پوشهٔ موجود را وارد کنید.",
+    "saveFailed": "ذخیرهٔ حساب Claude ناموفق بود.",
+    "created": "حساب Claude افزوده شد."
   }
 }

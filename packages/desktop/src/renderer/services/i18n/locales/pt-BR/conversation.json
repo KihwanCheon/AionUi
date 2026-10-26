@@ -839,5 +839,8 @@
     "running": "Em execução",
     "noConfirmed": "Nenhuma conversa foi confirmada como não vinculada. Tente novamente as consultas que falharam.",
     "empty": "Não há conversas não vinculadas ao MnP neste grupo."
+  },
+  "claudeAccount": {
+    "badgeTooltip": "Conta do Claude {{number}} · {{label}}"
   }
 }

@@ -204,7 +204,8 @@
     "resets": "Réinitialisation {{time}}",
     "reached": "Limite d’utilisation atteinte",
     "ok": "Dans la limite",
-    "approaching": "Limite bientôt atteinte"
+    "approaching": "Limite bientôt atteinte",
+    "noData": "Aucune donnée d'utilisation pour le moment"
   },
   "unit": {
     "minute_short": "m",

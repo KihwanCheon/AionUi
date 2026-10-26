@@ -14,7 +14,8 @@ export const initUsageProviders = (): void => {
     const conversation = await ipcBridge.conversation.get.invoke({ id: conversationId });
     if (conversation?.type !== 'acp') return null;
     publisher.noteActiveAcpConversation(conversation.id);
-    return publisher.readClaudeUsage(conversation.extra.workspace ?? '');
+    const { claude_account_id: accountId } = conversation.extra as { claude_account_id?: string };
+    return publisher.readClaudeUsage(conversation.extra.workspace ?? '', accountId);
   });
   subscriptionUsageBridge.getCodex.provider(async ({ conversationId }) => {
     if (conversationId) {

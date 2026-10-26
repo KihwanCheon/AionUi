@@ -833,5 +833,8 @@
     "running": "En cours",
     "noConfirmed": "Aucune conversation confirmée comme non liée. Réessayez les vérifications échouées.",
     "empty": "Aucune conversation de ce groupe n’est sans lien avec MnP."
+  },
+  "claudeAccount": {
+    "badgeTooltip": "Compte Claude {{number}} · {{label}}"
   }
 }

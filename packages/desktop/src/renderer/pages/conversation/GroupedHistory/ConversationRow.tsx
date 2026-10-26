@@ -10,6 +10,7 @@ import FlexFullContainer from '@/renderer/components/layout/FlexFullContainer';
 import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
 import { CronJobIndicator } from '@/renderer/pages/cron';
 import { resolveConversationLeadingMark } from '@/renderer/pages/conversation/utils/conversationAssistantIdentity';
+import { ConversationClaudeAccountBadge } from '@/renderer/pages/conversation/platforms/acp/claudeAccounts';
 import { cleanupSiderTooltips, getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { Checkbox, Tooltip } from '@arco-design/web-react';
@@ -279,6 +280,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
           >
             {renderLeadingIcon()}
           </ConversationLeadingStatus>
+          {!batchMode && <ConversationClaudeAccountBadge conversation={conversation} />}
           {/* Hover overlay on the leading icon: drag handle for sortable pinned rows, pushpin marker otherwise */}
           {!batchMode &&
             isPinned &&

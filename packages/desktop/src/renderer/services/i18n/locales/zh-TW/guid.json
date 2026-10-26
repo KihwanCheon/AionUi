@@ -22,5 +22,8 @@
     "specifyWorkspace": "選擇專案資料夾",
     "searchPlaceholder": "搜尋專案…",
     "noProject": "不使用專案"
+  },
+  "claudeAccount": {
+    "label": "Claude 帳號"
   }
 }

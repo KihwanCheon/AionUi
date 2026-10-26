@@ -1562,5 +1562,32 @@
       "invalidInput": "Check the settings you entered.",
       "firebase": "Check your Firebase and AionUi connections, then try again."
     }
+  },
+  "claudeAccounts": {
+    "title": "Claude accounts",
+    "description": "Use several Claude accounts on this computer. With two or more accounts, new conversations let you choose the account and conversation lists show its number.",
+    "add": "Add account",
+    "defaultDir": "Default Claude folder",
+    "labelLabel": "Account name",
+    "labelPlaceholder": "e.g. Personal Max",
+    "configDirLabel": "Claude config folder",
+    "configDirPlaceholder": "e.g. C:\\Users\\me\\.claude-max",
+    "defaultLabelLabel": "Name of the current default account",
+    "defaultLabelPlaceholder": "e.g. Company Team",
+    "shareSettings": "Also load the default account's settings.json (hooks, permissions)",
+    "checkLogin": "Check login",
+    "loggedIn": "Logged in ({{plan}})",
+    "loggedInNoPlan": "Logged in",
+    "loggedOut": "Not logged in",
+    "loginHint": "Log in from PowerShell, then check again:",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "delete": "Delete account",
+    "deleteConfirm": "Delete this account from AionUi? The config folder itself is not deleted.",
+    "deleteInUse": "This account is used by conversations and cannot be deleted.",
+    "duplicateDir": "This config folder is already registered.",
+    "invalidInput": "Check the account name and use the absolute path of an existing folder.",
+    "saveFailed": "Failed to save the Claude account.",
+    "created": "Claude account added."
   }
 }
