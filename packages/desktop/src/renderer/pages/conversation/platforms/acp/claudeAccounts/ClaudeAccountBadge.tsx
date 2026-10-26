@@ -25,7 +25,7 @@ export const ClaudeAccountBadge: React.FC<BadgeProps> = ({ account, variant = 'n
 
   if (variant === 'mark') {
     return (
-      <span className={styles.tagNumber} aria-label={label} data-testid='claude-account-mark'>
+      <span className={`${styles.tagNumber} ${styles.mark}`} aria-label={label} data-testid='claude-account-mark'>
         {account.number}
       </span>
     );
