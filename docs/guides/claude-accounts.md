@@ -62,14 +62,14 @@ claude-max() { CLAUDE_CONFIG_DIR="$HOME/.claude-max" claude --settings "$HOME/.c
 
 A new folder starts empty. Decide what the extra account should share with the default account.
 
-| Item | Shared automatically? | What to do |
-| --- | --- | --- |
-| `settings.json` (hooks, permissions, env) | Yes, while **Also load the default account's settings.json** is on (the default) | Nothing. AionUi starts the account with `--settings <default folder>/settings.json`. These hooks run, but Claude's interactive `/hooks` menu does not list them; confirm them from the hook's own output. |
-| `CLAUDE.md` (global guidance) | No | Create `<extra folder>/CLAUDE.md` containing the single line `@~/.claude/CLAUDE.md`. The account then imports the original instead of keeping a copy. |
-| `skills/` | No | Copy each skill folder from `~/.claude/skills` to `<extra folder>/skills`, and copy it again whenever the original changes. This includes skills installed by the MindNProgress Suite installer, which only installs into the default folder. |
-| MCP servers registered with `claude mcp add` (`.claude.json`) and plugins | No | Register them again for the extra account if you need them. MCP servers selected in AionUi for a conversation are passed by AionUi and work with every account. |
-| AionUi assistant rules and AionUi skills | Yes | Nothing. AionUi injects them into each conversation. |
-| Login | No | Each folder keeps its own login (step 1). |
+| Item                                                                      | Shared automatically?                                                            | What to do                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `settings.json` (hooks, permissions, env)                                 | Yes, while **Also load the default account's settings.json** is on (the default) | Nothing. AionUi starts the account with `--settings <default folder>/settings.json`. These hooks run, but Claude's interactive `/hooks` menu does not list them; confirm them from the hook's own output.                                     |
+| `CLAUDE.md` (global guidance)                                             | No                                                                               | Create `<extra folder>/CLAUDE.md` containing the single line `@~/.claude/CLAUDE.md`. The account then imports the original instead of keeping a copy.                                                                                         |
+| `skills/`                                                                 | No                                                                               | Copy each skill folder from `~/.claude/skills` to `<extra folder>/skills`, and copy it again whenever the original changes. This includes skills installed by the MindNProgress Suite installer, which only installs into the default folder. |
+| MCP servers registered with `claude mcp add` (`.claude.json`) and plugins | No                                                                               | Register them again for the extra account if you need them. MCP servers selected in AionUi for a conversation are passed by AionUi and work with every account.                                                                               |
+| AionUi assistant rules and AionUi skills                                  | Yes                                                                              | Nothing. AionUi injects them into each conversation.                                                                                                                                                                                          |
+| Login                                                                     | No                                                                               | Each folder keeps its own login (step 1).                                                                                                                                                                                                     |
 
 ## 3. Register the account in AionUi
 
@@ -101,14 +101,14 @@ In the account list you can rename an account inline, toggle settings sharing, r
 
 ## Troubleshooting
 
-| Symptom | Cause and fix |
-| --- | --- |
+| Symptom                                                                   | Cause and fix                                                                                                            |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | "Check the account name and use the absolute path of an existing folder." | The folder does not exist yet, the path is relative, or the name is empty or too long. Create the folder first (step 1). |
-| "This config folder is already registered." | The folder belongs to another account. Each account needs its own folder. |
-| **Not logged in** | Log in as shown in step 1, then click **Check login** again. |
-| The extra account lacks your rules or skills | Add the `CLAUDE.md` import line and copy the skills (step 2). |
-| Hooks seem missing in `/hooks` | Expected for shared settings; check the hook's output instead. |
-| **No usage data yet** | Start a conversation with that account and wait for the next refresh. |
+| "This config folder is already registered."                               | The folder belongs to another account. Each account needs its own folder.                                                |
+| **Not logged in**                                                         | Log in as shown in step 1, then click **Check login** again.                                                             |
+| The extra account lacks your rules or skills                              | Add the `CLAUDE.md` import line and copy the skills (step 2).                                                            |
+| Hooks seem missing in `/hooks`                                            | Expected for shared settings; check the hook's output instead.                                                           |
+| **No usage data yet**                                                     | Start a conversation with that account and wait for the next refresh.                                                    |
 
 ## For every upstream rebase
 
