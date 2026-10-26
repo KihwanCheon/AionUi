@@ -406,6 +406,27 @@ describe('SubscriptionUsagePublisher Claude accounts', () => {
     publisher.stop();
   });
 
+  it('forwards the PTY launch context on both the default and the account probe paths', async () => {
+    const getClaudeUsage = vi.fn(async (_cwd: string, accountId?: string) =>
+      accountId === 'max' ? maxUsage : claudeUsage
+    );
+    const { publisher } = createPublisher({ accountsList: accounts, getClaudeUsage });
+    const context = { conversationId: 'conversation-1', conversationName: 'Usage check' };
+
+    await publisher.readClaudeUsage('C:\\workspace', undefined, context);
+    await publisher.readClaudeUsage('C:\\workspace', 'default', context);
+    await publisher.readClaudeUsage('C:\\max-workspace', 'max', context);
+    await publisher.readClaudeUsage('C:\\max-workspace', 'max');
+
+    expect(getClaudeUsage.mock.calls).toEqual([
+      ['C:\\workspace', undefined, context],
+      ['C:\\workspace', undefined, context],
+      ['C:\\max-workspace', 'max', context],
+      ['C:\\max-workspace', 'max'],
+    ]);
+    publisher.stop();
+  });
+
   it('marks a failing account unavailable without touching the default account', async () => {
     const { publisher, capture } = createPublisher({
       accountsList: accounts,
