@@ -89,7 +89,8 @@ diff --git a/src/unix/pty.cc b/src/unix/pty.cc
                  pid_t* pid,
 -                int* err) {
 +                std::string* err) {
-   int low_fds[3];
+-  int low_fds[3];
++  int low_fds[3] = {-1, -1, -1};
    size_t count = 0;
 +  int res = 0;
 +  int slave = -1;
@@ -99,7 +100,7 @@ diff --git a/src/unix/pty.cc b/src/unix/pty.cc
  
    for (; count < 3; count++) {
      low_fds[count] = posix_openpt(O_RDWR);
-@@ -704,82 +718,103 @@ pty_posix_spawn(char** argv, char** env,
+@@ -704,82 +718,105 @@ pty_posix_spawn(char** argv, char** env,
                POSIX_SPAWN_SETSIGDEF |
                POSIX_SPAWN_SETSIGMASK |
                POSIX_SPAWN_SETSID;
@@ -222,8 +223,10 @@ diff --git a/src/unix/pty.cc b/src/unix/pty.cc
  
 -  for (; count > 0; count--) {
 -    close(low_fds[count]);
-+  for (size_t i = 0; i <= count; i++) {
-+    close(low_fds[i]);
++  for (size_t i = 0; i < 3; i++) {
++    if (low_fds[i] != -1) {
++      close(low_fds[i]);
++    }
    }
  }
  #endif
