@@ -156,9 +156,10 @@ When opening a PR, fill in the PR body using [.github/pull_request_template.md](
 ## 개인 fork 작업 원칙
 
 - `origin/main`은 개인 fork 브랜치이므로 일반적인 변경에서는 전체 테스트를 진행하지 않는다. 변경 동작에 필요한 집중 테스트만 실행한다.
-- 이 브랜치는 장기적이고 반복적으로 upstream을 rebase하므로 충돌 가능성을 최소화해야 한다. fork 전용 로직은 가능하면 별도 파일·모듈로 격리하고, upstream 공용 파일의 변경 범위와 불필요한 포맷·리팩터링을 최소화한다.
+- 원격 통합은 squash merge나 rebase 대신 merge commit으로 계보를 보존한다. 새 통합 브랜치는 최신 `aion/main`에서 시작해 `mabobsa/main`을 `--no-ff`로 병합하고, 그 결과 위에 `origin/main`을 `--no-ff`로 병합한다. KihwanCheon의 일반 작업은 이 통합 결과 위에 커밋한다.
+- 통합된 개인 fork 브랜치를 upstream 위로 rebase하지 않는다. fork 전용 로직은 가능하면 별도 파일·모듈로 격리하고, 각 원격의 공용 파일 변경 범위와 불필요한 포맷·리팩터링을 최소화해 이후 merge 충돌을 줄인다.
 - 개발 실행은 상위 폴더의 `run-aionui-dev-no-sentry.bat`을 사용한다. 이 배치는 `bun run dev`로 필요한 소스를 컴파일하므로 일반적인 변경에서는 별도의 패키지 빌드를 진행하지 않는다.
 - 사용자가 푸시를 요청하면 앞선 `just push` 규칙 대신 `just push-fork`를 사용한다.
-- rebase 이후에는 `--force-with-lease`를 반드시 사용한다.
+- 통합 브랜치에는 강제 push하지 않는다. 예외적인 이력 재작성은 사용자가 대상 브랜치와 방식을 명시적으로 승인한 경우에만 수행한다.
 - upstream PR, 릴리스 또는 사용자가 전체 검증이나 패키지 빌드를 요청한 경우에는 해당 검증을 수행하고 기존 `just push`를 사용한다.
 - 전체 테스트나 패키지 빌드를 생략한 경우 최종 보고에 명시한다.
