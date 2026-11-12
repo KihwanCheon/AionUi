@@ -10,6 +10,7 @@
     "selectedCount": "{{count}} sélectionné(s)",
     "up": "Remonter",
     "go": "Aller",
-    "empty": "Rien ici"
+    "empty": "Rien ici",
+    "symlink": "Lien symbolique / jonction"
   }
 }

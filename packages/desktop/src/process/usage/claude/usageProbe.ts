@@ -6,9 +6,15 @@
 
 /** Run and cache the interactive Claude subscription-usage probe. */
 import type { ClaudeUsageSnapshot } from '@/common/types/platform/claudeUsage';
+import type {
+  PtyLaunchCloseReason,
+  PtyLaunchContext,
+  PtyLaunchSnapshot,
+} from '@/common/types/platform/subscriptionUsage';
 import { existsSync, mkdirSync } from 'node:fs';
 import { delimiter, extname, join, win32 } from 'node:path';
 import { spawn, type IPty } from 'node-pty';
+import { getPtyMonitorService } from '../ptyMonitor';
 import { parseClaudeUsageOutput, stripClaudeUsageTerminalOutput } from './usageParser';
 
 const DEFAULT_SUCCESS_TTL_MS = 120_000;
@@ -26,6 +32,27 @@ const TRUST_CONFIRMATION = /quick safety check|trust this folder/i;
 const USAGE_DIALOG_DISMISSED = /settings dialog dismissed/i;
 
 export type SpawnPty = typeof spawn;
+
+type DestroyablePty = IPty & {
+  destroy?: () => void;
+};
+
+/** Close the PTY transport as well as its child process on Unix-like hosts. */
+export const releasePty = (terminal: IPty, platform: NodeJS.Platform = process.platform): void => {
+  if (platform !== 'win32') {
+    const destroyable = terminal as DestroyablePty;
+    const destroy = destroyable.destroy;
+    if (typeof destroy === 'function') {
+      try {
+        destroy.call(terminal);
+        return;
+      } catch {
+        // Fall through so the child is still terminated by alternate implementations.
+      }
+    }
+  }
+  terminal.kill();
+};
 
 export type ClaudeUsageProbeOptions = {
   accountId?: string;
@@ -53,6 +80,8 @@ export type ClaudeUsageProbeOptions = {
    * workspace passed to `getUsage`.
    */
   workingDirectory?: () => string;
+  trackPtyLaunch?: (launch: Omit<PtyLaunchSnapshot, 'id' | 'startedAt'>) => string;
+  finishPtyLaunch?: (launchId: string, reason: PtyLaunchCloseReason) => void;
 };
 
 type CacheEntry = {
@@ -108,6 +137,8 @@ export class ClaudeUsageProbe {
   readonly #successTtlMs: number;
   readonly #timeoutMs: number;
   readonly #workingDirectory: (() => string) | undefined;
+  readonly #trackPtyLaunch: (launch: Omit<PtyLaunchSnapshot, 'id' | 'startedAt'>) => string;
+  readonly #finishPtyLaunch: (launchId: string, reason: PtyLaunchCloseReason) => void;
 
   #cache: CacheEntry | undefined;
   #inFlight: Promise<ClaudeUsageSnapshot | null> | undefined;
@@ -127,14 +158,17 @@ export class ClaudeUsageProbe {
     this.#successTtlMs = options.successTtlMs ?? DEFAULT_SUCCESS_TTL_MS;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.#workingDirectory = options.workingDirectory;
+    this.#trackPtyLaunch = options.trackPtyLaunch ?? ((launch) => getPtyMonitorService().trackLaunch(launch));
+    this.#finishPtyLaunch =
+      options.finishPtyLaunch ?? ((launchId, reason) => getPtyMonitorService().finishLaunch(launchId, reason));
   }
 
-  async getUsage(cwd: string): Promise<ClaudeUsageSnapshot | null> {
+  async getUsage(cwd: string, context: PtyLaunchContext = {}): Promise<ClaudeUsageSnapshot | null> {
     const now = this.#now();
     if (this.#cache && this.#cache.expiresAt > now) return this.#cache.value;
     if (this.#inFlight) return this.#inFlight;
 
-    const request = this.#runProbe(cwd)
+    const request = this.#runProbe(cwd, context)
       .then((value) => {
         this.#cache = {
           value,
@@ -165,7 +199,7 @@ export class ClaudeUsageProbe {
     return request;
   }
 
-  #runProbe(cwd: string): Promise<ClaudeUsageSnapshot | null> {
+  #runProbe(cwd: string, context: PtyLaunchContext): Promise<ClaudeUsageSnapshot | null> {
     const executable = resolveExecutableFromPath(this.#command, this.#env);
     if (!executable) {
       return Promise.reject(new Error('Claude executable was not found on PATH'));
@@ -186,6 +220,18 @@ export class ClaudeUsageProbe {
       } catch (error) {
         reject(error);
         return;
+      }
+
+      let launchId: string | undefined;
+      try {
+        launchId = this.#trackPtyLaunch({
+          purpose: 'claude-usage-probe',
+          conversationId: context.conversationId,
+          conversationName: context.conversationName,
+          childPid: terminal.pid,
+        });
+      } catch {
+        // Monitoring must never interfere with subscription usage collection.
       }
 
       let captured = '';
@@ -211,7 +257,11 @@ export class ClaudeUsageProbe {
       let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
       let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
-      const finish = (value: ClaudeUsageSnapshot | null, error?: Error): void => {
+      const finish = (
+        value: ClaudeUsageSnapshot | null,
+        error?: Error,
+        reason: PtyLaunchCloseReason = 'completed'
+      ): void => {
         if (settled) return;
         settled = true;
         if (commandTimer) clearTimeout(commandTimer);
@@ -227,10 +277,10 @@ export class ClaudeUsageProbe {
         dataSubscription?.dispose();
         exitSubscription?.dispose();
         try {
-          // node-pty's Windows exit event closes its streams but does not
-          // release the ConPTY agent. Always kill the terminal so conhost.exe
-          // cannot accumulate after otherwise clean Claude exits.
-          terminal.kill();
+          // Unix node-pty kill() only signals the child and leaves the PTY
+          // master open. releasePty() closes that transport while preserving
+          // the existing Windows ConPTY kill path.
+          releasePty(terminal);
         } catch {
           // The PTY may already have been fully released.
         }
@@ -238,6 +288,13 @@ export class ClaudeUsageProbe {
           this.#onFinished?.();
         } catch {
           // Cleanup hooks must not change the probe result.
+        }
+        if (launchId) {
+          try {
+            this.#finishPtyLaunch(launchId, reason);
+          } catch {
+            // Monitoring must never interfere with subscription usage collection.
+          }
         }
         if (error) {
           reject(error);
@@ -317,7 +374,7 @@ export class ClaudeUsageProbe {
         // Letting Claude exit first can strand the Windows ConPTY host because
         // node-pty can no longer enumerate the finished console session.
         writeIfActive('\u001b');
-        shutdownTimer = setTimeout(() => finish(snapshot), DEFAULT_SHUTDOWN_TIMEOUT_MS);
+        shutdownTimer = setTimeout(() => finish(snapshot, undefined, 'shutdown-timeout'), DEFAULT_SHUTDOWN_TIMEOUT_MS);
       };
 
       // Fork: a plan without a 5-hour limit renders only the weekly bucket, so
@@ -359,7 +416,7 @@ export class ClaudeUsageProbe {
             cleanupQueued = true;
             const snapshot = completedSnapshot;
             cleanupTimer = setTimeout(() => {
-              finish(snapshot);
+              finish(snapshot, undefined, 'completed');
             }, this.#exitCommandDelayMs);
           }
           return;
@@ -381,14 +438,14 @@ export class ClaudeUsageProbe {
 
       exitSubscription = terminal.onExit(() => {
         exited = true;
-        finish(completedSnapshot ?? parseClaudeUsageOutput(captured, new Date(this.#now())));
+        finish(completedSnapshot ?? parseClaudeUsageOutput(captured, new Date(this.#now())), undefined, 'exit');
       });
 
       scheduleFallbackCommand();
 
       timeoutTimer = setTimeout(() => {
         const partial = parseClaudeUsageOutput(captured, new Date(this.#now()));
-        finish(partial, partial ? undefined : new Error('Claude usage probe timed out'));
+        finish(partial, partial ? undefined : new Error('Claude usage probe timed out'), 'timeout');
       }, this.#timeoutMs);
     });
   }

@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Left, Right, Refresh, Loading } from '@icon-park/react';
 import { ipcBridge } from '@/common';
 import { InternalNavTracker, shouldResetHistoryForUrlProp } from './webviewHistory';
+import { buildAgentBrowserTargetUpdate } from './agentBrowserTarget';
 
 export interface WebviewHostProps {
   /** URL to display */
@@ -42,6 +43,11 @@ export interface WebviewHostProps {
    * which keeps existing embedded consumers behaving exactly as before.
    */
   resolveUrlInput?: (raw: string) => string | null;
+  /**
+   * Whether this webview is the currently visible in-app browser tab.
+   * Undefined means this is not an agent-controllable browser webview.
+   */
+  agentBrowserActive?: boolean;
 }
 
 const MIN_ZOOM_FACTOR = 0.75;
@@ -70,6 +76,7 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   onTitleChange,
   onFaviconChange,
   resolveUrlInput,
+  agentBrowserActive,
 }) => {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -301,30 +308,6 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
       syncNavState();
       injectClickInterceptor();
 
-      /**
-       * 把这个 webview 的 webContents id 报给主进程，让单目标 CDP 通道附加到它。
-       *
-       * 放在 dom-ready 里：此时 getWebContentsId() 才可用，而且每次导航/切 tab 后都会
-       * 再触发一次，正好让通道跟着用户当前看的页面走。失败只记日志不打扰用户 ——
-       * Agent 操作浏览器本就是可选能力，不该因为它挡住正常浏览。
-       *
-       * Report this webview's webContents id so the single-target CDP bridge can attach.
-       * Done on dom-ready because getWebContentsId() is only valid by then, and because it
-       * fires again after navigation or a tab switch, which keeps the bridge pointed at the
-       * page the user is actually viewing. Failures are logged only: agent browser control
-       * is optional and must not block ordinary browsing.
-       */
-      try {
-        const webContentsId = webviewEl.getWebContentsId?.();
-        if (typeof webContentsId === 'number') {
-          void ipcBridge.application.reportBrowserWebContentsId.invoke({ webContentsId }).then((res) => {
-            if (!res.success && res.msg) console.warn('[browser] agent control unavailable:', res.msg);
-          });
-        }
-      } catch (error) {
-        console.warn('[browser] could not report webContents id:', error);
-      }
-
       // Inject viewport meta for responsive pages
       webviewEl
         .executeJavaScript(
@@ -460,6 +443,33 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
       webviewEl.removeEventListener('page-favicon-updated', handlePageFaviconUpdated as EventListener);
     };
   }, [navigateToWithHistory, currentUrl, onDidFinishLoad, onDidFailLoad, isStarOfficeUrl]);
+
+  /**
+   * Only the visible browser tab may own the single-target CDP bridge. This is
+   * separate from dom-ready because switching between persistent browser tabs
+   * changes visibility without loading either document again.
+   */
+  useEffect(() => {
+    if (!webviewReady) return;
+
+    let update: ReturnType<typeof buildAgentBrowserTargetUpdate> = null;
+    try {
+      update = buildAgentBrowserTargetUpdate(agentBrowserActive, webviewRef.current?.getWebContentsId?.());
+    } catch (error) {
+      console.warn('[browser] could not read webContents id:', error);
+      return;
+    }
+    if (!update) return;
+
+    void ipcBridge.application.reportBrowserWebContentsId.invoke(update).then((res) => {
+      if (!res.success && res.msg) console.warn('[browser] agent control unavailable:', res.msg);
+    });
+
+    if (!update.active) return;
+    return () => {
+      void ipcBridge.application.reportBrowserWebContentsId.invoke({ ...update, active: false });
+    };
+  }, [agentBrowserActive, webviewReady]);
 
   // Resize observer for content area
   useEffect(() => {

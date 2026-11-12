@@ -19,8 +19,8 @@ vi.mock('@process/usage/claude/usageProbe', () => ({
     constructor(options: { env?: NodeJS.ProcessEnv } = {}) {
       probeEnvs.push(options.env);
     }
-    getUsage(cwd: string) {
-      return getUsageMock(cwd);
+    getUsage(cwd: string, context?: unknown) {
+      return getUsageMock(cwd, context);
     }
   },
 }));
@@ -72,6 +72,21 @@ describe('getClaudeUsage per Claude account', () => {
       delete process.env.Path;
       if (originalPath !== undefined) process.env.PATH = originalPath;
     }
+  });
+
+  it('passes the PTY launch context through to the default and the account probe', async () => {
+    const { getClaudeUsage } = await import('@process/usage/claude');
+    const context = { conversationId: 'conversation-1', conversationName: 'Usage check' };
+
+    await getClaudeUsage('C:\\work', undefined, context);
+    await getClaudeUsage('C:\\work', 'max', context);
+    await getClaudeUsage('C:\\work');
+
+    expect(getUsageMock.mock.calls).toEqual([
+      ['C:\\work', context],
+      ['C:\\work', context],
+      ['C:\\work', undefined],
+    ]);
   });
 
   it('returns null for an unknown account instead of the default account usage', async () => {

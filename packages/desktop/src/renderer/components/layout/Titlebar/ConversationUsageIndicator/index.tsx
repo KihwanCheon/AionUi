@@ -17,14 +17,15 @@ import type {
 } from '@/common/types/platform/subscriptionUsage';
 import { ClaudeAccountBadge } from '@/renderer/pages/conversation/platforms/acp/claudeAccounts';
 import { isElectronDesktop } from '@/renderer/utils/platform';
-import ClaudeUsagePill from './ClaudeUsagePill';
-import CodexUsageIndicator from './CodexUsageIndicator';
-import styles from './SubscriptionUsageIndicator.module.css';
+import ClaudeUsagePill from '../ClaudeUsagePill';
+import CodexUsageIndicator from '../CodexUsageIndicator';
+import styles from '../SubscriptionUsageIndicator.module.css';
+import PtyMonitorIndicator from './PtyMonitorIndicator';
 import {
   getSubscriptionUsageTone,
   isSubscriptionUsageFresh,
   type SubscriptionUsageTone,
-} from './subscriptionUsageTone';
+} from '../subscriptionUsageTone';
 
 const WEB_USAGE_READY_POLL_MS = 10_000;
 const webUsageProvider = httpGet<SubscriptionUsageSnapshot | null>('/api/system/subscription-usage');
@@ -310,6 +311,7 @@ const ConversationUsageIndicator: React.FC = () => {
     <>
       <ClaudeUsagePill />
       <CodexUsageIndicator />
+      <PtyMonitorIndicator />
     </>
   );
 };

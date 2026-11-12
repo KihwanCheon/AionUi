@@ -13,10 +13,21 @@ import {
   normalizeRunnerCredential,
   type MindNProgressRunnerCredential,
 } from './credential';
+import { forwardRunnerOutput } from './outputLog';
+import { pairedCallbackHost } from './callbackHostEnv';
 
 type StoredCredentialEnvelope = {
   schemaVersion: 1;
   ciphertext: string;
+  /**
+   * Paired server address, stored in the clear beside the ciphertext.
+   *
+   * Only the token is secret; the address is not. Keeping it readable lets
+   * backend startup learn the callback host WITHOUT touching safeStorage —
+   * a decrypt there can raise a blocking OS keychain prompt on the critical
+   * path and stall the whole launch.
+   */
+  apiUrl?: string;
 };
 
 type PairingExchangeResponse = {
@@ -126,10 +137,55 @@ class MindNProgressRunnerManager {
     const envelope: StoredCredentialEnvelope = {
       schemaVersion: 1,
       ciphertext: safeStorage.encryptString(JSON.stringify(credential)).toString('base64'),
+      apiUrl: credential.apiUrl,
     };
     const temporaryPath = `${credentialPath}.tmp`;
     await writeFile(temporaryPath, `${JSON.stringify(envelope, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
     await rename(temporaryPath, credentialPath);
+  }
+
+  /**
+   * apiUrl of the stored pairing, read from the envelope's plaintext field.
+   *
+   * Deliberately does NOT decrypt: this runs before the backend spawns, and a
+   * safeStorage call there can block on an OS keychain prompt. Never throws —
+   * backend startup must not fail over a missing pairing.
+   */
+  async readPairedApiUrl(): Promise<string | null> {
+    try {
+      const envelope = JSON.parse(await readFile(this.credentialPath(), 'utf8')) as StoredCredentialEnvelope;
+      return typeof envelope.apiUrl === 'string' && envelope.apiUrl.trim() ? envelope.apiUrl : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Push the current callback-host allow list to the running backend.
+   *
+   * aioncore seeds the list from its environment at startup, which cannot
+   * follow a pairing made later or a disconnect. This keeps it current without
+   * restarting the backend. Best effort: a failure only means the backend
+   * keeps the seeded value until the next launch, so it must not surface as a
+   * pairing error.
+   */
+  private async pushCallbackHosts(apiUrl: string | null): Promise<void> {
+    if (!this.localAionUiUrl) return;
+    const host = pairedCallbackHost(apiUrl);
+    try {
+      const response = await net.fetch(`${this.localAionUiUrl}/api/internal/external-launch/callback-hosts`, {
+        method: 'PUT',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hosts: host ? [host] : [] }),
+        redirect: 'error',
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!response.ok) {
+        console.warn(`[mnp-runner] backend refused the callback host update (${response.status})`);
+      }
+    } catch (error) {
+      console.warn('[mnp-runner] could not update the backend callback hosts:', safeErrorMessage(error));
+    }
   }
 
   async initialize(localAionUiPort: number): Promise<void> {
@@ -150,6 +206,16 @@ class MindNProgressRunnerManager {
       this.publish({ configured: false, state: 'not-configured', lastError: null });
       return;
     }
+    // Pairings written before the plaintext apiUrl existed are upgraded here,
+    // off the startup critical path, so the next launch can read it without decrypting.
+    if ((await this.readPairedApiUrl()) !== this.credential.apiUrl) {
+      try {
+        await this.writeCredential(this.credential);
+      } catch {
+        // Non-fatal: the Runner still works, only the backend hint is missing.
+      }
+    }
+    await this.pushCallbackHosts(this.credential.apiUrl);
     this.publish({
       configured: true,
       apiUrl: this.credential.apiUrl,
@@ -173,7 +239,9 @@ class MindNProgressRunnerManager {
       const credential = this.credential;
       const child = utilityProcess.fork(this.runnerEntryPath(), [], {
         serviceName: 'MindNProgress Runner',
-        stdio: 'ignore',
+        // Piped, not ignored: a runner that dies before it can report over IPC
+        // must still leave its reason in the log file. See ./outputLog.
+        stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
           MNP_RUNNER_API_URL: credential.apiUrl,
@@ -183,6 +251,7 @@ class MindNProgressRunnerManager {
         },
       });
       this.child = child;
+      forwardRunnerOutput(child);
       child.on('message', (message: unknown) => this.handleChildMessage(child, message));
       child.once('exit', (code) => this.handleChildExit(child, code));
     } catch (error) {
@@ -301,6 +370,7 @@ class MindNProgressRunnerManager {
     await this.stopChild();
     await this.writeCredential(credential);
     this.credential = credential;
+    await this.pushCallbackHosts(credential.apiUrl);
     this.publish({
       configured: true,
       secureStorageAvailable: true,
@@ -327,6 +397,7 @@ class MindNProgressRunnerManager {
     await rm(this.credentialPath(), { force: true });
     this.credential = null;
     this.stopRequested = false;
+    await this.pushCallbackHosts(null);
     this.publish({
       configured: false,
       state: 'not-configured',

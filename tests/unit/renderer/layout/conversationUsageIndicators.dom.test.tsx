@@ -11,6 +11,7 @@ import type { ClaudeUsageSnapshot } from '@/common/types/platform/claudeUsage';
 import type { CodexUsageSnapshot } from '@/common/types/platform/codexUsage';
 import type {
   ClaudeAccountSubscriptionUsage,
+  PtyMonitorSnapshot,
   SubscriptionUsageSnapshot,
 } from '@/common/types/platform/subscriptionUsage';
 import styles from '@/renderer/components/layout/Titlebar/SubscriptionUsageIndicator.module.css';
@@ -21,6 +22,8 @@ const fixtures = vi.hoisted(() => ({
   codexInvoke: vi.fn(),
   codexListener: undefined as ((usage: CodexUsageSnapshot) => void) | undefined,
   conversationUsageInvoke: vi.fn(),
+  ptyInvoke: vi.fn(),
+  ptyListener: undefined as ((snapshot: PtyMonitorSnapshot) => void) | undefined,
   electronDesktop: true,
   webUsageInvoke: vi.fn(),
 }));
@@ -50,6 +53,13 @@ vi.mock('@/common/platform/subscriptionUsageBridge', () => ({
     codexChanged: {
       on: (listener: (usage: CodexUsageSnapshot) => void) => {
         fixtures.codexListener = listener;
+        return vi.fn();
+      },
+    },
+    getPtyMonitor: { invoke: fixtures.ptyInvoke },
+    ptyMonitorChanged: {
+      on: (listener: (snapshot: PtyMonitorSnapshot) => void) => {
+        fixtures.ptyListener = listener;
         return vi.fn();
       },
     },
@@ -92,6 +102,7 @@ vi.mock('@arco-design/web-react', () => ({
 
 vi.mock('@icon-park/react', () => ({
   Dashboard: () => <span />,
+  Terminal: () => <span />,
 }));
 
 import ConversationUsageIndicator from '@/renderer/components/layout/Titlebar/ConversationUsageIndicator';
@@ -135,6 +146,19 @@ describe('ConversationUsageIndicator', () => {
     fixtures.claudeInvoke.mockReset().mockResolvedValue(null);
     fixtures.codexInvoke.mockReset().mockResolvedValue(null);
     fixtures.conversationUsageInvoke.mockReset().mockResolvedValue(null);
+    fixtures.ptyInvoke.mockReset().mockResolvedValue({
+      state: 'unsupported',
+      updatedAt: Date.now(),
+      limit: null,
+      totalCount: null,
+      aionUiPid: 1,
+      aionUiCount: null,
+      trackedActiveCount: 0,
+      suspectedUntrackedCount: null,
+      owners: [],
+      activeLaunches: [],
+    } satisfies PtyMonitorSnapshot);
+    fixtures.ptyListener = undefined;
     fixtures.electronDesktop = true;
     fixtures.webUsageInvoke.mockReset().mockResolvedValue(null);
     fixtures.claudeListener = undefined;

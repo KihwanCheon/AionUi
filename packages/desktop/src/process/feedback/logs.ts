@@ -26,7 +26,13 @@ type FeedbackLogCandidate = {
 };
 
 function isFeedbackLogFileForDate(file: string, date: string): boolean {
-  return LOG_SUFFIXES.some((suffix) => file === `${date}${suffix}`);
+  if (file === `${date}.old.log`) return true;
+  return LOG_SUFFIXES.some((suffix) => {
+    if (file === `${date}${suffix}`) return true;
+    if (!file.startsWith(`${date}.`) || !file.endsWith(suffix)) return false;
+    const part = file.slice(date.length + 1, -suffix.length);
+    return /^\d+$/.test(part);
+  });
 }
 
 function normalizeLogDirs(logsDirs: string | string[]): string[] {

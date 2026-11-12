@@ -21,4 +21,21 @@ describe('FileTypeIcon', () => {
     expect(screen.getByTestId('file-type-icon-folder')).toBeInTheDocument();
     expect(screen.queryByTestId('file-type-icon-file')).not.toBeInTheDocument();
   });
+
+  it('does not render a symlink badge by default', () => {
+    render(<FileTypeIcon node={{ name: 'src', relativePath: 'src', isFile: false }} />);
+    expect(screen.queryByTestId('file-type-icon-symlink-badge')).not.toBeInTheDocument();
+  });
+
+  it('renders a symlink badge over the folder icon for a browsable symlink/junction', () => {
+    render(<FileTypeIcon node={{ name: 'link_dir', relativePath: 'link_dir', isFile: false }} isSymlink />);
+    expect(screen.getByTestId('file-type-icon-folder')).toBeInTheDocument();
+    expect(screen.getByTestId('file-type-icon-symlink-badge')).toBeInTheDocument();
+  });
+
+  it('renders a symlink badge over the file icon for a non-browsable symlink', () => {
+    render(<FileTypeIcon node={{ name: 'link.txt', relativePath: 'link.txt', isFile: true }} isSymlink />);
+    expect(screen.getByTestId('file-type-icon-file')).toBeInTheDocument();
+    expect(screen.getByTestId('file-type-icon-symlink-badge')).toBeInTheDocument();
+  });
 });

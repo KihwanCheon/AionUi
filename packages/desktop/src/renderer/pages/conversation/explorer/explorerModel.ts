@@ -23,8 +23,23 @@ export type Entry = {
   name: string;
   kind: EntryKind;
   symlink_target?: string;
+  /** Whether a `symlink` entry's target resolves to a directory (mac symlink
+   * or Windows junction alike — the backend reports both the same way).
+   * Absent/`false` for a file, a real directory, or a non-browsable symlink.
+   * See `isBrowsableDir`. */
+  symlink_target_is_dir?: boolean;
   excluded?: boolean;
 };
+
+/**
+ * Whether an entry can be browsed into like a directory: a real directory, or
+ * a symlink/junction whose target resolves to one. The tree's `isLeaf` and the
+ * directories-first sort both key off this rather than `kind === 'dir'` alone,
+ * so a browsable symlink is treated the same as a real directory everywhere.
+ */
+export function isBrowsableDir(entry: Pick<Entry, 'kind' | 'symlink_target_is_dir'>): boolean {
+  return entry.kind === 'dir' || (entry.kind === 'symlink' && entry.symlink_target_is_dir === true);
+}
 
 /** Directory / file identity on the wire: pe-relative, never canonical. */
 export type DirRef = {
@@ -132,7 +147,7 @@ export function applySnapshot(cache: FactCache, key: PeKey, entries: Entry[]): F
 }
 
 export type Change =
-  | { op: 'added'; name: string; kind: EntryKind; excluded?: boolean }
+  | { op: 'added'; name: string; kind: EntryKind; excluded?: boolean; symlink_target_is_dir?: boolean }
   | { op: 'removed'; name: string }
   | { op: 'renamed'; from: string; to: string }
   /**
@@ -165,6 +180,7 @@ export function applyDelta(cache: FactCache, key: PeKey, changes: Change[]): Fac
       case 'added': {
         const entry: Entry = { name: change.name, kind: change.kind };
         if (change.excluded) entry.excluded = true;
+        if (change.symlink_target_is_dir) entry.symlink_target_is_dir = true;
         entries = entries.filter((e) => e.name !== change.name);
         entries.push(entry);
         break;
@@ -288,6 +304,9 @@ export type TreeNode = {
   title: string;
   isLeaf: boolean;
   excluded?: boolean;
+  /** A symlink or Windows junction (independent of `isLeaf` — a browsable one
+   * is still `isSymlink: true`, so the icon can render it distinctly). */
+  isSymlink?: boolean;
   children?: TreeNode[];
   /** Root-only: role of the pe root (workspace pinned/immutable vs attached). */
   role?: RootRole;
@@ -309,20 +328,20 @@ export type RootRef = {
  * Project the fact cache + expanded set into arco `Tree` data. Starts at each
  * pe root; an expanded directory pulls its one level of children from the cache
  * and recurses; an unexpanded directory is not descended (lazy). Node key is the
- * PeKey. `isLeaf` from `kind === 'file'`.
+ * PeKey. `isLeaf` from `!isBrowsableDir(entry)`.
  */
 /**
- * Display order for a directory's children: directories first, then everything
- * else (files, symlinks — grouped with files, matching the `isLeaf = !isDir`
- * projection), each group sorted by name case-insensitively (locale-aware,
- * `sensitivity: 'base'`). Applied at projection time so both snapshots and
- * delta-added nodes land in the right place with no extra ordering to maintain
- * in the fact cache. Does not reorder pe roots (kept in their backend
- * `order_index`).
+ * Display order for a directory's children: browsable dirs first (real
+ * directories and symlinks/junctions resolved to one — `isBrowsableDir`), then
+ * everything else (files, non-browsable symlinks), each group sorted by name
+ * case-insensitively (locale-aware, `sensitivity: 'base'`). Applied at
+ * projection time so both snapshots and delta-added nodes land in the right
+ * place with no extra ordering to maintain in the fact cache. Does not reorder
+ * pe roots (kept in their backend `order_index`).
  */
 function compareEntriesForDisplay(a: Entry, b: Entry): number {
-  const aDir = a.kind === 'dir';
-  const bDir = b.kind === 'dir';
+  const aDir = isBrowsableDir(a);
+  const bDir = isBrowsableDir(b);
   if (aDir !== bDir) return aDir ? -1 : 1;
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
 }
@@ -339,13 +358,14 @@ export function buildTreeData(cache: FactCache, expanded: ReadonlySet<PeKey>, ro
       .toSorted(compareEntriesForDisplay)
       .map((entry) => {
         const childRel = joinRel(dirRel, entry.name);
-        const isDir = entry.kind === 'dir';
+        const isDir = isBrowsableDir(entry);
         const node: TreeNode = {
           key: peKey(peId, childRel),
           title: entry.name,
           isLeaf: !isDir,
         };
         if (entry.excluded) node.excluded = true;
+        if (entry.kind === 'symlink') node.isSymlink = true;
         if (isDir) {
           const children = buildChildren(peId, childRel);
           if (children) node.children = children;

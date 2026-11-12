@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -37,6 +37,7 @@ const originalConsole = {
   error: console.error,
   debug: console.debug,
 };
+const originalConsoleLogging = process.env.AIONUI_CONSOLE_LOG;
 
 const createLogMock = (): LogMock => ({
   transports: {
@@ -83,8 +84,14 @@ const loadConfigureConsoleLog = async (isPackaged: boolean): Promise<LogMock> =>
 };
 
 describe('configureConsoleLog', () => {
+  beforeEach(() => {
+    delete process.env.AIONUI_CONSOLE_LOG;
+  });
+
   afterEach(() => {
     Object.assign(console, originalConsole);
+    if (originalConsoleLogging === undefined) delete process.env.AIONUI_CONSOLE_LOG;
+    else process.env.AIONUI_CONSOLE_LOG = originalConsoleLogging;
     vi.resetModules();
     vi.clearAllMocks();
   });
@@ -101,6 +108,14 @@ describe('configureConsoleLog', () => {
     const log = await loadConfigureConsoleLog(false);
 
     expect(log.transports.console.level).toBe('silly');
+  });
+
+  it('disables stdout console transport in development when requested', async () => {
+    process.env.AIONUI_CONSOLE_LOG = '0';
+    const log = await loadConfigureConsoleLog(false);
+
+    expect(log.transports.console.level).toBe(false);
+    expect(log.transports.file.level).toBe('info');
   });
 
   it('routes cross-day frontend log writes into the matching date directory', async () => {

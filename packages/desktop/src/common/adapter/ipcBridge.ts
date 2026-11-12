@@ -836,7 +836,7 @@ export const application = {
    * in-app browser. Main validates getType() === 'webview', so even a misused call cannot
    * attach to the main window.
    */
-  reportBrowserWebContentsId: bridge.buildProvider<IBridgeResponse<void>, { webContentsId: number }>(
+  reportBrowserWebContentsId: bridge.buildProvider<IBridgeResponse<void>, { webContentsId: number; active: boolean }>(
     'app.report-browser-webcontents-id'
   ),
   getStartOnBootStatus: bridge.buildProvider<IBridgeResponse<IStartOnBootStatus>, void>('app.get-start-on-boot-status'),
@@ -2044,6 +2044,10 @@ export interface IDirOrFile {
   relativePath: string;
   isDir: boolean;
   isFile: boolean;
+  /** Identity flag, independent of `isDir`: a symlink or Windows junction
+   * (`isDir` may still be true for one whose target is a directory — that is
+   * what makes it browsable). Drives a distinct icon/badge in the UI. */
+  isSymlink: boolean;
   children?: Array<IDirOrFile>;
 }
 

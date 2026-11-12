@@ -30,12 +30,13 @@ import { classifyBackendStartupFailure } from './process/startup/backendStartupF
 import { installQuitCleanup } from './process/startup/quitCleanup';
 import { shouldRegisterBackendStartup } from './process/startup/singleInstanceGating';
 import type { AionUiBootstrapContext, BootstrapProtocolEvent } from './process/startup/bootstrap/protocol';
-import { ProcessConfig } from './process/utils/initStorage';
+import { getSystemDir as getBackendSystemDir, ProcessConfig } from './process/utils/initStorage';
 import type { BackendStartupFailureInfo } from './common/types/platform/electron';
 import { registerWindowMaximizeListeners } from '@process/bridge';
 import { BackendLifecycleManager } from '@aionui/web-host';
 import { resolveBinaryPath } from '@process/backend';
 import { createDatabaseMaintenance } from '@process/services/database/maintenance';
+import { startLogRetention } from './process/utils/logRetention';
 import './process/bridge/feedbackBridge';
 import { registerDatabaseMaintenanceBridge, wasLaunchedAtLogin } from '@process/bridge/applicationBridge';
 import { onLanguageChanged } from './process/bridge/systemSettingsBridge';
@@ -76,6 +77,7 @@ import {
 } from './process/utils/tray';
 import { readCloseToTraySetting } from './process/utils/closeToTraySetting';
 import { mindNProgressRunnerManager } from './process/startup/bootstrap/mindnprogressRunner';
+import { applyExternalLaunchCallbackHostEnv } from './process/startup/bootstrap/mindnprogressRunner/callbackHostEnv';
 // @ts-expect-error - electron-squirrel-startup doesn't have types
 import electronSquirrelStartup from 'electron-squirrel-startup';
 
@@ -229,6 +231,15 @@ let backendStartupFailed = false;
 let backendStartupFailureInfo: BackendStartupFailureInfo | null = null;
 let rendererInitialLanguage: string | null = null;
 let backendMigrationsScheduled = false;
+/** electron-log's own root (`app.getPath('logs')`), with the same fallback feedback collection uses. */
+function resolveElectronLogsDir(): string {
+  try {
+    return app.getPath('logs');
+  } catch {
+    return path.join(app.getPath('userData'), 'logs');
+  }
+}
+
 let ensureAdminUserPromise: Promise<void> | null = null;
 
 ipcMain.on('get-backend-port', (event) => {
@@ -744,6 +755,11 @@ const handleAppReady = async (): Promise<void> => {
     return;
   }
 
+  // Bound the rolling log tree (electron-log and aioncore both roll daily into
+  // it and neither expires anything). After initializeProcess() so getSystemDir()
+  // reports the configured — possibly user-overridden — backend log dir.
+  startLogRetention(() => [resolveElectronLogsDir(), getBackendSystemDir().logDir]);
+
   /**
    * 启动单目标 CDP 通道，并把端口/口令写进自己的 env。
    *
@@ -830,6 +846,9 @@ const handleAppReady = async (): Promise<void> => {
         });
         const { getDataPath } = await import('./process/utils/utils');
         const { getSystemDir } = await import('./process/utils/initStorage');
+        // Must precede the spawn: buildSpawnEnv copies this process's env, and
+        // aioncore reads its callback allow list from there once at startup.
+        applyExternalLaunchCallbackHostEnv(await mindNProgressRunnerManager.readPairedApiUrl());
         const sysDir = getSystemDir();
         return backendManager.start(
           getDataPath(),
@@ -1091,6 +1110,9 @@ const requestExternalWindowActivation = (): void => {
 };
 
 const handleBootstrapProtocolEvent = (event: BootstrapProtocolEvent): void => {
+  // Logged before the mode guard: "the OS delivered it but this build ignores
+  // it" and "the OS never delivered it" are otherwise indistinguishable.
+  console.info(`[DeepLink] protocol event kind=${event.kind} url=${event.deepLinkUrl ? 'yes' : 'none'}`);
   if (isWebUIMode || isResetPasswordMode) return;
   if (event.deepLinkUrl) handleDeepLinkUrl(event.deepLinkUrl);
   requestExternalWindowActivation();

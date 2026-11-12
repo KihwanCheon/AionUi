@@ -10,6 +10,7 @@
     "selectedCount": "{{count}}개 선택됨",
     "up": "위로",
     "go": "이동",
-    "empty": "비어 있습니다"
+    "empty": "비어 있습니다",
+    "symlink": "심볼릭 링크 / 정션"
   }
 }

@@ -18,6 +18,8 @@ type DirOrFileRaw = {
   isDir?: boolean;
   is_file?: boolean;
   isFile?: boolean;
+  is_symlink?: boolean;
+  isSymlink?: boolean;
   children?: DirOrFileRaw[];
 };
 
@@ -28,6 +30,7 @@ function mapDirOrFile(entry: DirOrFileRaw): Record<string, unknown> {
     relativePath: entry.relative_path ?? entry.relativePath,
     isDir: entry.is_dir ?? entry.isDir,
     isFile: entry.is_file ?? entry.isFile,
+    isSymlink: entry.is_symlink ?? entry.isSymlink,
     children: Array.isArray(entry.children) ? entry.children.map(mapDirOrFile) : entry.children,
   };
 }
