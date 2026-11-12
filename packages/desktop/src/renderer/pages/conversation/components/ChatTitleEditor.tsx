@@ -1,4 +1,5 @@
 import ConversationTitleMinimap from '@/renderer/pages/conversation/components/ConversationTitleMinimap';
+import MindNProgressTitle from '@/renderer/pages/conversation/GroupedHistory/components/MindNProgressTitle';
 import { Input } from '@arco-design/web-react';
 import classNames from 'classnames';
 import React from 'react';
@@ -17,6 +18,10 @@ type ChatTitleEditorProps = {
   conversation_id?: string;
   /** Optional leading icon (e.g. agent logo) rendered inside the hover region, just before the title */
   leading?: React.ReactNode;
+  /** Optional action rendered at the fixed left edge while the title is not being edited. */
+  leadingAction?: React.ReactNode;
+  /** Optional class for externally sourced title state. */
+  titleClassName?: string;
 };
 
 // Inline title display with click-to-edit rename support
@@ -32,6 +37,8 @@ const ChatTitleEditor: React.FC<ChatTitleEditorProps> = ({
   title,
   conversation_id,
   leading,
+  leadingAction,
+  titleClassName,
 }) => {
   const { t } = useTranslation();
 
@@ -58,6 +65,7 @@ const ChatTitleEditor: React.FC<ChatTitleEditorProps> = ({
       )}
       style={{ width: '100%', maxWidth: `${titleAreaMaxWidth}px` }}
     >
+      {!editingTitle && leadingAction}
       {leading && <div className='shrink-0 flex items-center ps-8px'>{leading}</div>}
       {editingTitle && canRenameTitle ? (
         <div className='min-w-0 flex-1 px-8px py-5px'>
@@ -119,10 +127,13 @@ const ChatTitleEditor: React.FC<ChatTitleEditorProps> = ({
               'block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-16px font-bold transition-colors duration-150',
               isTitleBlank ? 'text-t-tertiary' : 'text-t-primary',
               canRenameTitle &&
-                'group-hover:text-[rgb(var(--primary-6))] group-focus-within:text-[rgb(var(--primary-6))]'
+                'group-hover:text-[rgb(var(--primary-6))] group-focus-within:text-[rgb(var(--primary-6))]',
+              titleClassName
             )}
           >
-            {displayTitle}
+            <MindNProgressTitle conversationId={conversation_id} active disabled={Boolean(titleClassName)}>
+              {displayTitle}
+            </MindNProgressTitle>
           </span>
         </div>
       )}

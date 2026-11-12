@@ -9,6 +9,7 @@ import {
   localStopRequested,
   resetConversationRuntimeViewStoreForTest,
   turnCompleted,
+  runtimeChanged,
 } from '@/renderer/pages/conversation/runtime/conversationRuntimeViewStore';
 
 const idleRuntime = (): TConversationRuntimeSummary => ({
@@ -171,5 +172,99 @@ describe('conversationRuntimeViewStore turn id contract', () => {
     expect(view.activeTurnId).toBe('turn-2');
     expect(view.isProcessing).toBe(true);
     expect(view.localStopping).toBe(false);
+  });
+
+  const backgroundRuntime = (
+    revision: number,
+    target: string | null = 'background-1'
+  ): TConversationRuntimeSummary => ({
+    ...idleRuntime(),
+    can_stop: target !== null,
+    cancel_turn_id: target,
+    runtime_instance_id: 'core-1',
+    runtime_revision: revision,
+  });
+
+  it('keeps a continuation stoppable while allowing input and without a foreground claim', () => {
+    runtimeChanged('conv-1', backgroundRuntime(2));
+    expect(getConversationRuntimeViewSnapshot('conv-1')).toMatchObject({
+      activeTurnId: null,
+      cancelTurnId: 'background-1',
+      canStop: true,
+      isProcessing: false,
+      canSendMessage: true,
+    });
+    localStopRequested('conv-1', 'background-1');
+    expect(getConversationRuntimeViewSnapshot('conv-1').localStopping).toBe(true);
+  });
+
+  it('ignores an older HTTP hydrate after a continuation starts through realtime', () => {
+    runtimeChanged('conv-1', backgroundRuntime(2));
+    hydrateSucceeded('conv-1', backgroundRuntime(1, null));
+    expect(getConversationRuntimeViewSnapshot('conv-1')).toMatchObject({ canStop: true, cancelTurnId: 'background-1' });
+  });
+
+  it('keeps the continuation target when an older foreground completion arrives afterwards', () => {
+    hydrateSucceeded('conv-1', {
+      ...runningRuntime('foreground-1'),
+      runtime_instance_id: 'core-1',
+      runtime_revision: 1,
+    });
+    runtimeChanged('conv-1', backgroundRuntime(3));
+    turnCompleted('conv-1', 'foreground-1', backgroundRuntime(2, null));
+    expect(getConversationRuntimeViewSnapshot('conv-1')).toMatchObject({ canStop: true, cancelTurnId: 'background-1' });
+  });
+
+  it('keeps a pending send gated while acknowledging a stop on its predecessor', () => {
+    runtimeChanged('conv-1', backgroundRuntime(2));
+    localStopRequested('conv-1', 'background-1');
+    localSendStarted('conv-1');
+    localStopAcknowledged('conv-1', 'background-1', backgroundRuntime(3, null));
+    expect(getConversationRuntimeViewSnapshot('conv-1')).toMatchObject({
+      localSubmitting: true,
+      canSendMessage: false,
+    });
+  });
+
+  it('does not resurrect a completed continuation from a delayed stop response', () => {
+    runtimeChanged('conv-1', backgroundRuntime(2));
+    localStopRequested('conv-1', 'background-1');
+    runtimeChanged('conv-1', backgroundRuntime(4, null));
+    localStopAcknowledged('conv-1', 'background-1', { ...backgroundRuntime(3), state: 'cancelling' });
+    expect(getConversationRuntimeViewSnapshot('conv-1')).toMatchObject({
+      canStop: false,
+      cancelTurnId: null,
+      localStopping: false,
+    });
+  });
+
+  it('accepts a restarted Core instance and rejects late snapshots from the retired instance', () => {
+    hydrateSucceeded('conv-1', backgroundRuntime(100));
+    runtimeChanged('conv-1', { ...backgroundRuntime(1, 'background-new'), runtime_instance_id: 'core-2' });
+    hydrateSucceeded('conv-1', backgroundRuntime(101, null));
+    expect(getConversationRuntimeViewSnapshot('conv-1').cancelTurnId).toBe('background-new');
+  });
+
+  it('keeps a new pending send gated when the preceding continuation completes', () => {
+    runtimeChanged('conv-1', backgroundRuntime(2));
+    localSendStarted('conv-1');
+    runtimeChanged('conv-1', backgroundRuntime(3, null));
+    turnCompleted('conv-1', 'background-1', backgroundRuntime(3, null));
+    expect(getConversationRuntimeViewSnapshot('conv-1')).toMatchObject({
+      localSubmitting: true,
+      canSendMessage: false,
+    });
+    localSendAccepted('conv-1', 'foreground-1', {
+      ...runningRuntime('foreground-1'),
+      runtime_instance_id: 'core-1',
+      runtime_revision: 4,
+      cancel_turn_id: 'foreground-1',
+      can_stop: true,
+    });
+    expect(getConversationRuntimeViewSnapshot('conv-1')).toMatchObject({
+      localSubmitting: false,
+      cancelTurnId: 'foreground-1',
+      canStop: true,
+    });
   });
 });

@@ -9,6 +9,7 @@ import { scopeToToken } from '@/common/adapter/sidebarMapper';
 import type { SidebarItem } from '@/common/types/sidebar';
 import { useAgentLogos } from '@/renderer/utils/model/agentLogo';
 import { emitter } from '@/renderer/utils/emitter';
+import { getParentAndCurrentDir } from '@/renderer/utils/workspace/projectPathLabel';
 import { Button, Checkbox, Empty, Message, Modal, Spin } from '@arco-design/web-react';
 import { DeleteOne, FolderClose, ListCheckbox, MessageOne, Peoples, Robot } from '@icon-park/react';
 import React from 'react';
@@ -17,6 +18,7 @@ import useSWR from 'swr';
 
 import SettingsPageHeader from '../components/SettingsPageHeader';
 import SettingsPageWrapper from '../components/SettingsPageWrapper';
+import ArchiveRetentionSettings from './ArchiveRetentionSettings';
 import { resolveConversationLeadingMark } from '@/renderer/pages/conversation/utils/conversationAssistantIdentity';
 
 const ARCHIVED_SWR_KEY = 'sidebar-archived';
@@ -45,7 +47,7 @@ type ArchivedRow = {
   item_id: string;
   name: string;
   icon: React.ReactElement;
-  updatedAt?: number;
+  archivedAt?: number | null;
 };
 
 /** One archived project bucket. Ordinary chats are grouped into the synthetic no-project bucket. */
@@ -149,7 +151,7 @@ const ArchivedSettings: React.FC = () => {
           item_id: item.conversation.id,
           name: item.conversation.name || t('conversation.welcome.newConversation'),
           icon: renderConversationIcon(item),
-          updatedAt: item.conversation.created_at,
+          archivedAt: item.archived_at,
         };
       }
       const key = `team:${item.team_id}`;
@@ -161,15 +163,11 @@ const ArchivedSettings: React.FC = () => {
         item_id: item.team_id,
         name: item.name,
         icon: <Peoples theme='outline' size='16' className='block leading-none text-t-secondary' />,
-        updatedAt: item.updated_at,
+        archivedAt: item.archived_at,
       };
     };
 
     const archivedBlocks: ProjectBlock[] = [];
-    const noProjectRows: ArchivedRow[] = [];
-    // Paging metadata for the chats group, carried onto the synthetic no-project
-    // block (chats is the only group folded into it).
-    let chatsPaging: { token: string; hasMore: boolean; cursor?: string } | null = null;
     for (const group of data?.groups ?? []) {
       const token = scopeToToken(group.scope);
       const extra = extraPages[token];
@@ -189,22 +187,20 @@ const ArchivedSettings: React.FC = () => {
       if (scope.type === 'project' || scope.type === 'dir') {
         const key = scope.type === 'project' ? scope.project_id : scope.key;
         const projectId = scope.type === 'project' ? scope.project_id : undefined;
-        archivedBlocks.push({ key, name: scope.name, rows, projectId, scopeToken: token, hasMore, cursor });
+        const workspace = scope.type === 'project' ? scope.workspace : scope.path;
+        const name = workspace ? getParentAndCurrentDir(workspace) : scope.name;
+        archivedBlocks.push({ key, name, rows, projectId, scopeToken: token, hasMore, cursor });
       } else {
-        // Ordinary archived chats are still grouped as a project-like block, named "No project".
-        noProjectRows.push(...rows);
-        chatsPaging = { token, hasMore, cursor };
+        // Keep the server's archive-time group order, including ordinary chats.
+        archivedBlocks.push({
+          key: 'no-project',
+          name: t('settings.archived.noProject'),
+          rows,
+          scopeToken: token,
+          hasMore,
+          cursor,
+        });
       }
-    }
-    if (noProjectRows.length > 0) {
-      archivedBlocks.push({
-        key: 'no-project',
-        name: t('settings.archived.noProject'),
-        rows: noProjectRows,
-        scopeToken: chatsPaging?.token ?? 'chats',
-        hasMore: chatsPaging?.hasMore ?? false,
-        cursor: chatsPaging?.cursor,
-      });
     }
     return { archivedBlocks, total: seen.size };
   }, [data, extraPages, logos, t]);
@@ -393,115 +389,123 @@ const ArchivedSettings: React.FC = () => {
   }, [refresh, archivedBlocks, selectedKeys, selectedRows, t]);
 
   const formatArchivedTime = React.useCallback(
-    (timestamp?: number) => {
-      if (!timestamp) return '';
+    (timestamp?: number | null) => {
+      if (timestamp == null) return '';
+      const date = new Date(timestamp);
+      if (!Number.isFinite(date.getTime())) return '';
       return new Intl.DateTimeFormat(i18n.language || 'zh-CN', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-      }).format(new Date(timestamp));
+      }).format(date);
     },
     [i18n.language]
   );
 
-  const renderRow = (row: ArchivedRow, isLast: boolean) => (
-    <div
-      key={row.key}
-      className={`group box-border flex h-56px items-center gap-10px px-14px py-6px transition-colors hover:bg-fill-2 ${
-        selectionMode ? 'cursor-pointer' : ''
-      } ${!isLast ? 'border-0 border-b border-solid border-[var(--color-border-2)]' : ''}`}
-      onClick={() => {
-        if (selectionMode) toggleRowSelected(row);
-      }}
-    >
-      {selectionMode ? (
-        <Checkbox
-          checked={selectedKeys.has(row.key)}
-          onClick={(event) => event.stopPropagation()}
-          onChange={(checked) => setRowSelected(row, checked)}
-        />
-      ) : null}
-      <span className='size-20px flex items-center justify-center shrink-0 line-height-0'>{row.icon}</span>
-      <div className='min-w-0 flex-1'>
-        <div className='overflow-hidden text-ellipsis whitespace-nowrap text-14px font-[600] text-t-primary'>
-          {row.name}
+  const renderRow = (row: ArchivedRow, isLast: boolean) => {
+    const archivedTime = formatArchivedTime(row.archivedAt);
+    return (
+      <div
+        key={row.key}
+        className={`group box-border flex h-56px items-center gap-10px px-14px py-6px transition-colors hover:bg-fill-2 ${
+          selectionMode ? 'cursor-pointer' : ''
+        } ${!isLast ? 'border-0 border-b border-solid border-[var(--color-border-2)]' : ''}`}
+        onClick={() => {
+          if (selectionMode) toggleRowSelected(row);
+        }}
+      >
+        {selectionMode ? (
+          <Checkbox
+            checked={selectedKeys.has(row.key)}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(checked) => setRowSelected(row, checked)}
+          />
+        ) : null}
+        <span className='size-20px flex items-center justify-center shrink-0 line-height-0'>{row.icon}</span>
+        <div className='min-w-0 flex-1'>
+          <div className='overflow-hidden text-ellipsis whitespace-nowrap text-14px font-[600] text-t-primary'>
+            {row.name}
+          </div>
+          {archivedTime ? (
+            <div className='mt-2px overflow-hidden text-ellipsis whitespace-nowrap text-12px text-t-secondary'>
+              {t('settings.archived.archivedAt', { date: archivedTime })}
+            </div>
+          ) : null}
         </div>
-        {row.updatedAt ? (
-          <div className='mt-2px overflow-hidden text-ellipsis whitespace-nowrap text-12px text-t-secondary'>
-            {formatArchivedTime(row.updatedAt)}
+        {!selectionMode ? (
+          <div className='shrink-0 flex items-center gap-6px'>
+            <Button
+              type='text'
+              size='small'
+              status='danger'
+              icon={<DeleteOne theme='outline' size='14' />}
+              onClick={() => handleDelete(row)}
+            />
+            <Button
+              type='secondary'
+              size='mini'
+              className='!h-28px !rounded-8px !px-10px'
+              onClick={() => void handleRestore(row)}
+            >
+              {t('settings.archived.restore')}
+            </Button>
           </div>
         ) : null}
       </div>
-      {!selectionMode ? (
-        <div className='shrink-0 flex items-center gap-6px'>
-          <Button
-            type='text'
-            size='small'
-            status='danger'
-            icon={<DeleteOne theme='outline' size='14' />}
-            onClick={() => handleDelete(row)}
-          />
-          <Button
-            type='secondary'
-            size='mini'
-            className='!h-28px !rounded-8px !px-10px'
-            onClick={() => void handleRestore(row)}
-          >
-            {t('settings.archived.restore')}
-          </Button>
-        </div>
-      ) : null}
-    </div>
-  );
+    );
+  };
 
   return (
     <SettingsPageWrapper>
       <SettingsPageHeader
         title={t('settings.archived.navLabel')}
         actions={
-          total > 0 ? (
-            <div className='flex min-w-0 items-center justify-end gap-10px'>
-              {selectionMode ? (
-                <div className='flex items-center gap-10px rd-12px border border-solid border-[var(--color-border-2)] bg-fill-1 px-10px py-6px'>
-                  <span className='px-4px text-14px text-t-secondary'>
-                    {t('settings.archived.selectedCount', { count: selectedRows.length })}
-                  </span>
-                  <Checkbox className='!text-14px' checked={allRowsSelected} onChange={handleSelectAll}>
-                    {t('settings.archived.selectAll')}
-                  </Checkbox>
+          <>
+            <ArchiveRetentionSettings />
+            {total > 0 ? (
+              <div className='flex min-w-0 items-center justify-end gap-10px'>
+                {selectionMode ? (
+                  <div className='flex items-center gap-10px rd-12px border border-solid border-[var(--color-border-2)] bg-fill-1 px-10px py-6px'>
+                    <span className='px-4px text-14px text-t-secondary'>
+                      {t('settings.archived.selectedCount', { count: selectedRows.length })}
+                    </span>
+                    <Checkbox className='!text-14px' checked={allRowsSelected} onChange={handleSelectAll}>
+                      {t('settings.archived.selectAll')}
+                    </Checkbox>
+                    <Button
+                      size='small'
+                      type='secondary'
+                      className='!h-32px !rounded-10px !px-12px !text-14px'
+                      onClick={handleCancelSelectionMode}
+                    >
+                      {t('settings.archived.cancelSelect')}
+                    </Button>
+                    <Button
+                      size='small'
+                      status='warning'
+                      className='!h-32px !rounded-10px !px-12px !text-14px'
+                      disabled={selectedRows.length === 0}
+                      onClick={handleDeleteSelected}
+                    >
+                      {t('settings.archived.deleteSelected')}
+                    </Button>
+                  </div>
+                ) : (
                   <Button
-                    size='small'
+                    size='default'
                     type='secondary'
-                    className='!h-32px !rounded-10px !px-12px !text-14px'
-                    onClick={handleCancelSelectionMode}
+                    icon={<ListCheckbox theme='outline' size='16' />}
+                    className='!h-34px !rounded-10px !px-14px !text-14px !font-[500]'
+                    onClick={() => setSelectionMode(true)}
                   >
-                    {t('settings.archived.cancelSelect')}
+                    {t('settings.archived.multiSelect')}
                   </Button>
-                  <Button
-                    size='small'
-                    status='warning'
-                    className='!h-32px !rounded-10px !px-12px !text-14px'
-                    disabled={selectedRows.length === 0}
-                    onClick={handleDeleteSelected}
-                  >
-                    {t('settings.archived.deleteSelected')}
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  size='default'
-                  type='secondary'
-                  icon={<ListCheckbox theme='outline' size='16' />}
-                  className='!h-34px !rounded-10px !px-14px !text-14px !font-[500]'
-                  onClick={() => setSelectionMode(true)}
-                >
-                  {t('settings.archived.multiSelect')}
-                </Button>
-              )}
-            </div>
-          ) : null
+                )}
+              </div>
+            ) : null}
+          </>
         }
       />
 

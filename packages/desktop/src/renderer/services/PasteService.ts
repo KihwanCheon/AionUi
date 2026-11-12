@@ -110,6 +110,11 @@ class PasteServiceClass {
     this.lastFocusedComponent = componentId;
   }
 
+  // 当前焦点组件（供 Ctrl+Shift+V 键盘处理判断"是不是这个输入框被聚焦"）
+  getLastFocusedComponent(): string | null {
+    return this.lastFocusedComponent;
+  }
+
   // 全局粘贴事件处理
   private handleGlobalPaste = async (event: ClipboardEvent) => {
     // 当粘贴目标是可编辑元素（input/textarea/contentEditable）时，直接交给浏览器原生行为，避免拦截其他输入框

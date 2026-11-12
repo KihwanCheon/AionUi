@@ -6,14 +6,27 @@
 
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageText } from '@/common/chat/chatLib';
+import { normalizeTextMessageContent } from '@/common/chat/chatLib';
 import { ipcBridge } from '@/common';
 import { ConversationProvider } from '@/renderer/hooks/context/ConversationContext';
+import { LayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import MessageText, {
+  formatMessageTime,
   parseTeamContextResetNotice,
 } from '@/renderer/pages/conversation/Messages/components/MessageText';
 import { copyText } from '@/renderer/utils/ui/clipboard';
+import { openExternalUrl } from '@/renderer/utils/platform';
+import {
+  NotificationHighlightProvider,
+  useNotificationHighlight,
+  useConversationHighlight,
+} from '@/renderer/hooks/context/UserChoiceNotifications/NotificationHighlight';
+
+const mnpContent = (source: Record<string, unknown>, body = '# MindNProgress 업무 전문') =>
+  `[[MNP_CONVERSATION_SOURCE]]\n${JSON.stringify(source)}\n[[/MNP_CONVERSATION_SOURCE]]\n\n${body}`;
 
 const previewMocks = vi.hoisted(() => ({
   openPreview: vi.fn(),
@@ -38,6 +51,19 @@ const forkMocks = vi.hoisted(() => ({
   fork: vi.fn(),
   ensureRuntime: vi.fn().mockResolvedValue(undefined),
   navigate: vi.fn(),
+}));
+
+const sessionMentionMocks = vi.hoisted(() => ({
+  available: true,
+  mention: vi.fn(),
+}));
+
+vi.mock('@/renderer/hooks/chat/useMentionSessionFromMessage', () => ({
+  useMentionSessionFromMessage: () => ({
+    available: sessionMentionMocks.available,
+    pending: false,
+    mention: sessionMentionMocks.mention,
+  }),
 }));
 
 vi.mock('@/common', () => ({
@@ -88,8 +114,14 @@ vi.mock('@/renderer/components/Markdown', () => ({
   default: ({
     children,
     onLocalFileLink,
+    highlightUserQuestions,
+    highlightedQuestionIndex,
+    questionsComplete,
   }: {
     children?: React.ReactNode;
+    highlightUserQuestions?: boolean;
+    highlightedQuestionIndex?: number;
+    questionsComplete?: boolean;
     onLocalFileLink?: (
       path: string,
       reference?: {
@@ -101,7 +133,11 @@ vi.mock('@/renderer/components/Markdown', () => ({
       }
     ) => void | Promise<void>;
   }) => (
-    <div>
+    <div
+      data-highlight-user-questions={highlightUserQuestions}
+      data-highlighted-question-index={highlightedQuestionIndex}
+      data-questions-complete={questionsComplete}
+    >
       {children}
       {onLocalFileLink && (
         <button
@@ -139,21 +175,61 @@ vi.mock('@/renderer/utils/ui/clipboard', () => ({
   copyText: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@arco-design/web-react', () => ({
-  Alert: () => null,
-  Message: {
-    error: vi.fn(),
-  },
-  Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+vi.mock('@/renderer/utils/platform', () => ({
+  openExternalUrl: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock('@arco-design/web-react', () => {
+  const Menu = Object.assign(({ children }: { children?: React.ReactNode }) => <div>{children}</div>, {
+    Item: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+      <button type='button' {...props}>
+        {children}
+      </button>
+    ),
+  });
+  return {
+    Alert: () => null,
+    Button: ({
+      children,
+      shape: _shape,
+      size: _size,
+      type: _type,
+      ...props
+    }: React.ComponentProps<'button'> & {
+      shape?: string;
+      size?: string;
+      type?: string;
+    }) => (
+      <button type='button' {...props}>
+        {children}
+      </button>
+    ),
+    Dropdown: ({ children, droplist }: { children?: React.ReactNode; droplist?: React.ReactNode }) => {
+      const [open, setOpen] = React.useState(false);
+      return (
+        <div>
+          <div onClick={() => setOpen(true)}>{children}</div>
+          {open ? droplist : null}
+        </div>
+      );
+    },
+    Menu,
+    Message: {
+      error: vi.fn(),
+    },
+    Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  };
+});
 
 vi.mock('@icon-park/react', () => ({
   Copy: () => <span data-testid='copy-icon' />,
+  MoreOne: () => <span data-testid='more-icon' />,
 }));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+    t: (key: string, options?: { defaultValue?: string; name?: string }) =>
+      (options?.defaultValue ?? key).replace('{{name}}', options?.name ?? '{{name}}'),
   }),
 }));
 
@@ -671,6 +747,369 @@ describe('MessageText attachment paths', () => {
   });
 });
 
+describe('MessageText session message navigation', () => {
+  beforeEach(() => {
+    forkMocks.navigate.mockReset();
+    sessionMentionMocks.mention.mockReset();
+    sessionMentionMocks.available = true;
+    vi.mocked(openExternalUrl).mockClear();
+  });
+
+  const HighlightState = ({ id }: { id: string }) => (
+    <output data-testid={`highlight-${id}`}>{useConversationHighlight(id) ?? 'none'}</output>
+  );
+  const sessionView = (content: string | null, position: IMessageText['position'] = 'right') => (
+    <NotificationHighlightProvider>
+      {['sender-123', 'recipient', 'other'].map((id) => (
+        <HighlightState key={id} id={id} />
+      ))}
+      <ConversationProvider value={{ conversation_id: 'recipient', workspace: '/workspace/demo', type: 'acp' }}>
+        {content !== null && (
+          <MessageText
+            showCopyRow={false}
+            message={{
+              id: 'received-message',
+              conversation_id: 'recipient',
+              type: 'text',
+              position,
+              content: { content },
+            }}
+          />
+        )}
+      </ConversationProvider>
+    </NotificationHighlightProvider>
+  );
+  const renderSessionMessage = (content: string, position: IMessageText['position'] = 'right') =>
+    render(sessionView(content, position));
+
+  const deliveryContent = (id = 'sender-123', name = 'Sender conversation', workspace = 'same') =>
+    [
+      '[[AION_SESSION_MESSAGE]]',
+      `from: ${name}\t${id}`,
+      `workspace: ${workspace}`,
+      `reply_to: ${id}`,
+      '[[/AION_SESSION_MESSAGE]]',
+      'The delegated work is complete.',
+    ].join('\n');
+
+  it.each([
+    ['session', deliveryContent()],
+    ['delegation', mnpContent({ kind: 'delegation', conversationId: 'sender-123' })],
+    ['report', mnpContent({ kind: 'report', conversationId: 'sender-123' })],
+  ])('previews only the local %s sender on hover without navigation', (_kind, content) => {
+    renderSessionMessage(content);
+    const badge = screen.getByRole('button', { name: /From conversation/ });
+    fireEvent.mouseEnter(badge);
+    expect(['sender-123', 'recipient', 'other'].map((id) => screen.getByTestId(`highlight-${id}`).textContent)).toEqual(
+      ['source', 'none', 'none']
+    );
+    expect(forkMocks.navigate).not.toHaveBeenCalled();
+    fireEvent.mouseLeave(badge);
+    expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('none');
+  });
+
+  it('keeps the sender preview while keyboard focus remains and clears it on blur', () => {
+    renderSessionMessage(deliveryContent());
+    const badge = screen.getByRole('button', { name: /From conversation/ });
+    fireEvent.focus(badge);
+    expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('source');
+    fireEvent.mouseEnter(badge);
+    fireEvent.mouseLeave(badge);
+    expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('source');
+    fireEvent.blur(badge);
+    expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('none');
+  });
+
+  it('updates the preview when the source changes and clears it when the message unmounts', () => {
+    const { rerender } = renderSessionMessage(deliveryContent());
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /From conversation/ }));
+    rerender(sessionView(deliveryContent('other')));
+    expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('none');
+    expect(screen.getByTestId('highlight-other')).toHaveTextContent('source');
+    rerender(sessionView(null));
+    expect(screen.getByTestId('highlight-other')).toHaveTextContent('none');
+  });
+
+  it.each([null, 'http://remote.example/#/conversation/sender-123'])(
+    'does not highlight an unrelated local ID for a remote sender (%s)',
+    (externalUrl) => {
+      renderSessionMessage(mnpContent({ kind: 'report', conversationId: 'sender-123', externalUrl }));
+      const badge = screen.getByRole('button', { name: /From conversation/ });
+      fireEvent.mouseEnter(badge);
+      fireEvent.focus(badge);
+      expect(screen.getByTestId('highlight-sender-123')).toHaveTextContent('none');
+    }
+  );
+
+  it.each([
+    { kind: 'delegation', conversationId: 'parent-1', name: '상위 업무 대화' },
+    { kind: 'report', conversationId: 'child-1', name: '하위 업무 대화' },
+  ])('opens the source of an MnP $kind without adding a draft mention', (source) => {
+    renderSessionMessage(mnpContent(source));
+    fireEvent.click(screen.getByRole('button', { name: `From conversation ${source.name}` }));
+    expect(forkMocks.navigate).toHaveBeenCalledWith(`/conversation/${source.conversationId}`);
+    expect(sessionMentionMocks.mention).not.toHaveBeenCalled();
+    expect(screen.getByTestId('message-text-content')).not.toHaveTextContent('[[MNP_CONVERSATION_SOURCE]]');
+  });
+
+  it('opens a remote reporting conversation in its own WebUI', () => {
+    const externalUrl = 'http://sub.example:7777/#/conversation/child-1';
+    renderSessionMessage(mnpContent({ kind: 'report', conversationId: 'child-1', name: '하위 대화', externalUrl }));
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation 하위 대화' }));
+    expect(openExternalUrl).toHaveBeenCalledWith(externalUrl);
+    expect(forkMocks.navigate).not.toHaveBeenCalled();
+    expect(sessionMentionMocks.mention).not.toHaveBeenCalled();
+  });
+
+  it('does not navigate locally when the remote machine address is unavailable', () => {
+    renderSessionMessage(mnpContent({ kind: 'report', conversationId: 'child-1', externalUrl: null }));
+    const badge = screen.getByRole('button', { name: 'From conversation child-1' });
+    expect(badge).toBeDisabled();
+    fireEvent.click(badge);
+    expect(forkMocks.navigate).not.toHaveBeenCalled();
+    expect(openExternalUrl).not.toHaveBeenCalled();
+  });
+
+  it.each(['{Enter}', ' '])('opens the MnP source with the %s key', async (key) => {
+    const user = userEvent.setup();
+    renderSessionMessage(mnpContent({ kind: 'delegation', conversationId: 'parent-1', name: '상위 대화' }));
+    screen.getByRole('button', { name: 'From conversation 상위 대화' }).focus();
+    await user.keyboard(key);
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/parent-1');
+    expect(sessionMentionMocks.mention).not.toHaveBeenCalled();
+  });
+
+  it('keeps the outer report source when a child quotes a session message', () => {
+    renderSessionMessage(
+      mnpContent({ kind: 'report', conversationId: 'child-1', name: '하위 대화' }, deliveryContent())
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation 하위 대화' }));
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/child-1');
+    expect(screen.queryByRole('button', { name: 'From conversation Sender conversation' })).not.toBeInTheDocument();
+  });
+
+  it.each(['right', 'left'] as const)(
+    'does not create a source badge for invalid or assistant-provided metadata (%s)',
+    (position) => {
+      const source = { kind: 'report', conversationId: position === 'right' ? '' : 'child-1' };
+      renderSessionMessage(mnpContent(source), position);
+      expect(screen.queryByRole('button', { name: /From conversation/ })).not.toBeInTheDocument();
+      expect(screen.getByTestId('message-text-content')).toHaveTextContent('[[MNP_CONVERSATION_SOURCE]]');
+    }
+  );
+
+  it('opens the sending conversation by ID without adding a mention to the draft', () => {
+    renderSessionMessage(deliveryContent());
+
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation Sender conversation' }));
+
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/sender-123');
+    expect(sessionMentionMocks.mention).not.toHaveBeenCalled();
+  });
+
+  it.each(['{Enter}', ' '])('opens the sending conversation with the %s key', async (key) => {
+    const user = userEvent.setup();
+    renderSessionMessage(deliveryContent());
+
+    screen.getByRole('button', { name: 'From conversation Sender conversation' }).focus();
+    await user.keyboard(key);
+
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/sender-123');
+    expect(sessionMentionMocks.mention).not.toHaveBeenCalled();
+  });
+
+  it('can open an earlier sender even when cross-session messaging is disabled', () => {
+    sessionMentionMocks.available = false;
+    renderSessionMessage(deliveryContent());
+
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation Sender conversation' }));
+
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/sender-123');
+  });
+
+  it('uses the sender ID across workspaces and when its name is absent', () => {
+    renderSessionMessage(deliveryContent('sender-456', '', '/another/workspace'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation sender-456' }));
+
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/sender-456');
+    expect(screen.getByText('different workspace')).toBeInTheDocument();
+  });
+
+  it('keeps a sender ID containing URL delimiters within the conversation route', () => {
+    renderSessionMessage(deliveryContent('sender/part?query#fragment'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'From conversation Sender conversation' }));
+
+    expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/sender%2Fpart%3Fquery%23fragment');
+  });
+
+  it('keeps a malformed delivery without a sender ID as ordinary text', () => {
+    const content = deliveryContent('');
+    renderSessionMessage(content);
+
+    expect(screen.queryByRole('button', { name: /From conversation/ })).not.toBeInTheDocument();
+    expect(screen.getByTestId('message-text-content')).toHaveTextContent('[[AION_SESSION_MESSAGE]]');
+    expect(forkMocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('preserves mention insertion for sender-side recipient chips', () => {
+    renderSessionMessage(
+      'Please review.\n[[AION_SESSIONS]]\nTarget conversation\tconv-target\tworkspace: same\n[[/AION_SESSIONS]]'
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mention conversation Target conversation in the message box' })
+    );
+
+    expect(sessionMentionMocks.mention).toHaveBeenCalledWith({ id: 'conv-target', name: 'Target conversation' });
+    expect(forkMocks.navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('MessageText structured questions', () => {
+  it('tells the question renderer when the live response finishes', () => {
+    const message: IMessageText = {
+      id: 'live-text',
+      conversation_id: 'conv-1',
+      type: 'text',
+      position: 'left',
+      content: { content: '마지막 줄' },
+    };
+    const { rerender } = render(<MessageText message={message} isStreaming />);
+    expect(screen.getByTestId('message-text-content').firstChild).toHaveAttribute('data-questions-complete', 'false');
+    rerender(<MessageText message={message} isStreaming={false} />);
+    expect(screen.getByTestId('message-text-content').firstChild).toHaveAttribute('data-questions-complete', 'true');
+  });
+  const Preview = ({ messageId, markerIndex = 0 }: { messageId: string; markerIndex?: number }) => {
+    const { highlight, clear } = useNotificationHighlight();
+    React.useEffect(() => {
+      highlight({ key: 'preview', conversationId: 'conv-1', messageId, markerIndex });
+      return () => clear('preview');
+    }, [messageId, markerIndex, highlight, clear]);
+    return null;
+  };
+
+  it('highlights the exact structured question and clears it when preview ends', () => {
+    const message: IMessageText = {
+      id: 'question-1',
+      msg_id: 'stream-question',
+      conversation_id: 'conv-1',
+      type: 'text',
+      position: 'left',
+      content: { content: 'Which runtime?', user_choice: { title: 'Which runtime?', options: ['CPU', 'Vulkan'] } },
+    };
+    const view = (preview: boolean) => (
+      <NotificationHighlightProvider>
+        {preview && <Preview messageId='stream-question' />}
+        <MessageText message={message} showCopyRow={false} />
+        <MessageText message={{ ...message, id: 'question-2', msg_id: 'other-question' }} showCopyRow={false} />
+      </NotificationHighlightProvider>
+    );
+    const { rerender } = render(view(true));
+    const boxes = screen.getAllByRole('group', { name: 'messages.userQuestion.choice' });
+    expect(boxes.map((box) => box.hasAttribute('data-notification-highlight'))).toEqual([true, false]);
+    rerender(view(false));
+    expect(boxes[0]).not.toHaveAttribute('data-notification-highlight');
+  });
+
+  it('passes the matching marker index to prose rendering without changing another message', () => {
+    const message: IMessageText = {
+      id: 'message-1',
+      conversation_id: 'conv-1',
+      type: 'text',
+      position: 'left',
+      content: { content: 'Prose question' },
+    };
+    render(
+      <NotificationHighlightProvider>
+        <Preview messageId='message-1' markerIndex={1} />
+        <MessageText message={message} showCopyRow={false} />
+        <MessageText message={{ ...message, conversation_id: 'conv-2' }} showCopyRow={false} />
+      </NotificationHighlightProvider>
+    );
+    const bodies = screen.getAllByTestId('message-text-content');
+    expect(bodies[0].firstChild).toHaveAttribute('data-highlighted-question-index', '1');
+    expect(bodies[1].firstChild).not.toHaveAttribute('data-highlighted-question-index');
+  });
+
+  const renderQuestion = (raw: unknown, position: IMessageText['position'] = 'left') =>
+    render(
+      <MessageText
+        showCopyRow={false}
+        message={{
+          id: 'question-1',
+          msg_id: 'question-1',
+          conversation_id: 'conv-1',
+          type: 'text',
+          position,
+          status: 'finish',
+          content: normalizeTextMessageContent(raw),
+        }}
+      />
+    );
+
+  it.each([{ options: undefined }, { options: null }, { options: [] }])(
+    'labels a free response request with options $options',
+    ({ options }) => {
+      renderQuestion({ content: 'Where is the runtime?', user_choice: { title: 'Where is the runtime?', options } });
+
+      expect(screen.getByRole('group', { name: 'messages.userQuestion.freeText' })).toHaveTextContent(
+        'Where is the runtime?'
+      );
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    }
+  );
+
+  it('labels a choice request while displaying the original question and options once', () => {
+    const content = 'Which runtime?\n- CPU\n- Vulkan';
+    renderQuestion({ content, user_choice: { title: 'Which runtime?', options: ['CPU', 'Vulkan'] } });
+
+    expect(screen.getByRole('group', { name: 'messages.userQuestion.choice' })).toBeInTheDocument();
+    expect(screen.getByTestId('message-text-content').textContent).toContain(content);
+    expect(screen.getAllByTestId('message-text-content')).toHaveLength(1);
+  });
+
+  it.each([
+    { content: 'Can you share the path?' },
+    { content: 'Can you share the path?', user_choice: { title: 'Question?', options: 'Invalid' } },
+  ])('leaves text without valid structured metadata unchanged: %j', (content) => {
+    renderQuestion(content);
+
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+    expect(screen.getByTestId('message-text-content').textContent).toContain(content.content);
+  });
+
+  it('does not label user messages as assistant questions', () => {
+    renderQuestion({ content: 'CPU', user_choice: { title: 'Which runtime?', options: ['CPU', 'Vulkan'] } }, 'right');
+
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+    expect(screen.getByTestId('message-text-content')).toHaveTextContent('CPU');
+  });
+
+  it('enables prose question rendering for assistant text only', () => {
+    renderQuestion({ content: '[[AIONUI_USER_CHOICE_REQUIRED]]\nCan you share the path?' });
+
+    expect(screen.getByTestId('message-text-content').firstChild).toHaveAttribute(
+      'data-highlight-user-questions',
+      'true'
+    );
+  });
+
+  it('keeps structured questions on the existing blue-card rendering path', () => {
+    renderQuestion({
+      content: 'Where is the runtime?',
+      user_choice: { title: 'Where is the runtime?', options: null },
+    });
+
+    expect(screen.getByTestId('message-text-content').firstChild).toHaveAttribute(
+      'data-highlight-user-questions',
+      'false'
+    );
+  });
+});
+
 describe('MessageText team system notices', () => {
   it('renders a context-reset notice through i18n instead of exposing the wire payload', () => {
     const content = JSON.stringify({
@@ -767,13 +1206,30 @@ describe('MessageText fork entry point', () => {
 
   const renderWithCapability = (
     capability: { at_turn: boolean } | undefined,
-    props: { isLastMessage?: boolean; hasForkAnchor?: boolean } = {}
+    props: { isLastMessage?: boolean; hasForkAnchor?: boolean; message?: Partial<IMessageText> } = {},
+    mobileWidth?: number
   ) => {
+    if (mobileWidth !== undefined) {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: mobileWidth });
+    }
+    const message = (
+      <MessageText
+        message={forkMessage(props.message)}
+        isLastMessage={props.isLastMessage}
+        hasForkAnchor={props.hasForkAnchor}
+      />
+    );
     render(
       <ConversationProvider
         value={{ conversation_id: 'conv-fork', workspace: '/workspace/demo', type: 'acp', forkCapability: capability }}
       >
-        <MessageText message={forkMessage()} isLastMessage={props.isLastMessage} hasForkAnchor={props.hasForkAnchor} />
+        {mobileWidth === undefined ? (
+          message
+        ) : (
+          <LayoutContext.Provider value={{ isMobile: true, siderCollapsed: false, setSiderCollapsed: vi.fn() }}>
+            {message}
+          </LayoutContext.Provider>
+        )}
       </ConversationProvider>
     );
   };
@@ -782,6 +1238,7 @@ describe('MessageText fork entry point', () => {
     forkMocks.fork.mockReset().mockResolvedValue({ id: 'conv-forked' });
     forkMocks.ensureRuntime.mockReset().mockResolvedValue(undefined);
     forkMocks.navigate.mockReset();
+    vi.mocked(copyText).mockClear();
   });
 
   it('hides the fork button when the agent declares no capability', () => {
@@ -807,6 +1264,64 @@ describe('MessageText fork entry point', () => {
   it('shows the fork button on the last message for head-only backends', () => {
     renderWithCapability({ at_turn: false }, { isLastMessage: true });
     expect(screen.getByTestId('message-fork-button')).toBeInTheDocument();
+  });
+
+  it('keeps copy and fork actions visible on a touch tablet', () => {
+    renderWithCapability({ at_turn: true }, { isLastMessage: false, hasForkAnchor: true }, 820);
+
+    expect(screen.getByTestId('message-tablet-copy-button')).toBeInTheDocument();
+    expect(screen.getByTestId('message-fork-button')).toBeInTheDocument();
+    expect(screen.queryByTestId('message-actions-menu')).toBeNull();
+  });
+
+  it('keeps the message time visible on a touch tablet', () => {
+    const createdAt = new Date(2026, 0, 2, 3, 4).getTime();
+    renderWithCapability(
+      { at_turn: true },
+      { isLastMessage: false, hasForkAnchor: true, message: { created_at: createdAt } },
+      820
+    );
+
+    const timeDisplay = screen.getByTestId('message-tablet-time');
+    expect(timeDisplay).toHaveTextContent(formatMessageTime(createdAt));
+    expect(timeDisplay).not.toHaveClass('opacity-0');
+  });
+
+  it('offers fork from the phone action menu', async () => {
+    renderWithCapability({ at_turn: true }, { isLastMessage: false, hasForkAnchor: true }, 390);
+
+    expect(screen.queryByTestId('message-fork-button')).toBeNull();
+    fireEvent.click(screen.getByTestId('message-actions-menu'));
+    fireEvent.click(await screen.findByTestId('message-fork-menu-item'));
+
+    await waitFor(() => {
+      expect(forkMocks.fork).toHaveBeenCalledWith({ conversation_id: 'conv-fork', message_id: 'msg-fork-1' });
+    });
+  });
+
+  it('shows the message time as noninteractive information in the phone action menu', async () => {
+    const createdAt = new Date(2026, 0, 2, 3, 4).getTime();
+    renderWithCapability(
+      { at_turn: true },
+      { isLastMessage: false, hasForkAnchor: true, message: { created_at: createdAt } },
+      390
+    );
+
+    fireEvent.click(screen.getByTestId('message-actions-menu'));
+
+    const timeDisplay = await screen.findByTestId('message-time-menu-display');
+    expect(timeDisplay).toHaveTextContent(formatMessageTime(createdAt));
+    expect(timeDisplay.closest('button')).toBeNull();
+  });
+
+  it('does not offer fork in the phone menu when the agent has no capability', async () => {
+    renderWithCapability(undefined, { isLastMessage: true }, 390);
+
+    fireEvent.click(screen.getByTestId('message-actions-menu'));
+
+    fireEvent.click(await screen.findByTestId('message-copy-menu-item'));
+    await waitFor(() => expect(copyText).toHaveBeenCalledWith('assistant reply'));
+    expect(screen.queryByTestId('message-fork-menu-item')).toBeNull();
   });
 
   it('clicking fork calls the API, refreshes, navigates, and pre-warms the runtime', async () => {

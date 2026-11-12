@@ -1,4 +1,13 @@
 {
+  "externalLaunch": {
+    "loading": "Préparation de la conversation demandée...",
+    "errorTitle": "Impossible de démarrer la conversation",
+    "notFoundOrExpired": "Cette demande est invalide, expirée ou déjà terminée.",
+    "alreadyUsed": "Cette demande de démarrage a déjà été utilisée.",
+    "unavailableOptions": "L’agent, le modèle, les compétences ou les outils MCP demandés sont indisponibles.",
+    "loadFailed": "Impossible de charger la demande de démarrage. Réessayez.",
+    "callbackPending": "La conversation a été créée, mais l’application liée n’a pas pu être avertie. Une nouvelle tentative peut être nécessaire."
+  },
   "promptExamplesHint": "Essayez ces exemples de prompts :",
   "defaultPrompts": {
     "understand": "Découvre ce projet et explique-moi simplement ce qu'il fait et par où commencer",
@@ -13,5 +22,8 @@
     "specifyWorkspace": "Sélectionnez le dossier du projet",
     "searchPlaceholder": "Rechercher des projets…",
     "noProject": "Aucun projet"
+  },
+  "claudeAccount": {
+    "label": "Compte Claude"
   }
 }

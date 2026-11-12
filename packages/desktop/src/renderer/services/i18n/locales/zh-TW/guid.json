@@ -1,4 +1,13 @@
 {
+  "externalLaunch": {
+    "loading": "正在準備要求的對話...",
+    "errorTitle": "無法開始對話",
+    "notFoundOrExpired": "此啟動要求無效、已過期或已完成。",
+    "alreadyUsed": "此對話啟動要求已被使用。",
+    "unavailableOptions": "要求的代理、模型、技能或 MCP 工具無法使用。",
+    "loadFailed": "無法載入對話啟動要求，請再試一次。",
+    "callbackPending": "對話已建立，但無法通知連結的應用程式，可能需要重試。"
+  },
   "promptExamplesHint": "試試這些指令",
   "defaultPrompts": {
     "understand": "了解一下這個專案，用白話告訴我它是做什麼的、從哪裡入手",
@@ -13,5 +22,8 @@
     "specifyWorkspace": "選擇專案資料夾",
     "searchPlaceholder": "搜尋專案…",
     "noProject": "不使用專案"
+  },
+  "claudeAccount": {
+    "label": "Claude 帳號"
   }
 }

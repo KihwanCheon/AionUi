@@ -202,5 +202,17 @@
   },
   "selectedCount": "선택됨 {{count}}",
   "selectedSkills": "선택된 스킬",
-  "aiAssistant": "AI 어시스턴트"
+  "aiAssistant": "AI 어시스턴트",
+  "claudeUsage": {
+    "refreshDelayed": "갱신 지연",
+    "title": "Claude 사용량",
+    "codexTitle": "Codex 사용량",
+    "session": "5시간 한도",
+    "weekly": "주간 (전체 모델)",
+    "resets": "{{time}} 초기화",
+    "reached": "사용 한도 도달",
+    "ok": "여유 있음",
+    "approaching": "한도 근접",
+    "noData": "사용량 정보 없음"
+  }
 }

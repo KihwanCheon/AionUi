@@ -17,6 +17,7 @@ import { configService } from '@/common/config/configService';
 import { useConversationAssistants } from '@renderer/pages/conversation/hooks/useConversationAssistants';
 import CronStatusTag from './CronStatusTag';
 import CreateTaskDialog from './CreateTaskDialog';
+import CronJobBackupActions from './CronJobBackupActions';
 import { getJobAgentMeta } from './jobAgentMeta';
 import { useAgentLogos } from '@renderer/utils/model/agentLogo';
 import ThemedLogo from '@/renderer/components/agent/ThemedLogo';
@@ -148,6 +149,7 @@ const ScheduledTasksPage: React.FC = () => {
                   onManual={handleCreateManually}
                   manualLabel={t('cron.page.createManually')}
                 />
+                <CronJobBackupActions compact={isMobile} />
               </>
             }
           />

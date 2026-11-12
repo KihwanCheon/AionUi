@@ -5,6 +5,7 @@
  */
 
 import type { AssistantListItem } from '../types';
+import AssistantBackupActions from './AssistantBackupActions';
 import EnabledAssistantsList from './EnabledAssistantsList';
 import MyAssistantsList from './MyAssistantsList';
 import OfficialAssistantsGrid from './OfficialAssistantsGrid';
@@ -129,6 +130,7 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
                   })}
                   data-testid='btn-create-assistant'
                 />
+                <AssistantBackupActions compact={isMobile} />
               </>
             }
             tabs={[

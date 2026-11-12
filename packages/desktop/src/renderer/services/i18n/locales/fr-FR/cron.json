@@ -163,5 +163,15 @@
     "conversationNotFound": "Conversation introuvable",
     "scheduledTimePassed": "L'heure planifiée est dépassée",
     "conversationBusy": "Conversation occupée après {{count}} tentatives"
+  },
+  "backup": {
+    "backup": "Sauvegarder",
+    "restore": "Restaurer",
+    "backupEmpty": "Aucune tâche planifiée à sauvegarder",
+    "backupSuccess": "{{count}} tâche(s) planifiée(s) sauvegardée(s)",
+    "backupFailed": "Échec de la sauvegarde des tâches planifiées",
+    "restoreSuccess": "Restauration : {{imported}} nouvelle(s), {{updated}} remplacée(s), {{skipped}} en échec",
+    "restoreInvalid": "Ce fichier de sauvegarde de tâches planifiées n’est pas valide",
+    "restoreFailed": "Échec de la restauration des tâches planifiées"
   }
 }

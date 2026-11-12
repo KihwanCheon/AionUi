@@ -31,9 +31,11 @@ export const BUILTIN_TAB_IDS = [
   'skills',
   'tools',
   'appearance',
+  'mindnprogress',
   'webui',
   'pet',
   'system',
+  'database',
   'archived',
   'about',
 ] as const;
@@ -57,6 +59,7 @@ export const LEGACY_ANCHOR_REMAP: Record<string, string> = {
 const GROUP_HEADER_BEFORE: Record<string, string> = {
   agent: 'settings.groupAiCore',
   appearance: 'settings.groupApp',
+  mindnprogress: 'settings.groupIntegrations',
   archived: 'settings.archived.title',
   about: 'settings.groupAbout',
 };
@@ -105,6 +108,12 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
         path: 'tools',
       },
       appearance: { id: 'appearance', label: t('settings.appearancePanel'), icon: <Computer />, path: 'appearance' },
+      mindnprogress: {
+        id: 'mindnprogress',
+        label: t('settings.mindnprogressRunner.navLabel'),
+        icon: <Communication />,
+        path: 'mindnprogress',
+      },
       webui: {
         id: 'webui',
         label: t('settings.webui'),
@@ -113,6 +122,12 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
       },
       pet: { id: 'pet', label: t('pet.desktopPet'), icon: <Cat />, path: 'pet' },
       system: { id: 'system', label: t('settings.system'), icon: <System />, path: 'system' },
+      database: {
+        id: 'database',
+        label: t('settings.databaseMaintenance.title'),
+        icon: <Inbox />,
+        path: 'database',
+      },
       archived: {
         id: 'archived',
         label: t('settings.archived.navLabel'),
@@ -123,7 +138,9 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
     };
 
     // Start with ordered builtin IDs, hiding desktop-only tabs in browser mode
-    const result: SiderItem[] = BUILTIN_TAB_IDS.filter((id) => isDesktop || id !== 'pet').map((id) => builtinMap[id]);
+    const result: SiderItem[] = BUILTIN_TAB_IDS.filter(
+      (id) => isDesktop || (id !== 'pet' && id !== 'mindnprogress' && id !== 'database')
+    ).map((id) => builtinMap[id]);
 
     // Extension tabs with position anchoring
     const beforeMap = new Map<string, IExtensionSettingsTab[]>();

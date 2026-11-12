@@ -71,7 +71,7 @@ const mapItem = (raw: SidebarItem): SidebarItem => {
       ...mapped,
       extra: { ...mapped.extra, pinned: wire.pinned ?? false, pinned_at: wire.pinned_at },
     } as TChatConversation;
-    return { type: 'conversation', conversation };
+    return { type: 'conversation', conversation, archived_at: raw.archived_at };
   }
   return raw;
 };

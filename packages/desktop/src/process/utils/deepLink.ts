@@ -6,8 +6,16 @@
 
 import type { BrowserWindow } from 'electron';
 import { ipcBridge } from '@/common';
+import { AIONUI_PROTOCOL_SCHEME, createBufferedEventRelay, findDeepLinkUrl } from '../startup/bootstrap/protocol';
+import { registerRendererReadinessInvalidation } from '../startup/bootstrap/rendererReadiness';
+import { traceWindowsNotificationActivation } from '../startup/bootstrap/windowsNotification';
 
-export const PROTOCOL_SCHEME = 'aionui';
+export const PROTOCOL_SCHEME = AIONUI_PROTOCOL_SCHEME;
+
+type DeepLinkPayload = {
+  action: string;
+  params: Record<string, string>;
+};
 
 /**
  * Parse an aionui:// URL into action and params.
@@ -15,7 +23,7 @@ export const PROTOCOL_SCHEME = 'aionui';
  *   1. aionui://add-provider?base_url=xxx&api_key=xxx
  *   2. aionui://provider/add?v=1&data=<base64 JSON>  (one-api / new-api style)
  */
-export const parseDeepLinkUrl = (url: string): { action: string; params: Record<string, string> } | null => {
+export const parseDeepLinkUrl = (url: string): DeepLinkPayload | null => {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== `${PROTOCOL_SCHEME}:`) return null;
@@ -49,16 +57,42 @@ export const parseDeepLinkUrl = (url: string): { action: string; params: Record<
 };
 
 let mainWindowRef: BrowserWindow | null = null;
-let pendingDeepLinkUrl: string | null = process.argv.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`)) || null;
+let detachRendererConsumer: (() => void) | null = null;
+let readyProviderRegistered = false;
+const rendererRelay = createBufferedEventRelay<DeepLinkPayload>();
 
-export const setDeepLinkMainWindow = (win: BrowserWindow): void => {
-  mainWindowRef = win;
+const markDeepLinkRendererNotReady = (): void => {
+  detachRendererConsumer?.();
+  detachRendererConsumer = null;
 };
 
-export const getPendingDeepLinkUrl = (): string | null => pendingDeepLinkUrl;
+export const setDeepLinkMainWindow = (win: BrowserWindow): void => {
+  markDeepLinkRendererNotReady();
+  mainWindowRef = win;
+  registerRendererReadinessInvalidation(win.webContents, markDeepLinkRendererNotReady);
+  win.on('closed', () => {
+    if (mainWindowRef !== win) return;
+    markDeepLinkRendererNotReady();
+    mainWindowRef = null;
+  });
+};
 
-export const clearPendingDeepLinkUrl = (): void => {
-  pendingDeepLinkUrl = null;
+/** Register the renderer-ready handshake once in the main process. */
+export const registerDeepLinkReadyProvider = (): void => {
+  if (readyProviderRegistered) return;
+  readyProviderRegistered = true;
+  ipcBridge.deepLink.ready.provider(() => {
+    if (!mainWindowRef || mainWindowRef.isDestroyed() || mainWindowRef.webContents.isDestroyed()) {
+      return Promise.resolve();
+    }
+    if (!detachRendererConsumer) {
+      detachRendererConsumer = rendererRelay.attach((payload) => {
+        traceWindowsNotificationActivation(payload, 'renderer-ready');
+        ipcBridge.deepLink.received.emit(payload);
+      });
+    }
+    return Promise.resolve();
+  });
 };
 
 /**
@@ -68,11 +102,9 @@ export const clearPendingDeepLinkUrl = (): void => {
 export const handleDeepLinkUrl = (url: string): void => {
   const parsed = parseDeepLinkUrl(url);
   if (!parsed) return;
-
-  if (!mainWindowRef || mainWindowRef.isDestroyed()) {
-    pendingDeepLinkUrl = url;
-    return;
-  }
-
-  ipcBridge.deepLink.received.emit(parsed);
+  traceWindowsNotificationActivation(parsed, 'received');
+  rendererRelay.publish(parsed);
 };
+
+const initialDeepLinkUrl = findDeepLinkUrl(process.argv);
+if (initialDeepLinkUrl) handleDeepLinkUrl(initialDeepLinkUrl);

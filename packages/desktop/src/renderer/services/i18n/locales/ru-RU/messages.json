@@ -1,4 +1,10 @@
 {
+  "userQuestion": {
+    "fallback": "Требуется ваше подтверждение. Ознакомьтесь с содержимым выше.",
+    "prose": "Запрос ответа",
+    "choice": "Запрос ответа · Выбор варианта",
+    "freeText": "Запрос ответа · Свободный ввод"
+  },
   "fileChanges": "Изменения файлов",
   "fileChangesCount": "{{count}} изменений файлов",
   "fileChangesCount_one": "{{count}} изменение файлов",
@@ -9,6 +15,20 @@
   "confirm": "Подтвердить",
   "canceledExecution": "Выполнение отменено",
   "openLinkFailed": "Не удалось открыть ссылку",
+  "mindnprogress": {
+    "openLinkedCard": "Открыть связанную карточку MindNProgress",
+    "selectionFailed": "Не удалось выбрать связанную карточку MindNProgress.",
+    "titleSyncTooltip": "Синхронизировать с заголовком MindNProgress: {{title}}",
+    "titleSyncSuccess": "Заголовок диалога синхронизирован с MindNProgress.",
+    "titleSyncFailed": "Не удалось синхронизировать заголовок диалога с MindNProgress.",
+    "roleCoordinator": "Координатор группы",
+    "roleRoot": "Родительская",
+    "roleAuxiliary": "Вспомогательная",
+    "rolePrimaryTooltip": "Основной диалог этой карточки",
+    "roleAuxiliaryTooltip": "Вспомогательный диалог этой карточки",
+    "roleNoPrimaryTooltip": "Вспомогательный диалог этой карточки · Основной не назначен",
+    "roleUnknownTooltip": "Основная/вспомогательная роль не подтверждена"
+  },
   "imageGenerationModelDetected": "Обнаружена модель для изображений, инструмент изображений автоматически включён. Модель по умолчанию: {{platform}}:{{model}}",
   "auto_handling_permissions": "Автоматическая обработка запроса разрешения: {{request}}",
   "copy": "Копировать",
@@ -96,6 +116,7 @@
   "askDecline": "Не отвечать",
   "askAnswered": "Отвечено",
   "askDeclined": "Пропущено",
+  "askClosed": "Этот вопрос больше не ожидает ответа.",
   "askOther": "Другое",
   "askOtherPlaceholder": "Введите свой ответ",
   "requestDetails": "Детали запроса:",

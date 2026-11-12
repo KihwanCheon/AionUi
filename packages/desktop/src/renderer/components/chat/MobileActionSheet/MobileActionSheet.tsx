@@ -65,8 +65,8 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({ open, onClose, ti
     if (activeSubKey) {
       setRenderedSubKey(activeSubKey);
       setSubPhase('enter');
-      const raf = requestAnimationFrame(() => {
-        requestAnimationFrame(() => setSubPhase('shown'));
+      let raf = requestAnimationFrame(() => {
+        raf = requestAnimationFrame(() => setSubPhase('shown'));
       });
       return () => cancelAnimationFrame(raf);
     }
@@ -93,6 +93,12 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({ open, onClose, ti
   const activeSub: MobileActionSheetSubMenu | undefined = activeEntry?.submenu;
   const renderedSubEntry = renderedSubKey ? entries.find((e) => e.key === renderedSubKey) : null;
   const renderedSub: MobileActionSheetSubMenu | undefined = renderedSubEntry?.submenu;
+  const hasActiveSubMenu = Boolean(activeSub);
+
+  // A catalog update can remove the currently open account submenu.
+  useEffect(() => {
+    if (activeSubKey && !hasActiveSubMenu) setActiveSubKey(null);
+  }, [activeSubKey, hasActiveSubMenu]);
 
   if (!mounted) {
     return null;
@@ -222,6 +228,7 @@ const MobileActionSheet: React.FC<MobileActionSheetProps> = ({ open, onClose, ti
                     );
                   })
                 )}
+                {renderedSub.footer}
               </div>
             </div>
           )}

@@ -4,6 +4,7 @@ import FlexFullContainer from '@/renderer/components/layout/FlexFullContainer';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useResizableSplit } from '@/renderer/hooks/ui/useResizableSplit';
 import ChatTitleEditor from '@/renderer/pages/conversation/components/ChatTitleEditor';
+import { useMindNProgressConversationTitleSync } from './MindNProgressConversationTitleSync';
 import MobileWorkspaceOverlay from './MobileWorkspaceOverlay';
 import WorkspacePanelHeader from './WorkspacePanelHeader';
 import { useContainerWidth } from '@/renderer/pages/conversation/hooks/useContainerWidth';
@@ -37,6 +38,8 @@ const ChatLayout: React.FC<{
   /** Fallback agent name (used when no presetAssistant, e.g. from conversation.extra.agent_name) */
   agent_name?: string;
   headerExtra?: React.ReactNode;
+  /** Optional badge over the title's agent icon. */
+  headerIconBadge?: React.ReactNode;
   workspaceEnabled?: boolean;
   /**
    * When true (project conversations), the preview panel is hoisted to the
@@ -111,6 +114,12 @@ const ChatLayout: React.FC<{
       conversation_id,
       onRename: props.onRenameTitle,
     });
+  const mindNProgressTitleSync = useMindNProgressConversationTitleSync({
+    conversationId: conversation_id,
+    currentTitle: props.title,
+    disabled: renameLoading,
+    enabled: !props.onRenameTitle,
+  });
 
   const capitalizedBackend = backend ? backend.charAt(0).toUpperCase() + backend.slice(1) : backend;
 
@@ -213,17 +222,27 @@ const ChatLayout: React.FC<{
           submitTitleRename={submitTitleRename}
           titleAreaMaxWidth={titleAreaMaxWidth}
           title={props.title}
+          titleClassName={mindNProgressTitleSync.titleClassName}
           conversation_id={conversation_id}
+          leadingAction={mindNProgressTitleSync.leadingAction}
           leading={
             props.headerLeading ??
             ((backend || presetAssistant) && (
-              <AgentLogoIcon
-                backend={backend}
-                agent_name={display_name}
-                agentLogo={presetAssistant?.logo}
-                agentLogoIsEmoji={presetAssistant?.isEmoji}
-                agentLogoIsFallback={presetAssistant?.isFallback}
-              />
+              <span
+                className={classNames(
+                  'relative inline-flex items-center justify-center shrink-0',
+                  props.headerIconBadge && 'size-22px'
+                )}
+              >
+                <AgentLogoIcon
+                  backend={backend}
+                  agent_name={display_name}
+                  agentLogo={presetAssistant?.logo}
+                  agentLogoIsEmoji={presetAssistant?.isEmoji}
+                  agentLogoIsFallback={presetAssistant?.isFallback}
+                />
+                {props.headerIconBadge}
+              </span>
             ))
           }
         />

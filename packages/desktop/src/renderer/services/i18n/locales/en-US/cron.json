@@ -163,5 +163,15 @@
     "conversationNotFound": "Conversation not found",
     "scheduledTimePassed": "Scheduled time has passed",
     "conversationBusy": "Conversation busy after {{count}} retries"
+  },
+  "backup": {
+    "backup": "Backup",
+    "restore": "Restore",
+    "backupEmpty": "No scheduled tasks to back up",
+    "backupSuccess": "Backed up {{count}} scheduled task(s)",
+    "backupFailed": "Failed to back up scheduled tasks",
+    "restoreSuccess": "Restored: {{imported}} new, {{updated}} overwritten, {{skipped}} failed",
+    "restoreInvalid": "Not a valid scheduled task backup file",
+    "restoreFailed": "Failed to restore scheduled tasks"
   }
 }

@@ -15,6 +15,7 @@
 import type { IConfirmation } from '@/common/chat/chatLib';
 import type { AcpSlashCommandApiItem } from '@/common/chat/slash/types';
 import { bridge } from '@/common/platform/bridge';
+import type { DatabaseMaintenanceAction, DatabaseMaintenanceStatus } from '@/common/types/platform/databaseMaintenance';
 import { buildListTasksPath } from './teamTaskPath';
 import type { OpenDialogOptions } from 'electron';
 import type {
@@ -36,6 +37,7 @@ import type {
   UpdateAssistantRequest,
 } from '../types/agent/assistantTypes';
 import type {
+  ConversationRuntimeConfigResponse,
   EnsureConversationRuntimeResponse,
   GetConfigOptionsResponse,
   SetConfigOptionRequest,
@@ -117,7 +119,7 @@ import {
   wsEmitter,
   wsMappedEmitter,
 } from './httpBridge';
-import { fromApiSearchResult, type ApiMessageSearchItem } from './searchMapper';
+import { fromApiSearchResult, type ApiMessageSearchResponse } from './searchMapper';
 import { fromApiSidebar, fromApiSidebarItems } from './sidebarMapper';
 import type { IAddTeamAssistantParams, ICreateTeamParams } from './teamMapper';
 import {
@@ -268,6 +270,33 @@ export const auth = {
 // Conversation — REST + WS
 // ---------------------------------------------------------------------------
 
+type ApiChoiceNotice = {
+  key: string;
+  conversation_id: string;
+  message_id: string;
+  marker_index: number;
+  preview: string;
+  created_at: number;
+};
+
+export type IChoiceNotice = {
+  key: string;
+  conversationId: string;
+  messageId: string;
+  markerIndex: number;
+  preview: string;
+  createdAt: number;
+};
+
+const fromApiChoiceNotice = (notice: ApiChoiceNotice): IChoiceNotice => ({
+  key: notice.key,
+  conversationId: notice.conversation_id,
+  messageId: notice.message_id,
+  markerIndex: notice.marker_index,
+  preview: notice.preview,
+  createdAt: notice.created_at,
+});
+
 export const conversation = {
   create: withResponseMap(
     httpPost<TChatConversation, ICreateConversationParams>('/api/conversations', (p) => buildCreateConversationBody(p)),
@@ -304,7 +333,10 @@ export const conversation = {
     httpGet<TChatConversation[], { cron_job_id: string }>((p) => `/api/cron/jobs/${p.cron_job_id}/conversations`),
     (list) => list.map(fromApiConversation)
   ),
-  remove: httpDelete<boolean, { id: string }>((p) => `/api/conversations/${p.id}`),
+  remove: httpDelete<boolean, { id: string }>((p) => `/api/conversations/${p.id}`, {
+    timeoutMs: 190_000,
+    missingResourceResult: true,
+  }),
   // `name_source` qualifies a `name` change: 'user' = explicit rename (backend
   // locks the name against agent-generated titles; also the default when absent),
   // 'auto' = frontend-derived default title (stays agent-overwritable).
@@ -338,6 +370,25 @@ export const conversation = {
     ),
     fromApiConversation
   ),
+  reloadMcpServers: withResponseMap(
+    httpPut<
+      TChatConversation,
+      {
+        conversation_id: string;
+        sync_aionui_catalog: boolean;
+        mcp_server_ids: string[];
+        session_mcp_servers: ISessionMcpServer[];
+      }
+    >(
+      (p) => `/api/conversations/${p.conversation_id}/mcp-servers`,
+      (p) => ({
+        sync_aionui_catalog: p.sync_aionui_catalog,
+        mcp_server_ids: p.mcp_server_ids,
+        session_mcp_servers: p.session_mcp_servers,
+      })
+    ),
+    fromApiConversation
+  ),
   ensureRuntime: httpPost<EnsureConversationRuntimeResponse, { conversation_id: string }>(
     (p) => `/api/conversations/${p.conversation_id}/runtime/ensure`,
     () => undefined
@@ -352,6 +403,9 @@ export const conversation = {
   restartRuntime: httpPost<EnsureConversationRuntimeResponse, { conversation_id: string }>(
     (p) => `/api/conversations/${p.conversation_id}/runtime/restart`,
     () => undefined
+  ),
+  getRuntimeConfig: httpGet<ConversationRuntimeConfigResponse, { conversation_id: string }>(
+    (p) => `/api/conversations/${p.conversation_id}/runtime-config`
   ),
   activeLease: httpPost<void, { conversation_id: string }>(
     (p) => `/api/conversations/${p.conversation_id}/active-lease`,
@@ -419,6 +473,36 @@ export const conversation = {
     (p) => `/api/conversations/${p.conversation_id}/artifacts/${p.artifact_id}`,
     (p) => ({ status: p.status })
   ),
+  listChoiceNotices: withResponseMap(httpGet<ApiChoiceNotice[], void>('/api/choice-notifications'), (list) =>
+    list.map(fromApiChoiceNotice)
+  ),
+  registerChoiceNotice: withResponseMap(
+    httpPost<ApiChoiceNotice[], IChoiceNotice>('/api/choice-notifications', (notice) => ({
+      conversation_id: notice.conversationId,
+      message_id: notice.messageId,
+      marker_index: notice.markerIndex,
+      preview: notice.preview,
+      created_at: notice.createdAt,
+    })),
+    (list) => list.map(fromApiChoiceNotice)
+  ),
+  dismissChoiceNotice: withResponseMap(
+    httpPost<ApiChoiceNotice[], IChoiceNotice>('/api/choice-notifications/dismiss', (notice) => ({
+      conversation_id: notice.conversationId,
+      message_id: notice.messageId,
+      marker_index: notice.markerIndex,
+      preview: notice.preview,
+      created_at: notice.createdAt,
+    })),
+    (list) => list.map(fromApiChoiceNotice)
+  ),
+  choiceNoticesChanged: wsMappedEmitter<{ user_id: string; items: IChoiceNotice[] }>(
+    'conversation.choiceNoticesChanged',
+    (raw) => {
+      const payload = raw as { user_id: string; items: ApiChoiceNotice[] };
+      return { user_id: payload.user_id, items: payload.items.map(fromApiChoiceNotice) };
+    }
+  ),
   responseStream: wsEmitter<IResponseMessage>('message.stream'),
   userCreated: wsEmitter<{
     conversation_id: string;
@@ -430,6 +514,8 @@ export const conversation = {
     client_msg_id?: string;
     content: string;
     position: 'right';
+    /** Distinguishes an actual send from a programmatic visible agent turn. */
+    source?: 'user' | 'agent_turn';
     /** 'pending' for a message delivered mid-turn that the agent hasn't
      * consumed yet (see `message.statusChanged`); 'finish' otherwise. */
     status: 'finish' | 'pending';
@@ -447,6 +533,11 @@ export const conversation = {
     status: 'finish' | 'pending' | 'error';
   }>('message.statusChanged'),
   artifactStream: wsEmitter<IConversationArtifact>('conversation.artifact'),
+  runtimeChanged: wsEmitter<{
+    user_id: string;
+    conversation_id: string;
+    runtime: TConversationRuntimeSummary;
+  }>('conversation.runtimeChanged'),
   turnCompleted: wsMappedEmitter<IConversationTurnCompletedEvent>('turn.completed', (raw) => {
     const r = raw as Record<string, unknown>;
     const rawLast = (r.last_message ?? r.lastMessage) as Record<string, unknown> | undefined;
@@ -472,6 +563,10 @@ export const conversation = {
       is_processing: (rawRuntime.is_processing ?? rawRuntime.isProcessing ?? false) as boolean,
       pending_confirmations: (rawRuntime.pending_confirmations ?? rawRuntime.pendingConfirmations ?? 0) as number,
       turn_id: (rawRuntime.turn_id ?? rawRuntime.turnId ?? null) as string | null,
+      can_stop: rawRuntime.can_stop as boolean | undefined,
+      cancel_turn_id: rawRuntime.cancel_turn_id as string | null | undefined,
+      runtime_instance_id: rawRuntime.runtime_instance_id as string | undefined,
+      runtime_revision: rawRuntime.runtime_revision as number | undefined,
       supports_midturn_delivery: (rawRuntime.supports_midturn_delivery ??
         rawRuntime.supportsMidturnDelivery ??
         false) as boolean,
@@ -652,6 +747,31 @@ export interface IAppRestartResult {
 
 export type IRendererLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
+export type TMindNProgressRunnerState =
+  | 'not-configured'
+  | 'starting'
+  | 'connected'
+  | 'reconnecting'
+  | 'error'
+  | 'stopped';
+
+export interface IMindNProgressRunnerStatus {
+  configured: boolean;
+  secureStorageAvailable: boolean;
+  state: TMindNProgressRunnerState;
+  apiUrl: string | null;
+  machineId: string | null;
+  label: string | null;
+  lastConnectedAt: string | null;
+  lastError: string | null;
+}
+
+export interface IMindNProgressRunnerPairRequest {
+  apiUrl: string;
+  pairingCode: string;
+  expectedMachineId: string;
+}
+
 export interface IRendererLogEntry {
   level: IRendererLogLevel;
   tag: string;
@@ -664,6 +784,10 @@ export interface IRendererLogEntry {
 // ---------------------------------------------------------------------------
 
 export const application = {
+  databaseMaintenanceStatus: bridge.buildProvider<DatabaseMaintenanceStatus, void>('app.database-maintenance.status'),
+  databaseMaintenanceStart: bridge.buildProvider<DatabaseMaintenanceStatus, { action: DatabaseMaintenanceAction }>(
+    'app.database-maintenance.start'
+  ),
   restart: bridge.buildProvider<IAppRestartResult, void>('restart-app'),
   openDevTools: bridge.buildProvider<boolean, void>('open-dev-tools'),
   isDevToolsOpened: bridge.buildProvider<boolean, void>('is-dev-tools-opened'),
@@ -719,11 +843,35 @@ export const application = {
   setStartOnBoot: bridge.buildProvider<IBridgeResponse<IStartOnBootStatus>, { enabled: boolean }>(
     'app.set-start-on-boot'
   ),
+  getMindNProgressRunnerStatus: bridge.buildProvider<IBridgeResponse<IMindNProgressRunnerStatus>, void>(
+    'app.get-mindnprogress-runner-status'
+  ),
+  pairMindNProgressRunner: bridge.buildProvider<
+    IBridgeResponse<IMindNProgressRunnerStatus>,
+    IMindNProgressRunnerPairRequest
+  >('app.pair-mindnprogress-runner'),
+  restartMindNProgressRunner: bridge.buildProvider<IBridgeResponse<IMindNProgressRunnerStatus>, void>(
+    'app.restart-mindnprogress-runner'
+  ),
+  disconnectMindNProgressRunner: bridge.buildProvider<IBridgeResponse<IMindNProgressRunnerStatus>, void>(
+    'app.disconnect-mindnprogress-runner'
+  ),
+  mindNProgressRunnerStatusChanged: bridge.buildEmitter<IMindNProgressRunnerStatus>(
+    'app.mindnprogress-runner-status-changed'
+  ),
   getGpuStatus: bridge.buildProvider<IBridgeResponse<IGpuStatus>, void>('app.get-gpu-status'),
   setGpuOverride: bridge.buildProvider<IBridgeResponse<IGpuStatus>, { override: IGpuOverride | null }>(
     'app.set-gpu-override'
   ),
+  // Mirror the count of conversations with an unread "completed" state onto the
+  // taskbar icon: numeric overlay (rendered to a PNG dataURL by the renderer)
+  // plus continuous flashing until the window is focused.
+  setTaskbarBadge: bridge.buildProvider<void, { count: number; iconDataUrl?: string }>('app.set-taskbar-badge'),
   writeRendererLog: bridge.buildProvider<void, IRendererLogEntry>('app.write-renderer-log'),
+  // Read absolute paths of files currently on the OS clipboard (e.g. files copied
+  // from Windows Explorer). Used by message inputs to paste a path as text on
+  // Ctrl+Shift+V — the browser paste event exposes the File but not its OS path.
+  getClipboardFilePaths: bridge.buildProvider<string[], void>('app.get-clipboard-file-paths'),
   logStream: bridge.buildEmitter<{ level: 'log' | 'warn' | 'error'; tag: string; message: string; data?: unknown }>(
     'app.log-stream'
   ),
@@ -799,6 +947,15 @@ export const dialog = {
       return nativeShowOpen.invoke(options);
     }) as typeof nativeShowOpen.invoke,
   },
+  // Read/write a file at a user-chosen absolute path in the main process,
+  // bypassing the backend's workspace sandbox. Only use with paths the user
+  // explicitly selected via a trusted OS dialog (e.g. assistant backup/restore).
+  writeUserFile: bridge.buildProvider<{ success: boolean; error?: string }, { path: string; data: string }>(
+    'dialog.write-user-file'
+  ),
+  readUserFile: bridge.buildProvider<{ success: boolean; content?: string; error?: string }, { path: string }>(
+    'dialog.read-user-file'
+  ),
 };
 
 // ---------------------------------------------------------------------------
@@ -829,6 +986,11 @@ type RawFileMetadata = {
   type: string;
   last_modified: number;
   is_directory?: boolean;
+};
+
+export type WorkspaceGitBranch = {
+  workspace: string;
+  branch: string | null;
 };
 
 /** Map backend snake_case metadata to the camelCase {@link IFileMetadata}. */
@@ -871,6 +1033,7 @@ export const fs = {
   getImageBase64: httpPost<string | null, { path: string; workspace?: string }>('/api/fs/image-base64'),
   fetchRemoteImage: httpPost<string, { url: string }>('/api/fs/fetch-remote-image'),
   readFile: httpPost<string | null, { path: string; workspace?: string }>('/api/fs/read'),
+  getGitBranches: httpPost<WorkspaceGitBranch[], { workspaces: string[] }>('/api/fs/git-branches'),
   writeFile: httpPost<boolean, { path: string; data: string; workspace?: string }>('/api/fs/write'),
   getFileMetadata: httpPost<IFileMetadata, { path: string; workspace?: string }>('/api/fs/metadata'),
   // ── ChatFileRef content endpoints (PR-2: preview I/O by ref identity) ──────
@@ -1397,9 +1560,9 @@ export const database = {
     fromApiPaginatedConversations
   ),
   searchConversationMessages: withResponseMap(
-    httpGet<PaginatedResult<ApiMessageSearchItem>, { keyword: string; page?: number; page_size?: number }>(
+    httpGet<ApiMessageSearchResponse, { keyword: string; cursor?: string; page_size?: number; match_all?: boolean }>(
       (p) =>
-        `/api/messages/search?keyword=${encodeURIComponent(p.keyword)}&page=${p.page ?? 1}&page_size=${p.page_size ?? 50}`
+        `/api/messages/search?keyword=${encodeURIComponent(p.keyword)}&page_size=${p.page_size ?? 20}${p.cursor ? `&cursor=${encodeURIComponent(p.cursor)}` : ''}${p.match_all ? '&match_all=true' : ''}`
     ),
     fromApiSearchResult
   ),
@@ -1468,6 +1631,7 @@ export const excelPreview = {
 // ---------------------------------------------------------------------------
 
 export const deepLink = {
+  ready: bridge.buildProvider<void, void>('deep-link.ready'),
   received: bridge.buildEmitter<{
     action: string;
     params: Record<string, string>;
@@ -1980,6 +2144,10 @@ export interface IConversationTurnCompletedEvent {
      * the current turn to end. The ONLY capability bit the frontend may gate
      * mid-turn UI on. */
     supports_midturn_delivery: boolean;
+    can_stop?: boolean;
+    cancel_turn_id?: string | null;
+    runtime_instance_id?: string;
+    runtime_revision?: number;
   };
   workspace: string;
   model: {
@@ -2420,6 +2588,13 @@ export const team = {
 };
 
 export const sidebar = {
+  getArchiveRetention: httpGet<import('@/common/types/sidebar').ArchiveRetentionResponse, void>(
+    '/api/sidebar/archive-retention'
+  ),
+  saveArchiveRetention: httpPut<
+    import('@/common/types/sidebar').ArchiveRetentionResponse,
+    import('@/common/types/sidebar').ArchiveRetentionSettings
+  >('/api/sidebar/archive-retention'),
   // First screen: pinned → project area (real projects + dir pseudo-groups) → chats.
   // `win` is a repeated query param (one per group to widen); `limit` caps items per group.
   get: withResponseMap(

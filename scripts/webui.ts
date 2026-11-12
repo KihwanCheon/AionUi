@@ -31,7 +31,7 @@ import { openBrowserUrl, shouldAutoOpenBrowser } from '../packages/web-cli/src/b
 const DEFAULT_PORT = (() => {
   if (process.env.NODE_ENV === 'production') return 25808;
   if (process.env.AIONUI_MULTI_INSTANCE === '1') return 25810;
-  return 25809;
+  return 7777;
 })();
 const BACKEND_BINARY = process.platform === 'win32' ? 'aioncore.exe' : 'aioncore';
 

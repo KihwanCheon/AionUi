@@ -22,7 +22,11 @@ async function startMockBackend(
   const port = (server.address() as AddressInfo).port;
   return {
     port,
-    close: () => new Promise<void>((r) => server.close(() => r())),
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
   };
 }
 
@@ -75,6 +79,73 @@ describe('static-server', () => {
     expect(await r.text()).toContain('hi');
   });
 
+  it('proxies browser assets to the development frontend when configured', async () => {
+    const backend = await startMockBackend((_req, res) => res.end('backend'));
+    stopBackend = backend.close;
+    const frontend = await startMockBackend((req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<title>vite</title><main>${req.url}</main>`);
+    });
+    const closeBackend = stopBackend;
+    stopBackend = async () => {
+      await frontend.close();
+      await closeBackend();
+    };
+
+    handle = await startStaticServer({
+      staticDir: path.join(staticDir, 'missing'),
+      frontendUrl: `http://127.0.0.1:${frontend.port}`,
+      backendPort: backend.port,
+      port: 0,
+    });
+
+    const r = await fetch(`${handle.localUrl}/conversation/123`, {
+      headers: { accept: 'text/html' },
+    });
+    expect(r.status).toBe(200);
+    expect(await r.text()).toContain('<main>/index.html</main>');
+  });
+
+  it('keeps API requests on the backend when a development frontend is configured', async () => {
+    const backend = await startMockBackend((req, res) => res.end(`backend:${req.url}`));
+    stopBackend = backend.close;
+    const frontend = await startMockBackend((req, res) => res.end(`frontend:${req.url}`));
+    const closeBackend = stopBackend;
+    stopBackend = async () => {
+      await frontend.close();
+      await closeBackend();
+    };
+
+    handle = await startStaticServer({
+      staticDir,
+      frontendUrl: `http://127.0.0.1:${frontend.port}`,
+      backendPort: backend.port,
+      port: 0,
+    });
+
+    const r = await fetch(`${handle.localUrl}/api/anything`);
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe('backend:/api/anything');
+  });
+
+  it('returns 502 when the development frontend is unreachable', async () => {
+    const backend = await startMockBackend((_req, res) => res.end('backend'));
+    stopBackend = backend.close;
+    const placeholder = await startMockBackend((_req, res) => res.end());
+    const freePort = placeholder.port;
+    await placeholder.close();
+
+    handle = await startStaticServer({
+      staticDir,
+      frontendUrl: `http://127.0.0.1:${freePort}`,
+      backendPort: backend.port,
+      port: 0,
+    });
+
+    const r = await fetch(`${handle.localUrl}/`);
+    expect(r.status).toBe(502);
+  });
+
   it('/api/* reverse-proxies to backend', async () => {
     const backend = await startMockBackend((req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -86,6 +157,43 @@ describe('static-server', () => {
     expect(r.status).toBe(200);
     const json = (await r.json()) as { path: string };
     expect(json.path).toBe('/api/anything');
+  });
+
+  it('does not expose the internal external-launch issuer through WebUI', async () => {
+    let backendRequests = 0;
+    const backend = await startMockBackend((_req, res) => {
+      backendRequests += 1;
+      res.end('unexpected');
+    });
+    stopBackend = backend.close;
+    handle = await startStaticServer({ staticDir, backendPort: backend.port, port: 0 });
+
+    const r = await fetch(`${handle.localUrl}/api/internal/external-conversation-launches?probe=1`, {
+      method: 'POST',
+    });
+
+    expect(r.status).toBe(404);
+    expect(await r.json()).toEqual({ error: 'NOT_FOUND' });
+    expect(backendRequests).toBe(0);
+  });
+
+  it('does not expose internal conversation dispatch routes through WebUI', async () => {
+    let backendRequests = 0;
+    const backend = await startMockBackend((_req, res) => {
+      backendRequests += 1;
+      res.end('unexpected');
+    });
+    stopBackend = backend.close;
+    handle = await startStaticServer({ staticDir, backendPort: backend.port, port: 0 });
+
+    const issue = await fetch(`${handle.localUrl}/api/internal/external-conversation-dispatches`, {
+      method: 'POST',
+    });
+    const status = await fetch(`${handle.localUrl}/api/internal/external-conversation-dispatches/operation-1`);
+
+    expect(issue.status).toBe(404);
+    expect(status.status).toBe(404);
+    expect(backendRequests).toBe(0);
   });
 
   it('/login reverse-proxies to backend (no local handler)', async () => {

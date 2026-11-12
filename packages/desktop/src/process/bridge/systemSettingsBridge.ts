@@ -18,6 +18,7 @@ import { changeLanguage } from '@process/services/i18n';
 import type { PetSize } from '@process/pet/petTypes';
 import { createOrUpdateTray, destroyTray, setCloseToTrayEnabled } from '@process/utils/tray';
 import { readCloseToTraySetting, writeCloseToTraySetting } from '@process/utils/closeToTraySetting';
+import { initUsageProviders } from '@process/usage';
 
 type LanguageChangeListener = () => void;
 let _languageChangeListener: LanguageChangeListener | null = null;
@@ -32,6 +33,7 @@ export function onLanguageChanged(listener: LanguageChangeListener): void {
 
 export function initSystemSettingsBridge(): void {
   ipcBridge.systemSettings.getCloseToTray.provider(async () => readCloseToTraySetting());
+  initUsageProviders();
 
   ipcBridge.systemSettings.setCloseToTray.provider(async ({ enabled }) => {
     await writeCloseToTraySetting(enabled);

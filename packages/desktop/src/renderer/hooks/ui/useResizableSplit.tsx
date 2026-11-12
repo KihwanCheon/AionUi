@@ -313,7 +313,7 @@ export const useResizableSplit = (options: UseResizableSplitOptions = {}) => {
             : 'justify-end',
         className
       )}
-      style={{ width: '12px', ...style }}
+      style={{ width: '12px', touchAction: 'none', ...style }}
       onPointerDown={handleDragStart(reverse)}
       onDoubleClick={() => {
         setSplitRatio(defaultWidth);

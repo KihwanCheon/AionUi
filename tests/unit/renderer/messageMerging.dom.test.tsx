@@ -8,7 +8,9 @@ import React, { type PropsWithChildren } from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ipcBridge } from '@/common';
-import type { IMessageAcpToolCall, IMessageText, IMessageThinking } from '@/common/chat/chatLib';
+import type { MessageCursorPage } from '@/common/adapter/ipcBridge';
+import type { IMessageAcpToolCall, IMessageAsk, IMessageText, IMessageThinking } from '@/common/chat/chatLib';
+import { transformMessage } from '@/common/chat/chatLib';
 import {
   MessageListLoadingProvider,
   MessageListProvider,
@@ -16,12 +18,22 @@ import {
   useAddOrUpdateMessage,
   useMessageLstCache,
   useMessageList,
+  useMessageListLoading,
+  useMessagePaginationState,
   useReplaceWithAnchorWindow,
+  usePrependHistoryPage,
+  normalizeDbMessage,
 } from '@/renderer/pages/conversation/Messages/hooks';
+import { usePendingConfirmationsRecovery } from '@/renderer/pages/conversation/Messages/usePendingConfirmationsRecovery';
 
 vi.mock('@/common', () => ({
   ipcBridge: {
+    realtime: { reconnected: { on: vi.fn().mockReturnValue(() => {}) } },
     conversation: {
+      confirmation: {
+        list: { invoke: vi.fn().mockResolvedValue([]) },
+        remove: { on: vi.fn().mockReturnValue(() => {}) },
+      },
       userCreated: {
         on: vi.fn().mockReturnValue(() => {}),
       },
@@ -41,6 +53,23 @@ vi.mock('@/common', () => ({
 }));
 
 const CONVERSATION_ID = 'conversation-1';
+
+function createQuestionMessage(requestId: string, persisted: boolean): IMessageAsk {
+  const id = persisted ? `ask-${requestId}` : `confirmation:${requestId}`;
+  return {
+    id,
+    msg_id: id,
+    type: 'ask',
+    conversation_id: CONVERSATION_ID,
+    position: 'left',
+    content: {
+      session_id: CONVERSATION_ID,
+      request_id: requestId,
+      questions: [{ question: '이 초안으로 등록할까요?', options: [{ label: '등록' }] }],
+      ...(persisted ? { persisted: true } : {}),
+    },
+  };
+}
 
 function createTextMessage(msgId: string, content: string): IMessageText {
   return {
@@ -149,6 +178,160 @@ describe('message merging', () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
+  });
+
+  it('keeps one native question when pending recovery finishes before history hydration', async () => {
+    const stored = createQuestionMessage('request-1', true);
+    const invoke = vi.mocked(ipcBridge.database.getConversationMessages.invoke);
+    let finishHistory!: (page: MessageCursorPage) => void;
+    invoke.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishHistory = resolve;
+      })
+    );
+    vi.mocked(ipcBridge.conversation.confirmation.list.invoke).mockResolvedValue([
+      { id: 'request-1', call_id: 'request-1', description: '', options: [], questions: stored.content.questions },
+    ]);
+
+    const { result } = renderHook(
+      () => {
+        useMessageLstCache(CONVERSATION_ID);
+        usePendingConfirmationsRecovery(CONVERSATION_ID);
+        return useMessageList();
+      },
+      { wrapper: CacheWrapper }
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current).toHaveLength(1);
+
+    await act(async () => {
+      finishHistory({ items: [stored], has_more_before: false, has_more_after: false });
+    });
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0].msg_id).toBe(stored.msg_id);
+  });
+
+  it('keeps one native question when history loads before pending recovery', async () => {
+    const stored = createQuestionMessage('request-1', true);
+    vi.mocked(ipcBridge.database.getConversationMessages.invoke).mockResolvedValueOnce({
+      items: [stored],
+      has_more_before: false,
+      has_more_after: false,
+    });
+    const confirmations = [
+      { id: 'request-1', call_id: 'request-1', description: '', options: [], questions: stored.content.questions },
+    ];
+    let finishRecovery!: (value: typeof confirmations) => void;
+    const pending = new Promise<typeof confirmations>((resolve) => {
+      finishRecovery = resolve;
+    });
+    vi.mocked(ipcBridge.conversation.confirmation.list.invoke).mockReturnValue(pending);
+    const { result } = renderHook(
+      () => {
+        useMessageLstCache(CONVERSATION_ID);
+        usePendingConfirmationsRecovery(CONVERSATION_ID);
+        return useMessageList();
+      },
+      { wrapper: CacheWrapper }
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      finishRecovery(confirmations);
+    });
+
+    expect(result.current).toHaveLength(1);
+    expect((result.current[0] as IMessageAsk).content.pendingVerified).toBe(true);
+  });
+
+  it('uses the persisted question anchor when a notification opens its history window', async () => {
+    const stored = createQuestionMessage('request-1', true);
+    const { result } = renderHook(() => useAnchorMessageHarness(), { wrapper: TestWrapper });
+    act(() => {
+      result.current.addOrUpdateMessage(createQuestionMessage('request-1', false));
+    });
+    await flushMessageQueue();
+
+    act(() => {
+      result.current.replaceWithAnchorWindow(CONVERSATION_ID, [stored]);
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].msg_id).toBe(stored.msg_id);
+  });
+
+  it('replaces a recovered question with its durable anchor when loading an older page', async () => {
+    const stored = createQuestionMessage('request-1', true);
+    const { result } = renderHook(
+      () => ({
+        ...useMessageHarness(),
+        prepend: usePrependHistoryPage(),
+      }),
+      { wrapper: TestWrapper }
+    );
+    act(() => {
+      result.current.addOrUpdateMessage(createQuestionMessage('request-1', false));
+    });
+    await flushMessageQueue();
+
+    act(() => {
+      result.current.prepend([stored]);
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].msg_id).toBe(stored.msg_id);
+  });
+
+  it('keeps identical question text from different requests as separate cards', async () => {
+    const { result } = renderHook(() => useAnchorMessageHarness(), { wrapper: TestWrapper });
+    act(() => {
+      result.current.addOrUpdateMessage(createQuestionMessage('request-2', false));
+    });
+    await flushMessageQueue();
+
+    act(() => {
+      result.current.replaceWithAnchorWindow(CONVERSATION_ID, [createQuestionMessage('request-1', true)]);
+    });
+
+    expect(result.current.messages).toHaveLength(2);
+  });
+
+  it('keeps one question and its metadata through replay and history hydration', async () => {
+    const { result } = renderHook(() => useAnchorMessageHarness(), { wrapper: TestWrapper });
+    const content = {
+      content: 'Which runtime?\n- CPU\n- Vulkan',
+      user_choice: { title: 'Which runtime?', options: ['CPU', 'Vulkan'] },
+    };
+    const frame = {
+      type: 'content',
+      conversation_id: CONVERSATION_ID,
+      msg_id: 'question-1',
+      position: 'left' as const,
+      status: 'finish' as const,
+      replace: true,
+      data: content,
+    };
+    act(() => {
+      result.current.addOrUpdateMessage(transformMessage(frame)!);
+      result.current.addOrUpdateMessage(transformMessage(frame)!);
+    });
+    await flushMessageQueue();
+    act(() => {
+      result.current.replaceWithAnchorWindow(CONVERSATION_ID, [
+        normalizeDbMessage({
+          ...createTextMessage('question-1', content.content),
+          id: 'question-1',
+          content,
+        }),
+      ]);
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].content).toMatchObject(content);
   });
 
   it('keeps text segments split when tool calls interrupt the same msg_id stream', async () => {
@@ -577,5 +760,278 @@ describe('message merging', () => {
     });
 
     expect(invoke).not.toHaveBeenCalled();
+  });
+});
+
+describe('conversation recovery after browser suspension', () => {
+  const invoke = vi.mocked(ipcBridge.database.getConversationMessages.invoke);
+  let reconnect: () => void;
+  const disposeReconnect = vi.fn();
+  let visibility: DocumentVisibilityState;
+
+  const message = (index: number, content = `message ${index}`): IMessageText => ({
+    ...createTextMessage(`msg-${index}`, content),
+    id: `saved-${index}`,
+    created_at: index,
+  });
+  const page = (messages: IMessageText[], hasMoreBefore = false): MessageCursorPage => ({
+    items: messages,
+    oldest_cursor: messages.length ? `cursor-${messages[0].created_at}` : null,
+    newest_cursor: messages.length ? `cursor-${messages.at(-1)?.created_at}` : null,
+    has_more_before: hasMoreBefore,
+    has_more_after: false,
+  });
+  const changeVisibility = (next: DocumentVisibilityState) => {
+    visibility = next;
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
+  const advance = async (ms = 150) => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  };
+  const mount = async () => {
+    const hook = renderHook(
+      ({ id }) => {
+        useMessageLstCache(id);
+        return {
+          ...useMessageHarness(),
+          loading: useMessageListLoading(),
+          pagination: useMessagePaginationState(),
+          prepend: usePrependHistoryPage(),
+        };
+      },
+      { initialProps: { id: CONVERSATION_ID }, wrapper: CacheWrapper }
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    return hook;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    visibility = 'visible';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
+    invoke.mockReset().mockResolvedValue(page([message(1), message(2, 'partial')]));
+    vi.mocked(ipcBridge.realtime.reconnected.on).mockImplementation((callback) => {
+      reconnect = () => callback({ timestamp: Date.now() });
+      return disposeReconnect;
+    });
+    disposeReconnect.mockClear();
+  });
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('recovers a completed answer and missed messages on visibility return without showing the loading screen', async () => {
+    const { result } = await mount();
+    changeVisibility('hidden');
+    invoke.mockResolvedValue(page([message(1), message(2, 'completed answer'), message(3)]));
+    await advance();
+    expect(invoke).toHaveBeenCalledTimes(1);
+    changeVisibility('visible');
+    await advance();
+    expect(result.current.messages.map((row) => (row as IMessageText).content.content)).toEqual([
+      'message 1',
+      'completed answer',
+      'message 3',
+    ]);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('coalesces visibility, focus, online and reconnect signals into one fetch', async () => {
+    await mount();
+    changeVisibility('hidden');
+    changeVisibility('visible');
+    window.dispatchEvent(new Event('focus'));
+    window.dispatchEvent(new Event('online'));
+    reconnect();
+    await advance();
+    expect(invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not reload messages when a visible desktop window only regains focus', async () => {
+    const { result } = await mount();
+    const before = result.current.messages;
+    window.dispatchEvent(new Event('focus'));
+    await advance();
+    changeVisibility('visible');
+    window.dispatchEvent(new Event('focus'));
+    await advance();
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(result.current.messages).toBe(before);
+  });
+
+  it('uses focus as a fallback only after the document was hidden', async () => {
+    const { result } = await mount();
+    changeVisibility('hidden');
+    invoke.mockResolvedValue(page([message(2, 'recovered answer')]));
+    visibility = 'visible';
+    window.dispatchEvent(new Event('focus'));
+    await advance();
+    changeVisibility('visible');
+    window.dispatchEvent(new Event('focus'));
+    await advance();
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect((result.current.messages.at(-1) as IMessageText).content.content).toBe('recovered answer');
+  });
+
+  it('refreshes on a restored back-forward cache page without a visibility event', async () => {
+    const { result } = await mount();
+    invoke.mockResolvedValue(page([message(2, 'finished while frozen')]));
+    const event = new Event('pageshow');
+    Object.defineProperty(event, 'persisted', { value: true });
+    window.dispatchEvent(event);
+    await advance();
+    expect((result.current.messages.at(-1) as IMessageText).content.content).toBe('finished while frozen');
+  });
+
+  it('fills a multi-page gap in order and retains already loaded older history', async () => {
+    invoke.mockResolvedValueOnce(page([message(1), message(2)], true));
+    const { result } = await mount();
+    act(() => result.current.prepend([message(0)]));
+    invoke.mockResolvedValueOnce(page([message(5), message(6)], true));
+    invoke.mockResolvedValueOnce(page([message(3), message(4)], true));
+    invoke.mockResolvedValueOnce(page([message(1), message(2)], true));
+    reconnect();
+    await advance();
+    expect(result.current.messages.map((row) => row.id)).toEqual(Array.from({ length: 7 }, (_, i) => `saved-${i}`));
+    expect(invoke.mock.calls.slice(2).map(([params]) => params.before)).toEqual(['cursor-5', 'cursor-3']);
+    expect(result.current.pagination).toMatchObject({
+      oldestCursor: 'cursor-1',
+      newestCursor: 'cursor-6',
+      hasMoreBefore: true,
+    });
+  });
+
+  it('recovers all missed pages when the conversation was initially empty', async () => {
+    invoke.mockResolvedValueOnce(page([]));
+    const { result } = await mount();
+    invoke.mockResolvedValueOnce(page([message(3), message(4)], true));
+    invoke.mockResolvedValueOnce(page([message(1), message(2)]));
+    reconnect();
+    await advance();
+    expect(result.current.messages.map((row) => row.id)).toEqual(['saved-1', 'saved-2', 'saved-3', 'saved-4']);
+    expect(result.current.pagination.hasMoreBefore).toBe(false);
+  });
+
+  it('does not loop indefinitely if the server repeats a history cursor', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = await mount();
+    invoke.mockResolvedValue(page([message(5)], true));
+    reconnect();
+    await advance();
+    expect(invoke).toHaveBeenCalledTimes(3);
+    expect(result.current.messages.map((row) => row.id)).toEqual(['saved-1', 'saved-2']);
+  });
+
+  it('retains newer live text and avoids duplicate rows when recovery returns an older snapshot', async () => {
+    const { result } = await mount();
+    let finish!: (value: MessageCursorPage) => void;
+    invoke.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+    );
+    reconnect();
+    await advance();
+    act(() => result.current.addOrUpdateMessage({ ...message(2, ' with more live text'), id: 'renderer-2' }));
+    await advance();
+    await act(async () => {
+      finish(page([message(1), message(2, 'partial')]));
+    });
+    expect(result.current.messages).toHaveLength(2);
+    expect((result.current.messages.at(-1) as IMessageText).content.content).toBe('partial with more live text');
+  });
+
+  it('keeps the displayed messages on network failure and retries after connectivity returns', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = await mount();
+    invoke.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(page([message(2, 'recovered answer')]));
+    reconnect();
+    await advance();
+    expect((result.current.messages.at(-1) as IMessageText).content.content).toBe('partial');
+    await advance(1000);
+    expect((result.current.messages.at(-1) as IMessageText).content.content).toBe('recovered answer');
+  });
+
+  it('bounds retries while offline and stops retrying after unmount', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { unmount } = await mount();
+    invoke.mockRejectedValue(new Error('offline'));
+    reconnect();
+    await advance(20000);
+    expect(invoke).toHaveBeenCalledTimes(4);
+    reconnect();
+    unmount();
+    await advance(20000);
+    expect(invoke).toHaveBeenCalledTimes(4);
+    expect(disposeReconnect).toHaveBeenCalledOnce();
+  });
+
+  it('serializes a reconnect that arrives during recovery and runs one trailing refresh', async () => {
+    await mount();
+    let finish!: (value: MessageCursorPage) => void;
+    invoke.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+    );
+    reconnect();
+    await advance();
+    reconnect();
+    await advance();
+    expect(invoke).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      finish(page([message(2)]));
+    });
+    await advance();
+    expect(invoke).toHaveBeenCalledTimes(3);
+  });
+
+  it('ignores an old conversation response after navigation', async () => {
+    const { result, rerender } = await mount();
+    let finish!: (value: MessageCursorPage) => void;
+    invoke.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+    );
+    reconnect();
+    await advance();
+    const other = { ...message(10), conversation_id: 'other' };
+    invoke.mockResolvedValue(page([other]));
+    rerender({ id: 'other' });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      finish(page([message(2), message(3)]));
+    });
+    expect(result.current.messages).toEqual([other]);
+    expect(result.current.pagination.newestCursor).toBe('cursor-10');
+  });
+
+  it('preserves the current list when a gap page fails and recovers the whole gap on retry', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = await mount();
+    invoke.mockResolvedValueOnce(page([message(5)], true)).mockRejectedValueOnce(new Error('offline'));
+    invoke
+      .mockResolvedValueOnce(page([message(5)], true))
+      .mockResolvedValueOnce(page([message(2), message(3), message(4)]));
+    reconnect();
+    await advance();
+    expect(result.current.messages.map((row) => row.id)).toEqual(['saved-1', 'saved-2']);
+    await advance(1000);
+    expect(result.current.messages.map((row) => row.id)).toEqual([
+      'saved-1',
+      'saved-2',
+      'saved-3',
+      'saved-4',
+      'saved-5',
+    ]);
   });
 });

@@ -5,9 +5,18 @@
  */
 
 import { ipcBridge } from '@/common';
+import { isTerminalErrorStreamMessage } from '@/common/chat/chatLib';
 import type { TChatConversation } from '@/common/config/storage';
 import { addEventListener } from '@/renderer/utils/emitter';
-import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { countVisibleCompletionUnread, isConversationWindowFocused } from '../utils/completionUnread';
+import { createDoorayCompletionReadPolicy } from '../utils/doorayCompletionRead';
+import { createWaitingConfirmationSync } from '../utils/waitingConfirmationSync';
+import {
+  createConversationFailureTracker,
+  getConversationErrorMessage,
+  type ConversationFailure,
+} from '../utils/conversationFailure';
 
 /**
  * Whitelist of message types that indicate content generation is in progress.
@@ -44,10 +53,15 @@ const isTerminalAgentStatus = (data: unknown): boolean => {
   return status === 'error' || status === 'disconnected';
 };
 
-const isTerminalStreamMessage = (message: { type: string; data: unknown }): boolean => {
+const isTerminalStreamMessage = (message: {
+  type: string;
+  data: unknown;
+  status?: string;
+  replace?: boolean;
+}): boolean => {
   return (
     message.type === 'finish' ||
-    message.type === 'error' ||
+    isTerminalErrorStreamMessage(message) ||
     (message.type === 'agent_status' && isTerminalAgentStatus(message.data))
   );
 };
@@ -130,7 +144,8 @@ export const getSidebarStreamGuardDecision = ({
  * (`ask`). These pause the turn until the user answers, so the sidebar shows a
  * distinct "needs you" icon instead of the generic generating spinner.
  */
-export const isWaitingConfirmationStreamMessage = (type: string): boolean => {
+export const isWaitingConfirmationStreamMessage = (type: string, data?: unknown): boolean => {
+  if (type === 'ask' && data && typeof data === 'object' && 'resolution' in data && data.resolution) return false;
   return type === 'permission' || type === 'acp_permission' || type === 'ask';
 };
 
@@ -181,6 +196,7 @@ export const RUNTIME_PENDING_CONFIRMATION_ID = '__runtime_pending__';
 export type WaitingConfirmationTransition =
   | { kind: 'mark'; confirmationId: string }
   | { kind: 'unmark'; confirmationId: string }
+  | { kind: 'replace'; confirmationIds: string[] }
   | { kind: 'clear' };
 
 /**
@@ -196,6 +212,9 @@ export const applyWaitingConfirmationTransition = (
   if (transition.kind === 'clear') {
     return new Set();
   }
+  if (transition.kind === 'replace') {
+    return new Set(transition.confirmationIds);
+  }
   const next = new Set(current);
   if (transition.kind === 'mark') {
     next.add(transition.confirmationId);
@@ -209,16 +228,19 @@ export const applyWaitingConfirmationTransition = (
 /**
  * Pure decision helper mirroring `shouldReconcileMarkGenerating`: a runtime
  * summary lights the sidebar "waiting" icon only when it reports pending
- * confirmations. Clearing is never done via reconcile.
+ * confirmations. A separate pending-list reconciliation can clear stale marks.
  */
 export const shouldReconcileMarkWaiting = (pendingConfirmations: number): boolean => pendingConfirmations > 0;
 
 type ConversationListSyncSnapshot = {
   conversations: TChatConversation[];
+  activeConversationIds: ReadonlySet<string>;
+  hasCompleteConversationList: boolean;
   generatingConversationIds: Set<string>;
   waitingConfirmationConversationIds: Set<string>;
   completionUnreadConversationIds: Set<string>;
   manualUnreadConversationIds: Set<string>;
+  failures: ReadonlyMap<string, ConversationFailure>;
 };
 
 /**
@@ -264,6 +286,7 @@ let completionUnreadConversationIdsState = new Set<string>();
 let manualUnreadConversationIdsState = readStoredManualUnread();
 let completedConversationIdsState = new Set<string>();
 let conversation_idsState = new Set<string>();
+let hasCompleteConversationListState = false;
 // Full id → owning project_id map over ALL loaded conversations (incl. the team
 // member rows filtered out of `conversationsState`). Every row from
 // GET /api/conversations carries project_id, so this lets the route publish the
@@ -275,22 +298,37 @@ let projectIdByIdState = new Map<string, string | null>();
 let activeConversationIdState: string | null = null;
 let snapshotState: ConversationListSyncSnapshot = {
   conversations: conversationsState,
+  activeConversationIds: conversation_idsState,
+  hasCompleteConversationList: hasCompleteConversationListState,
   generatingConversationIds: generatingConversationIdsState,
   waitingConfirmationConversationIds: waitingConfirmationConversationIdsState,
   completionUnreadConversationIds: completionUnreadConversationIdsState,
   manualUnreadConversationIds: manualUnreadConversationIdsState,
+  failures: new Map(),
 };
 
 const emitStoreChange = () => {
   snapshotState = {
     conversations: conversationsState,
+    activeConversationIds: conversation_idsState,
+    hasCompleteConversationList: hasCompleteConversationListState,
     generatingConversationIds: generatingConversationIdsState,
     waitingConfirmationConversationIds: waitingConfirmationConversationIdsState,
     completionUnreadConversationIds: completionUnreadConversationIdsState,
     manualUnreadConversationIds: manualUnreadConversationIdsState,
+    failures: failureTracker.getSnapshot(),
   };
   listeners.forEach((listener) => listener());
 };
+
+const failureTracker = createConversationFailureTracker(
+  (id) => activeConversationIdState === id && isConversationWindowFocused(),
+  emitStoreChange
+);
+const activeStreamTurnIds = new Map<string, string>();
+const failedTurnIds = new Map<string, string>();
+const isStaleTerminal = (id: string, turnId?: string | null) =>
+  Boolean(turnId && activeStreamTurnIds.has(id) && activeStreamTurnIds.get(id) !== turnId);
 
 const subscribeConversationListSync = (listener: () => void) => {
   listeners.add(listener);
@@ -332,12 +370,25 @@ export const getSnapshotConversationName = (conversation_id: string): string | u
   return name ? name : undefined;
 };
 
+let conversationRefreshInFlight = false;
+let conversationRefreshQueued = false;
+
 const refreshConversations = () => {
+  if (conversationRefreshInFlight) {
+    conversationRefreshQueued = true;
+    return;
+  }
+  conversationRefreshInFlight = true;
+  if (hasCompleteConversationListState) {
+    hasCompleteConversationListState = false;
+    emitStoreChange();
+  }
   void ipcBridge.database.getUserConversations
     .invoke({ limit: 10000 })
     .then((result) => {
       const items = result?.items;
       if (items && Array.isArray(items)) {
+        completionReadPolicy.reconcile(items);
         const filteredData = items.filter((conv) => {
           // Legacy rows from the pre-provider-probe health check flow are hidden
           // from normal history. New health checks must not create conversations.
@@ -345,10 +396,14 @@ const refreshConversations = () => {
           return extra?.is_health_check !== true && !extra?.team_id && !extra?.teamId;
         });
         conversationsState = filteredData;
+        failureTracker.reconcile(filteredData);
         // Use ALL conversation IDs (including team/legacy health-check rows) so the
         // responseStream listener recognises them as known and doesn't
         // trigger an infinite refreshConversations loop.
         conversation_idsState = new Set(items.map((conversation) => conversation.id));
+        // Absence only identifies an archived search hit after a complete read.
+        // Pagination and unreadable rows must not turn active hits into archive labels.
+        hasCompleteConversationListState = result.has_more === false && result.total === items.length;
         // Map ALL rows (unfiltered) so a team member conversation's project_id is
         // resolvable too — the team route looks up its leader conversation here.
         projectIdByIdState = new Map(items.map((conversation) => [conversation.id, conversation.project_id ?? null]));
@@ -358,6 +413,7 @@ const refreshConversations = () => {
 
       conversationsState = [];
       conversation_idsState = new Set();
+      hasCompleteConversationListState = false;
       projectIdByIdState = new Map();
       emitStoreChange();
     })
@@ -365,8 +421,17 @@ const refreshConversations = () => {
       console.error('[WorkspaceGroupedHistory] Failed to load conversations:', error);
       conversationsState = [];
       conversation_idsState = new Set();
+      hasCompleteConversationListState = false;
       projectIdByIdState = new Map();
       emitStoreChange();
+    })
+    .finally(() => {
+      conversationRefreshInFlight = false;
+      // Changes received during the request must be fetched after its snapshot.
+      if (conversationRefreshQueued) {
+        conversationRefreshQueued = false;
+        refreshConversations();
+      }
     });
 };
 
@@ -468,25 +533,37 @@ const applyWaitingConfirmation = (conversation_id: string, transition: WaitingCo
   emitStoreChange();
 };
 
+const waitingConfirmationSync = createWaitingConfirmationSync({
+  load: async (conversation_id) => {
+    const pending = await ipcBridge.conversation.confirmation.list.invoke({ conversation_id });
+    return (pending ?? []).map((item) => item.call_id || item.id);
+  },
+  replace: (conversation_id, confirmationIds) => {
+    applyWaitingConfirmation(conversation_id, { kind: 'replace', confirmationIds });
+  },
+});
+
 const markWaitingConfirmation = (conversation_id: string, confirmationId: string) => {
+  if (!waitingConfirmationSync.mark(conversation_id, confirmationId)) return;
   applyWaitingConfirmation(conversation_id, { kind: 'mark', confirmationId });
 };
 
 const clearWaitingConfirmationById = (conversation_id: string, confirmationId: string) => {
+  waitingConfirmationSync.resolve(conversation_id, confirmationId);
   applyWaitingConfirmation(conversation_id, { kind: 'unmark', confirmationId });
 };
 
 const clearAllWaitingConfirmation = (conversation_id: string) => {
+  waitingConfirmationSync.forget(conversation_id);
   applyWaitingConfirmation(conversation_id, { kind: 'clear' });
 };
 
 /**
  * Reconciles the sidebar "waiting" icon with authoritative runtime state on a
  * per-conversation hydrate/send-accepted response. Mirrors
- * `reconcileGeneratingFromRuntime`: it only ever marks (using a sentinel id, as
- * the runtime summary reports a count, not ids) so a stale idle summary can't
- * fight a live stream; clearing stays with `confirmation.remove` / terminal
- * frames. Covers the window-reload case where the mark stream frame was missed.
+ * `reconcileGeneratingFromRuntime`: a count only marks a provisional sentinel.
+ * The pending-list query then replaces it with concrete ids (or clears it),
+ * guarded against stream events that arrive while that query is in flight.
  */
 export const reconcileWaitingConfirmationFromRuntime = (
   conversation_id: string,
@@ -497,10 +574,12 @@ export const reconcileWaitingConfirmationFromRuntime = (
   }
   if (shouldReconcileMarkWaiting(pendingConfirmations)) {
     markWaitingConfirmation(conversation_id, RUNTIME_PENDING_CONFIRMATION_ID);
+  } else if (waitingConfirmationConversationIdsState.has(conversation_id)) {
+    void waitingConfirmationSync.refresh(conversation_id);
   }
 };
 
-const markCompletionUnread = (conversation_id: string) => {
+const commitCompletionUnread = (conversation_id: string) => {
   if (completionUnreadConversationIdsState.has(conversation_id)) {
     return;
   }
@@ -509,7 +588,7 @@ const markCompletionUnread = (conversation_id: string) => {
   emitStoreChange();
 };
 
-const clearCompletionUnreadState = (conversation_id: string) => {
+const commitCompletionRead = (conversation_id: string) => {
   if (!completionUnreadConversationIdsState.has(conversation_id)) {
     return;
   }
@@ -519,6 +598,13 @@ const clearCompletionUnreadState = (conversation_id: string) => {
   completionUnreadConversationIdsState = next;
   emitStoreChange();
 };
+
+const completionReadPolicy = createDoorayCompletionReadPolicy({
+  loadConversation: (id) => ipcBridge.conversation.get.invoke({ id }),
+  markUnread: commitCompletionUnread,
+  clearUnread: commitCompletionRead,
+});
+const { markCompletion: markCompletionUnread, clearCompletion: clearCompletionUnreadState } = completionReadPolicy;
 
 const markManualUnreadState = (conversation_id: string) => {
   if (manualUnreadConversationIdsState.has(conversation_id)) {
@@ -588,14 +674,30 @@ const initializeConversationListSyncStore = () => {
   isStoreInitialized = true;
   refreshConversations();
 
+  // When the user returns to the window, the open conversation is being viewed
+  // again — clear its completion dot (which may have been set while backgrounded).
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', () => {
+      waitingConfirmationConversationIdsState.forEach((id) => void waitingConfirmationSync.refresh(id));
+      if (activeConversationIdState) {
+        clearCompletionUnreadState(activeConversationIdState);
+        failureTracker.read(activeConversationIdState);
+      }
+    });
+  }
+
   addEventListener('chat.history.refresh', refreshConversations);
   ipcBridge.conversation.listChanged.on((event) => {
     if (event.action === 'deleted') {
       clearGenerating(event.conversation_id, 'deleted');
       clearAllWaitingConfirmation(event.conversation_id);
       clearCompletionUnreadState(event.conversation_id);
+      completionReadPolicy.forget(event.conversation_id);
       clearManualUnreadState(event.conversation_id);
       clearCompleted(event.conversation_id);
+      failureTracker.forget(event.conversation_id);
+      activeStreamTurnIds.delete(event.conversation_id);
+      failedTurnIds.delete(event.conversation_id);
     }
     refreshConversations();
   });
@@ -616,24 +718,23 @@ const initializeConversationListSyncStore = () => {
     }
 
     if (isTerminalStreamMessage(message)) {
+      if (isStaleTerminal(conversation_id, message.turn_id)) return;
       const wasGenerating = generatingConversationIdsState.has(conversation_id);
-      if (wasGenerating && activeConversationIdState !== conversation_id) {
+      if (isTerminalErrorStreamMessage(message)) {
+        failedTurnIds.set(conversation_id, message.turn_id ?? 'unknown');
+        clearCompletionUnreadState(conversation_id);
+        failureTracker.mark(conversation_id, {
+          turnId: message.turn_id ?? message.msg_id ?? `error-${Date.now()}`,
+          completedAt: message.created_at ?? Date.now(),
+          message: getConversationErrorMessage(message.data),
+        });
+      } else if (wasGenerating && (activeConversationIdState !== conversation_id || !isConversationWindowFocused())) {
         markCompletionUnread(conversation_id);
       }
+      markCompleted(conversation_id, message.turn_id);
       clearGenerating(conversation_id, 'terminal');
       clearAllWaitingConfirmation(conversation_id);
       return;
-    }
-
-    // A permission/acp_permission/ask frame pauses the turn on the user — light
-    // the distinct "waiting" icon. This is independent of the generating guard
-    // (an `ask` frame is not in the generating whitelist, and waiting takes
-    // display precedence over the spinner regardless).
-    if (isWaitingConfirmationStreamMessage(message.type)) {
-      const confirmationId = extractConfirmationId(message);
-      if (confirmationId) {
-        markWaitingConfirmation(conversation_id, confirmationId);
-      }
     }
 
     const decision = getSidebarStreamGuardDecision({
@@ -649,16 +750,36 @@ const initializeConversationListSyncStore = () => {
       logLateStreamIgnored(conversation_id, message.type);
       return;
     }
+    // Resolved or late permission frames must not relight the waiting badge.
+    // The server's pending list also repairs missed resolution events.
+    if (isWaitingConfirmationStreamMessage(message.type, message.data)) {
+      const confirmationId = extractConfirmationId(message);
+      if (confirmationId) {
+        markWaitingConfirmation(conversation_id, confirmationId);
+      }
+    }
     if (decision.markGenerating) {
+      if (message.turn_id) activeStreamTurnIds.set(conversation_id, message.turn_id);
+      if (decision.clearCompleted) {
+        failedTurnIds.delete(conversation_id);
+        failureTracker.read(conversation_id);
+      }
       markGenerating(conversation_id, 'stream');
     }
   });
   ipcBridge.conversation.turnCompleted.on((event) => {
-    if (isTerminalTurnState(event.state) && activeConversationIdState !== event.session_id) {
+    if (isStaleTerminal(event.session_id, event.turn_id)) return;
+    if (
+      isTerminalTurnState(event.state) &&
+      !failureTracker.getSnapshot().has(event.session_id) &&
+      failedTurnIds.get(event.session_id) !== event.turn_id &&
+      (activeConversationIdState !== event.session_id || !isConversationWindowFocused())
+    ) {
       markCompletionUnread(event.session_id);
     }
     markCompleted(event.session_id, event.turn_id);
     clearGenerating(event.session_id, 'turnCompleted');
+    clearAllWaitingConfirmation(event.session_id);
     refreshConversations();
   });
 };
@@ -674,6 +795,7 @@ export const useConversationListSync = () => {
     waitingConfirmationConversationIds,
     completionUnreadConversationIds,
     manualUnreadConversationIds,
+    failures,
   } = useSyncExternalStore(
     subscribeConversationListSync,
     getConversationListSyncSnapshot,
@@ -682,6 +804,7 @@ export const useConversationListSync = () => {
 
   const clearCompletionUnread = useCallback((conversation_id: string) => {
     clearCompletionUnreadState(conversation_id);
+    failureTracker.read(conversation_id);
   }, []);
 
   const markManualUnread = useCallback((conversation_id: string) => {
@@ -717,6 +840,9 @@ export const useConversationListSync = () => {
     [completionUnreadConversationIds]
   );
 
+  const getConversationFailure = useCallback((id: string) => failures.get(id), [failures]);
+  const hasFailureUnread = useCallback((id: string) => failures.has(id), [failures]);
+
   const isManualUnread = useCallback(
     (conversation_id: string) => {
       return manualUnreadConversationIds.has(conversation_id);
@@ -724,15 +850,51 @@ export const useConversationListSync = () => {
     [manualUnreadConversationIds]
   );
 
+  const completionUnreadCount = useMemo(
+    () => countVisibleCompletionUnread(conversations, completionUnreadConversationIds),
+    [conversations, completionUnreadConversationIds]
+  );
+
   return {
     conversations,
     isConversationGenerating,
     isConversationWaitingConfirmation,
     hasCompletionUnread,
+    getConversationFailure,
+    hasFailureUnread,
+    completionUnreadCount,
     clearCompletionUnread,
     isManualUnread,
     markManualUnread,
     clearManualUnread,
     setActiveConversation,
   };
+};
+
+const getUnreadFailureSnapshot = () => failureTracker.getSnapshot();
+
+/** Reuse the complete active feed, including team rows hidden from the sidebar. */
+export const useConversationListPresence = () => {
+  useEffect(() => {
+    initializeConversationListSyncStore();
+  }, []);
+  const { activeConversationIds, hasCompleteConversationList } = useSyncExternalStore(
+    subscribeConversationListSync,
+    getConversationListSyncSnapshot,
+    getConversationListSyncSnapshot
+  );
+  return { activeConversationIds, hasCompleteConversationList, refreshConversationListPresence: refreshConversations };
+};
+
+/** Reuse sidebar read receipts without a second event listener or notification store. */
+export const useUnreadConversationFailures = () => {
+  useEffect(() => {
+    initializeConversationListSyncStore();
+  }, []);
+  const failures = useSyncExternalStore(
+    subscribeConversationListSync,
+    getUnreadFailureSnapshot,
+    getUnreadFailureSnapshot
+  );
+  return { failures, acknowledge: failureTracker.read };
 };

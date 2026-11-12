@@ -7,6 +7,7 @@
 import { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ipcBridge } from '@/common';
+import { handleExternalConversationDeepLink } from '@/renderer/services/externalConversationLaunch';
 
 /**
  * Deep link event payload from main process
@@ -23,8 +24,16 @@ export type DeepLinkAddProviderDetail = {
   platform?: string;
 };
 
+export type MindNProgressRunnerPairingDetail = {
+  apiUrl: string;
+  pairingCode: string;
+  machineId: string;
+};
+
 /** Pending deep link data for the add-provider action. Read-once: consumed by ModelModalContent on mount. */
 let pendingDeepLinkData: DeepLinkAddProviderDetail | null = null;
+let pendingMindNProgressRunnerPairing: MindNProgressRunnerPairingDetail | null = null;
+const mindNProgressRunnerPairingListeners = new Set<(pairing: MindNProgressRunnerPairingDetail) => void>();
 
 /**
  * Consume (read and clear) pending deep link data.
@@ -34,6 +43,30 @@ export const consumePendingDeepLink = (): DeepLinkAddProviderDetail | null => {
   const data = pendingDeepLinkData;
   pendingDeepLinkData = null;
   return data;
+};
+
+/** Read and clear the one-time Runner pairing payload before it can be reused. */
+export const consumeMindNProgressRunnerPairing = (): MindNProgressRunnerPairingDetail | null => {
+  const pairing = pendingMindNProgressRunnerPairing;
+  pendingMindNProgressRunnerPairing = null;
+  return pairing;
+};
+
+/** Deliver pairing links to an already-mounted settings page without putting secrets in the route. */
+export const subscribeMindNProgressRunnerPairing = (
+  listener: (pairing: MindNProgressRunnerPairingDetail) => void
+): (() => void) => {
+  mindNProgressRunnerPairingListeners.add(listener);
+  return () => mindNProgressRunnerPairingListeners.delete(listener);
+};
+
+const publishMindNProgressRunnerPairing = (pairing: MindNProgressRunnerPairingDetail): void => {
+  if (mindNProgressRunnerPairingListeners.size === 0) {
+    pendingMindNProgressRunnerPairing = pairing;
+    return;
+  }
+  pendingMindNProgressRunnerPairing = null;
+  for (const listener of mindNProgressRunnerPairingListeners) listener(pairing);
 };
 
 /**
@@ -54,6 +87,8 @@ export const useDeepLink = () => {
 
   const handler = useCallback(
     (payload: DeepLinkPayload) => {
+      if (handleExternalConversationDeepLink(payload, navigate)) return;
+
       // Support both formats: "add-provider" and "provider/add" (one-api style)
       if (payload.action === 'add-provider' || payload.action === 'provider/add') {
         pendingDeepLinkData = {
@@ -65,6 +100,19 @@ export const useDeepLink = () => {
 
         // Navigate to model settings page; ModelModalContent will pick up the pending data
         void navigate('/settings/model');
+        return;
+      }
+
+      if (payload.action === 'mindnprogress/runner-pair') {
+        const apiUrl = payload.params.api_url;
+        const pairingCode = payload.params.pairing_code;
+        const machineId = payload.params.machine_id;
+        if (!apiUrl || !pairingCode || !machineId) {
+          console.warn('[DeepLink] MindNProgress Runner pairing link is incomplete');
+          return;
+        }
+        publishMindNProgressRunnerPairing({ apiUrl, pairingCode, machineId });
+        void navigate('/settings/mindnprogress');
         return;
       }
 
@@ -88,6 +136,10 @@ export const useDeepLink = () => {
   );
 
   useEffect(() => {
-    return ipcBridge.deepLink.received.on(handler);
+    const unsubscribe = ipcBridge.deepLink.received.on(handler);
+    void ipcBridge.deepLink.ready.invoke().catch(() => {
+      // Browser-only WebUI sessions may not have an Electron deep-link provider.
+    });
+    return unsubscribe;
   }, [handler]);
 };

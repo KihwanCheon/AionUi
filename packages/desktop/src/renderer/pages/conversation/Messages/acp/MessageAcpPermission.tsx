@@ -6,6 +6,7 @@
 
 import type { IMessageAcpPermission } from '@/common/chat/chatLib';
 import { conversation } from '@/common/adapter/ipcBridge';
+import { submitClaudePermission, useClaudePermissionResponse } from '../../platforms/acp/claudePermissions';
 import {
   classifyAcpPermission,
   normalizePermissionOperationKind,
@@ -24,6 +25,7 @@ const MessageAcpPermission: React.FC<MessageAcpPermissionProps> = React.memo(({ 
   const options = Array.isArray(content.options) ? content.options : [];
   const { t } = useTranslation();
   const toolCallId = tool_call?.tool_call_id;
+  const responseState = useClaudePermissionResponse(message.conversation_id, toolCallId || message.id);
 
   const panelOptions = useMemo(
     () =>
@@ -43,12 +45,14 @@ const MessageAcpPermission: React.FC<MessageAcpPermissionProps> = React.memo(({ 
 
   const handleConfirm = useCallback(
     async (selectedValue: string) => {
-      await conversation.confirmMessage.invoke({
-        confirm_key: selectedValue,
-        msg_id: message.id,
-        conversation_id: message.conversation_id,
-        call_id: toolCallId || message.id,
-      });
+      await submitClaudePermission(message.conversation_id, toolCallId || message.id, () =>
+        conversation.confirmMessage.invoke({
+          confirm_key: selectedValue,
+          msg_id: message.id,
+          conversation_id: message.conversation_id,
+          call_id: toolCallId || message.id,
+        })
+      );
     },
     [message.conversation_id, message.id, toolCallId]
   );
@@ -92,6 +96,7 @@ const MessageAcpPermission: React.FC<MessageAcpPermissionProps> = React.memo(({ 
       detailLabelKey={command ? undefined : 'messages.requestDetails'}
       options={panelOptions}
       onConfirm={handleConfirm}
+      responseState={responseState}
     />
   );
 });

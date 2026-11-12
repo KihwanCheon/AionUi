@@ -15,6 +15,7 @@ type QuitCleanupDeps = {
   markExplicitQuit: () => void;
   destroyTray: () => void;
   disposeCronResumeListener: () => void;
+  stopSidecars: () => Promise<void>;
   stopBackend: () => Promise<void>;
   destroyPetWindow: () => Promise<void> | void;
   logInfo: (message: string) => void;
@@ -55,6 +56,9 @@ async function runQuitCleanup(deps: QuitCleanupDeps): Promise<void> {
   const cleanup = async () => {
     deps.disposeCronResumeListener();
 
+    // Sidecars may still be completing requests against aioncore, so let them
+    // drain before the backend they depend on is stopped.
+    await deps.stopSidecars().catch((err) => deps.logError('[App] Failed to stop sidecars:', err));
     await deps.stopBackend().catch((err) => deps.logError('[App] Failed to stop backend:', err));
 
     try {

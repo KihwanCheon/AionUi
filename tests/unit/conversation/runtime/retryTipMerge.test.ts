@@ -66,6 +66,19 @@ describe('codex retry tip live merge', () => {
     expect((tips[0] as IMessageTips).content.content).toContain('5/5');
   });
 
+  it('preserves partial text and deduplicates its terminal error without replacing the reply', () => {
+    const error = {
+      type: 'error',
+      msg_id: TURN_MSG_ID,
+      conversation_id: 'conv-1',
+      data: { message: 'Selected model is at capacity. Please try a different model.' },
+    } as IResponseMessage;
+    const list = replay([textFrame('Checking the request'), error, error]);
+    expect(list.filter((message) => message.type === 'text')).toHaveLength(1);
+    expect(list.filter((message) => message.type === 'tips')).toHaveLength(1);
+    expect((list.find((message) => message.type === 'tips') as IMessageTips).content.content).toContain('at capacity');
+  });
+
   it('finds its card again after other frames land in between', () => {
     const list = replay([retryFrame(1), textFrame('partial answer'), retryFrame(2)]);
 

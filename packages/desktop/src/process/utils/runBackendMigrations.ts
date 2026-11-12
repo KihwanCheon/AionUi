@@ -18,6 +18,13 @@ import {
 import { BUILTIN_IMAGE_GEN_NAME, type IMcpServer, type IProvider } from '@/common/config/storage';
 import { getBuiltinMcpScriptPath, type ProcessConfig as ProcessConfigType } from './initStorage';
 import { migrateAssistantsToBackend } from './migrateAssistants';
+import {
+  buildMindNProgressMcpServer,
+  buildMnPSuiteOptionalMcpBootstrap,
+  isLegacyMnPSuiteMindNProgressMcpServer,
+  isMnPSuiteManagedMcpServer,
+  MINDNPROGRESS_MCP_NAME,
+} from '../startup/bootstrap/mnpSuiteMcp';
 
 type ConfigFile = typeof ProcessConfigType;
 type MigrationStepResult = boolean;
@@ -309,11 +316,81 @@ async function ensureBootstrapMcpServersInDb(configFile: ConfigFile): Promise<vo
   logImageGenerationEnvResolution(imageEnvResolution, 'bootstrap');
   const imageServer = buildBuiltinImageGenerationServer(imageEnvResolution, imageConfig);
   const defaultServers = buildDefaultMcpServers();
-  const missing = [...defaultServers, imageServer].filter((server) => !existingByName.has(server.name));
+  const mindNProgressServer = buildMindNProgressMcpServer();
+  const optionalBootstrap = buildMnPSuiteOptionalMcpBootstrap();
+  const existingByNormalizedName = new Map(
+    (existing ?? []).map((server) => [server.name.trim().toLowerCase(), server])
+  );
+  const suiteServers = [mindNProgressServer, ...(optionalBootstrap?.servers ?? [])].filter(
+    (server): server is McpImportServer => server !== null
+  );
+  const suiteMissing = suiteServers.filter((server) => !existingByNormalizedName.has(server.name.trim().toLowerCase()));
+  const missing = [
+    ...defaultServers.filter((server) => !existingByName.has(server.name)),
+    ...(existingImageServer ? [] : [imageServer]),
+    ...suiteMissing,
+  ];
   let imageServerUpdated = false;
+  let suiteServersUpdated = 0;
+  let suiteServersRemoved = 0;
+  let suiteServerConflicts = 0;
 
   if (missing.length > 0) {
     await mcpService.batchImportServers.invoke({ servers: missing });
+  }
+
+  for (const desiredServer of suiteServers) {
+    const existingServer = existingByNormalizedName.get(desiredServer.name.trim().toLowerCase());
+    if (!existingServer) {
+      continue;
+    }
+    const isManagedServer =
+      isMnPSuiteManagedMcpServer(existingServer) ||
+      (desiredServer.name === MINDNPROGRESS_MCP_NAME && isLegacyMnPSuiteMindNProgressMcpServer(existingServer));
+    if (!isManagedServer) {
+      suiteServerConflicts += 1;
+      console.warn('[Migration] skipped MnP Suite MCP name conflict: %s', desiredServer.name);
+      continue;
+    }
+
+    const transportChanged = !isSameStdioTransport(existingServer.transport, desiredServer.transport);
+    const metadataChanged =
+      existingServer.name !== desiredServer.name ||
+      existingServer.description !== desiredServer.description ||
+      existingServer.original_json !== desiredServer.original_json ||
+      existingServer.builtin !== false;
+    if (transportChanged || metadataChanged) {
+      await mcpService.updateServer.invoke({
+        id: existingServer.id,
+        data: {
+          name: desiredServer.name,
+          description: desiredServer.description,
+          transport: desiredServer.transport,
+          original_json: desiredServer.original_json,
+          builtin: false,
+        },
+      });
+      suiteServersUpdated += 1;
+    }
+    if (existingServer.enabled === false) {
+      await mcpService.toggleServer.invoke({ id: existingServer.id });
+      suiteServersUpdated += 1;
+    }
+  }
+
+  if (optionalBootstrap) {
+    const desiredNames = new Set(optionalBootstrap.servers.map((server) => server.name.trim().toLowerCase()));
+    for (const existingServer of existing ?? []) {
+      const normalizedName = existingServer.name.trim().toLowerCase();
+      if (
+        optionalBootstrap.managedNames.includes(normalizedName) &&
+        !desiredNames.has(normalizedName) &&
+        isMnPSuiteManagedMcpServer(existingServer)
+      ) {
+        await mcpService.deleteServer.invoke({ id: existingServer.id });
+        suiteServersRemoved += 1;
+      }
+    }
   }
 
   const existingChromeDevtools = existingByName.get(BUILTIN_CHROME_DEVTOOLS_NAME);
@@ -435,10 +512,13 @@ async function ensureBootstrapMcpServersInDb(configFile: ConfigFile): Promise<vo
   }
 
   console.info(
-    '[Migration] MCP bootstrap completed, imported %d missing defaults, updated image server: %s, updated browser server: %s, image config source: %s, image enabled: %s',
+    '[Migration] MCP bootstrap completed, imported %d missing defaults, updated image server: %s, updated browser server: %s, updated MnP Suite servers: %d, removed MnP Suite servers: %d, MnP Suite name conflicts: %d, image config source: %s, image enabled: %s',
     missing.length,
     imageServerUpdated ? 'yes' : 'no',
     browserServerUpdated ? 'yes' : 'no',
+    suiteServersUpdated,
+    suiteServersRemoved,
+    suiteServerConflicts,
     imageConfigSource,
     imageConfig?.switch === true ? 'yes' : 'no'
   );

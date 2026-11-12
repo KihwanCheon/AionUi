@@ -20,6 +20,7 @@ type GuidInputCardProps = {
   input: string;
   onInputChange: (value: string) => void;
   onKeyDown: (event: React.KeyboardEvent) => void;
+  enterKeyHint?: 'enter' | 'send';
   onPaste: React.ClipboardEventHandler;
   onFocus: () => void;
   onBlur: () => void;
@@ -52,6 +53,7 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
   input,
   onInputChange,
   onKeyDown,
+  enterKeyHint,
   onPaste,
   onFocus,
   onBlur,
@@ -128,6 +130,7 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
           autoSize={textareaAutoSize}
           placeholder={placeholder}
           spellCheck={false}
+          enterKeyHint={enterKeyHint}
           className={`text-14px focus:b-none rounded-xl !bg-transparent !b-none !resize-none !py-0 !pe-0 !ps-7px ${styles.lightPlaceholder}`}
           value={input}
           onChange={onInputChange}

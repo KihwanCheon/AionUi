@@ -57,4 +57,29 @@ describe('ProjectPanelMobileOverlay (P3 mobile)', () => {
     rerender(<ProjectPanelMobileOverlay projectId='p1' collapsed={true} onCollapse={() => {}} widthPx={360} />);
     expect(panel().getAttribute('data-mount-id')).toBe(first);
   });
+
+  it('shows the tablet resize handle only while the overlay is open', () => {
+    const resizeHandle = <div data-testid='tablet-resize-handle' />;
+    const { rerender } = render(
+      <ProjectPanelMobileOverlay
+        projectId='p1'
+        collapsed={false}
+        onCollapse={() => {}}
+        widthPx={360}
+        dragHandle={resizeHandle}
+      />
+    );
+    expect(screen.getByTestId('tablet-resize-handle')).toBeInTheDocument();
+
+    rerender(
+      <ProjectPanelMobileOverlay
+        projectId='p1'
+        collapsed={true}
+        onCollapse={() => {}}
+        widthPx={360}
+        dragHandle={resizeHandle}
+      />
+    );
+    expect(screen.queryByTestId('tablet-resize-handle')).not.toBeInTheDocument();
+  });
 });

@@ -1,4 +1,13 @@
 {
+  "externalLaunch": {
+    "loading": "Preparando la conversación solicitada...",
+    "errorTitle": "No se puede iniciar la conversación",
+    "notFoundOrExpired": "Esta solicitud no es válida, ha caducado o ya se completó.",
+    "alreadyUsed": "Esta solicitud de inicio ya se ha utilizado.",
+    "unavailableOptions": "El agente, modelo, las habilidades o herramientas MCP solicitados no están disponibles.",
+    "loadFailed": "No se pudo cargar la solicitud de inicio. Inténtalo de nuevo.",
+    "callbackPending": "La conversación se creó, pero no se pudo avisar a la aplicación vinculada. Puede ser necesario reintentar."
+  },
   "agentFallbackNotice": "{{original}} no está disponible, usando {{fallback}} en su lugar.",
   "noAgentAvailable": "No hay ningún agente principal disponible. Inicia sesión en Google o instala Claude/Codex CLI. ¿Ir a configuración?",
   "noAgentAvailableShort": "No hay agente principal disponible. Haz clic para configurar.",
@@ -31,5 +40,8 @@
     "understand": "Familiarízate con este proyecto y explícame con palabras sencillas qué hace y por dónde empezar",
     "cleanup": "Encuentra archivos duplicados e inútiles en esta carpeta y lístalos para que los confirme",
     "create": "Créame una página personal bonita y ábrela cuando esté lista"
+  },
+  "claudeAccount": {
+    "label": "Cuenta de Claude"
   }
 }

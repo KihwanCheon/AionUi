@@ -11,6 +11,7 @@ import { ipcBridge } from '@/common';
 import { configService } from '@/common/config/configService';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import { getSnapshotConversationName } from '@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync';
+import { showBrowserNotification } from './browserNotificationDisplay';
 import {
   createBrowserNotificationController,
   shouldShowNotification,
@@ -50,28 +51,32 @@ export const useBrowserNotification = (): void => {
           settingEnabled: configService.get('system.notificationEnabled') !== false,
           documentHidden: document.hidden,
         }),
-      bodyFor: (kind, conversationId) => {
+      bodyFor: (kind, conversationId, reason) => {
         const name = conversationId ? getSnapshotConversationName(conversationId) : undefined;
         if (kind === 'confirmation') {
           return name
             ? t('settings.browserNotification.bodyConfirmationNamed', { name: truncateConversationName(name) })
             : t('settings.browserNotification.bodyConfirmation');
         }
+        if (kind === 'turnFailed') {
+          const failureReason = reason || t('settings.browserNotification.failureReasonUnavailable');
+          return name
+            ? t('settings.browserNotification.bodyTurnFailedNamed', {
+                name: truncateConversationName(name),
+                reason: failureReason,
+              })
+            : t('settings.browserNotification.bodyTurnFailed', { reason: failureReason });
+        }
         return name
           ? t('settings.browserNotification.bodyTurnCompletedNamed', { name: truncateConversationName(name) })
           : t('settings.browserNotification.bodyTurnCompleted');
       },
-      show: ({ body, conversationId }) => {
-        try {
-          const notification = new Notification('AionUi', { body });
-          notification.onclick = () => {
-            window.focus();
-            if (conversationId) void navigate(`/conversation/${conversationId}`);
-            notification.close();
-          };
-        } catch (error) {
+      show: (payload) => {
+        void showBrowserNotification(payload, () => {
+          if (payload.conversationId) void navigate(`/conversation/${payload.conversationId}`);
+        }).catch((error) => {
           console.error('[useBrowserNotification] Failed to show notification:', error);
-        }
+        });
       },
     });
 

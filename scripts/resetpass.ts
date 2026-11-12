@@ -112,7 +112,7 @@ function resolveWebUIProbePort(): number {
   if (env && /^\d+$/.test(env)) return Number(env);
   if (process.env.NODE_ENV === 'production') return 25808;
   if (process.env.AIONUI_MULTI_INSTANCE === '1') return 25810;
-  return 25809;
+  return 7777;
 }
 
 /**

@@ -12,10 +12,14 @@
  * 时退化为纯 clamp」的向后兼容护栏（保护另外 4 个消费方）。
  */
 
-import { act, fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render, renderHook } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useResizableSplit } from '@/renderer/hooks/ui/useResizableSplit';
+import {
+  isResizableTabletLayout,
+  useTabletPanelWidths,
+} from '@/renderer/pages/conversation/hooks/useTabletPanelWidths';
 
 const STORAGE_KEY = 'sider-width-px';
 const DEFAULT_WIDTH = 260;
@@ -27,10 +31,11 @@ type HarnessProps = {
   onCollapsedChange?: (collapsed: boolean) => void;
   /** 省略 → 关闭 collapse 语义（向后兼容护栏） */
   withCollapse?: boolean;
+  reverse?: boolean;
 };
 
 // 渲染一个使用 hook 的组件：暴露 splitRatio 文本 + 拖拽句柄。
-const Harness: React.FC<HarnessProps> = ({ collapsed = false, onCollapsedChange, withCollapse = true }) => {
+const Harness: React.FC<HarnessProps> = ({ collapsed = false, onCollapsedChange, withCollapse = true, reverse }) => {
   const { splitRatio, createDragHandle } = useResizableSplit({
     unit: 'px',
     defaultWidth: DEFAULT_WIDTH,
@@ -42,7 +47,7 @@ const Harness: React.FC<HarnessProps> = ({ collapsed = false, onCollapsedChange,
   return (
     <div>
       <span data-testid='width'>{splitRatio}</span>
-      {createDragHandle({})}
+      {createDragHandle({ reverse })}
     </div>
   );
 };
@@ -57,11 +62,11 @@ const getWidth = (container: HTMLElement): number =>
   Number(container.querySelector('[data-testid="width"]')?.textContent);
 
 // 从默认起点（260）拖到目标像素宽后松手。startX=0 → clientX = target-260。
-const dragTo = (container: HTMLElement, targetWidth: number) => {
+const dragTo = (container: HTMLElement, targetWidth: number, pointerType = 'mouse', reverse = false) => {
   const handle = getHandle(container);
-  const clientX = targetWidth - DEFAULT_WIDTH;
+  const clientX = (targetWidth - DEFAULT_WIDTH) * (reverse ? -1 : 1);
   act(() => {
-    fireEvent.pointerDown(handle, { clientX: 0, button: 0, pointerType: 'mouse', pointerId: 1 });
+    fireEvent.pointerDown(handle, { clientX: 0, button: 0, pointerType, pointerId: 1 });
   });
   act(() => {
     window.dispatchEvent(new MouseEvent('pointermove', { clientX, buttons: 1 }));
@@ -150,5 +155,40 @@ describe('useResizableSplit collapse extension', () => {
     expect(getWidth(container)).toBe(MIN_WIDTH);
     expect(localStorage.getItem(STORAGE_KEY)).toBe(String(MIN_WIDTH));
     expect(onCollapsedChange).not.toHaveBeenCalled();
+  });
+
+  it('touch drag resizes a left-anchored panel without browser panning', () => {
+    const { container } = render(<Harness withCollapse={false} />);
+    expect(getHandle(container)).toHaveStyle({ touchAction: 'none' });
+
+    dragTo(container, 320, 'touch');
+
+    expect(getWidth(container)).toBe(320);
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('320');
+  });
+
+  it('touch drag resizes a right-anchored panel in reverse', () => {
+    const { container } = render(<Harness withCollapse={false} reverse />);
+
+    dragTo(container, 320, 'touch', true);
+
+    expect(getWidth(container)).toBe(320);
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('320');
+  });
+
+  it('enables panel resizing only for the tablet range of the mobile layout', () => {
+    expect(isResizableTabletLayout(true, 767)).toBe(false);
+    expect(isResizableTabletLayout(true, 768)).toBe(true);
+    expect(isResizableTabletLayout(false, 900)).toBe(false);
+  });
+
+  it('restores independent left and right tablet panel widths', () => {
+    localStorage.setItem('tablet-sider-width-px', '500');
+    localStorage.setItem('tablet-explorer-width-px', '600');
+
+    const { result } = renderHook(() => useTabletPanelWidths(true, 900));
+
+    expect(result.current.siderWidthPx).toBe(500);
+    expect(result.current.explorerWidthPx).toBe(600);
   });
 });

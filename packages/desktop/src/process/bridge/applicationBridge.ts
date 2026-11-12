@@ -8,6 +8,8 @@ import type { BrowserWindow } from 'electron';
 import { app, session } from 'electron';
 import { ipcBridge } from '@/common';
 import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
+import { readClipboardFilePaths } from '@process/services/clipboardFilePaths';
+import { applyTaskbarBadge, setTaskbarBadgeWindow } from '@process/services/taskbarBadge';
 import { ProcessConfig } from '@process/utils/initStorage';
 import { getZoomFactor, setZoomFactor } from '@process/utils/zoom';
 import { getCdpStatus, updateCdpConfig } from '@process/utils/configureChromium';
@@ -16,8 +18,16 @@ import { getGpuStatus, setGpuUserOverride } from '@process/utils/gpuRecovery';
 import { initApplicationBridgeCore } from './applicationBridgeCore';
 import type { IStartOnBootStatus } from '@/common/adapter/ipcBridge';
 import { restartApplication } from './restartApplication';
+import { mindNProgressRunnerManager } from '@process/startup/bootstrap/mindnprogressRunner';
+import type { MaintenanceController } from '@process/services/database/maintenance/MaintenanceController';
 
 let mainWindowRef: BrowserWindow | null = null;
+
+/** Keeps progress available over native IPC while the backend is stopped. */
+export function registerDatabaseMaintenanceBridge(controller: MaintenanceController): void {
+  ipcBridge.application.databaseMaintenanceStatus.provider(() => controller.getStatus());
+  ipcBridge.application.databaseMaintenanceStart.provider((request) => controller.start(request?.action));
+}
 
 const START_ON_BOOT_UNSUPPORTED_MESSAGE = 'Start on boot is only available in packaged macOS and Windows apps.';
 export const START_ON_BOOT_WINDOWS_ARG = '--start-on-boot';
@@ -95,11 +105,45 @@ export function setStartOnBootEnabled(enabled: boolean): IStartOnBootStatus {
 
 export function setApplicationMainWindow(win: BrowserWindow): void {
   mainWindowRef = win;
+  setTaskbarBadgeWindow(win);
 }
 
 export function initApplicationBridge(): void {
   // Platform-agnostic handlers: systemInfo, updateSystemInfo, getPath
   initApplicationBridgeCore();
+
+  mindNProgressRunnerManager.onStatusChanged((status) => {
+    ipcBridge.application.mindNProgressRunnerStatusChanged.emit(status);
+  });
+
+  ipcBridge.application.getMindNProgressRunnerStatus.provider(async () => ({
+    success: true,
+    data: mindNProgressRunnerManager.getStatus(),
+  }));
+
+  ipcBridge.application.pairMindNProgressRunner.provider(async (request) => {
+    try {
+      return { success: true, data: await mindNProgressRunnerManager.pair(request) };
+    } catch (error) {
+      return { success: false, msg: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  ipcBridge.application.restartMindNProgressRunner.provider(async () => {
+    try {
+      return { success: true, data: await mindNProgressRunnerManager.restart() };
+    } catch (error) {
+      return { success: false, msg: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  ipcBridge.application.disconnectMindNProgressRunner.provider(async () => {
+    try {
+      return { success: true, data: await mindNProgressRunnerManager.disconnect() };
+    } catch (error) {
+      return { success: false, msg: error instanceof Error ? error.message : String(error) };
+    }
+  });
 
   ipcBridge.application.restart.provider(async () => {
     // Backend subprocess shutdown is handled by backendManager.stop() in the
@@ -148,6 +192,8 @@ export function initApplicationBridge(): void {
   });
 
   ipcBridge.application.getZoomFactor.provider(() => Promise.resolve(getZoomFactor()));
+
+  ipcBridge.application.getClipboardFilePaths.provider(() => readClipboardFilePaths());
 
   ipcBridge.application.setZoomFactor.provider(async ({ factor }) => {
     const updatedFactor = setZoomFactor(factor);
@@ -281,5 +327,9 @@ export function initApplicationBridge(): void {
     } catch (e) {
       return { success: false, msg: e.message || e.toString() };
     }
+  });
+
+  ipcBridge.application.setTaskbarBadge.provider(async ({ count, iconDataUrl }) => {
+    applyTaskbarBadge(Math.max(0, Math.floor(count)), iconDataUrl);
   });
 }

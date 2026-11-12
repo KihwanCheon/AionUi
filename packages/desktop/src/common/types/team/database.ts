@@ -9,10 +9,8 @@ export interface IMessageSearchItem {
   preview_text: string;
 }
 
-export interface IMessageSearchResponse {
+export type IMessageSearchResponse = {
   items: IMessageSearchItem[];
-  total: number;
-  page: number;
-  page_size: number;
   has_more: boolean;
-}
+  next_cursor: string | null;
+};

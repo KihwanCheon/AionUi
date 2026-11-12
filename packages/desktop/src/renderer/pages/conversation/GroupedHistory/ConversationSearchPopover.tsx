@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import type { TChatConversation } from '@/common/config/storage';
 import type { IMessageSearchItem } from '@/common/types/team/database';
 import AionModal from '@/renderer/components/base/AionModal';
 import { AionSearchInput } from '@/renderer/components/base';
@@ -13,45 +14,76 @@ import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistan
 import { useAgentLogos } from '@/renderer/utils/model/agentLogo';
 import ThemedLogo from '@/renderer/components/agent/ThemedLogo';
 import { resolveConversationLeadingMark } from '@/renderer/pages/conversation/utils/conversationAssistantIdentity';
+import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
+import { ConversationClaudeAccountBadge } from '@/renderer/pages/conversation/platforms/acp/claudeAccounts';
 import { blockMobileInputFocus, blurActiveElement } from '@/renderer/utils/ui/focus';
 import { isPrimaryApplicationShortcut } from '@/renderer/utils/ui/keyboardShortcuts';
-import { Empty, Spin, Typography } from '@arco-design/web-react';
+import { getParentAndCurrentDir } from '@/renderer/utils/workspace/projectPathLabel';
+import { Button, Checkbox, Empty, Spin, Tooltip, Typography } from '@arco-design/web-react';
 import { Close, MessageOne, Robot, Search } from '@icon-park/react';
 import classNames from 'classnames';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import MindNProgressTitle from './components/MindNProgressTitle';
+import { useConversationListPresence } from './hooks/useConversationListSync';
 import './ConversationSearchPopover.css';
 
 const PAGE_SIZE = 20;
 const MAX_RECENT_SEARCHES = 8;
 const RECENT_SEARCH_STORAGE_KEY = 'conversation.historySearch.recentKeywords';
+const MATCH_ALL_STORAGE_KEY = 'conversation.historySearch.matchAll';
 const SNIPPET_MAX_LENGTH = 110;
 const SNIPPET_PREFIX_CONTEXT_LENGTH = 34;
 const SNIPPET_SUFFIX_CONTEXT_LENGTH = 58;
 
+type ConversationSearchResult = Omit<IMessageSearchItem, 'message_id' | 'message_type'> & { message_id?: string };
+
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const buildSnippet = (text: string, keyword: string, maxLength = SNIPPET_MAX_LENGTH): string => {
+/** Whitespace-separated AND terms without case-insensitive repeats. */
+const splitSearchTerms = (keyword: string): string[] => {
+  const terms: string[] = [];
+  for (const term of keyword.trim().split(/\s+/)) {
+    if (term && !terms.some((existing) => existing.toLowerCase() === term.toLowerCase())) terms.push(term);
+  }
+  return terms;
+};
+
+const readStoredMatchAll = (): boolean => {
+  try {
+    return localStorage.getItem(MATCH_ALL_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+const buildSnippet = (text: string, terms: string[], maxLength = SNIPPET_MAX_LENGTH): string => {
   const normalized = text.replace(/\s+/g, ' ').trim();
   if (!normalized) return '';
-  if (!keyword.trim()) {
-    return normalized.length > maxLength ? `${normalized.slice(0, maxLength).trimEnd()}...` : normalized;
-  }
 
+  // Center the snippet on the earliest term so AND results show a match.
   const lowerText = normalized.toLowerCase();
-  const lowerKeyword = keyword.trim().toLowerCase();
-  const matchIndex = lowerText.indexOf(lowerKeyword);
+  let matchIndex = -1;
+  let matchLength = 0;
+  for (const term of terms) {
+    const lowerTerm = term.trim().toLowerCase();
+    const index = lowerTerm ? lowerText.indexOf(lowerTerm) : -1;
+    if (index !== -1 && (matchIndex === -1 || index < matchIndex)) {
+      matchIndex = index;
+      matchLength = lowerTerm.length;
+    }
+  }
   if (matchIndex === -1) {
     return normalized.length > maxLength ? `${normalized.slice(0, maxLength).trimEnd()}...` : normalized;
   }
 
   let start = Math.max(0, matchIndex - SNIPPET_PREFIX_CONTEXT_LENGTH);
-  let end = Math.min(normalized.length, matchIndex + lowerKeyword.length + SNIPPET_SUFFIX_CONTEXT_LENGTH);
+  let end = Math.min(normalized.length, matchIndex + matchLength + SNIPPET_SUFFIX_CONTEXT_LENGTH);
 
   if (end - start > maxLength) {
-    const centeredStart = Math.max(0, matchIndex - Math.floor((maxLength - lowerKeyword.length) / 2));
+    const centeredStart = Math.max(0, matchIndex - Math.floor((maxLength - matchLength) / 2));
     start = Math.min(centeredStart, Math.max(0, normalized.length - maxLength));
     end = Math.min(normalized.length, start + maxLength);
   }
@@ -60,17 +92,20 @@ const buildSnippet = (text: string, keyword: string, maxLength = SNIPPET_MAX_LEN
   return `${start > 0 ? '...' : ''}${snippet}${end < normalized.length ? '...' : ''}`;
 };
 
-const renderHighlightedText = (text: string, keyword: string) => {
-  if (!keyword.trim()) {
+const renderHighlightedText = (text: string, terms: string[]) => {
+  const activeTerms = terms.map((term) => term.trim()).filter(Boolean);
+  if (activeTerms.length === 0) {
     return text;
   }
 
-  const pattern = new RegExp(`(${escapeRegExp(keyword.trim())})`, 'ig');
+  // Try longer terms first so a shorter prefix does not split a longer match.
+  const alternatives = activeTerms.toSorted((a, b) => b.length - a.length).map(escapeRegExp);
+  const pattern = new RegExp(`(${alternatives.join('|')})`, 'ig');
   const parts = text.split(pattern);
-  const lowerKeyword = keyword.trim().toLowerCase();
+  const lowerTerms = new Set(activeTerms.map((term) => term.toLowerCase()));
 
   return parts.map((part, index) => {
-    if (part.toLowerCase() !== lowerKeyword) {
+    if (!lowerTerms.has(part.toLowerCase())) {
       return <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
     }
 
@@ -141,15 +176,40 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
 }) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const { activeConversationIds, hasCompleteConversationList, refreshConversationListPresence } =
+    useConversationListPresence();
   const [visible, setVisible] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [debouncedKeyword, setDebouncedKeyword] = useState('');
   const [items, setItems] = useState<IMessageSearchItem[]>([]);
-  const [page, setPage] = useState(0);
+  const [idMatch, setIdMatch] = useState<TChatConversation | null>(null);
+  const [idLoading, setIdLoading] = useState(false);
+  const searchGeneration = useRef(0);
+  const nextCursor = useRef<string | undefined>(undefined);
+  const searchInFlight = useRef(false);
+  const seenMessageIds = useRef(new Set<string>());
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
   const [recentKeywords, setRecentKeywords] = useState<string[]>([]);
+  const [matchAll, setMatchAll] = useState(readStoredMatchAll);
+  const searchTerms = useMemo(
+    () => (matchAll ? splitSearchTerms(debouncedKeyword) : [debouncedKeyword].filter(Boolean)),
+    [debouncedKeyword, matchAll]
+  );
+  // A keyword without spaces is an ordinary search; keep that request unchanged.
+  // The backend drops repeated terms, so only spacing decides the AND request.
+  const matchAllTerms = matchAll && /\s/.test(debouncedKeyword);
+
+  const handleMatchAllChange = useCallback((checked: boolean) => {
+    setMatchAll(checked);
+    try {
+      localStorage.setItem(MATCH_ALL_STORAGE_KEY, String(checked));
+    } catch {
+      // Ignore storage write errors in private mode / restricted environments.
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -173,49 +233,116 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
     return () => window.clearTimeout(timer);
   }, [keyword]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setIdMatch(null);
+    // Current IDs are eight hex characters; also allow legacy safe ID tokens.
+    // Do not pass free text, slashes or query delimiters into the detail route.
+    const candidate =
+      visible && keyword.trim() === debouncedKeyword && /^[a-z\d][a-z\d_-]{7,127}$/i.test(debouncedKeyword)
+        ? debouncedKeyword
+        : null;
+    setIdLoading(candidate !== null);
+    if (candidate) {
+      const id = /^[a-f\d]{8}$/i.test(candidate) ? candidate.toLowerCase() : candidate;
+      void getConversationOrNull(id)
+        .then((conversation) => {
+          if (!cancelled) setIdMatch(conversation);
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) console.error('[ConversationSearchPopover] ID lookup failed:', error);
+        })
+        .finally(() => {
+          if (!cancelled) setIdLoading(false);
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedKeyword, keyword, visible]);
+
   const runSearch = useCallback(
-    async (pageToLoad: number, append: boolean) => {
-      if (!debouncedKeyword) {
-        setItems([]);
-        setPage(0);
-        setHasMore(false);
-        return;
-      }
+    async (append: boolean) => {
+      if (!visible || !debouncedKeyword || searchInFlight.current) return;
+      searchInFlight.current = true;
+      const generation = ++searchGeneration.current;
+      const isCurrent = () => generation === searchGeneration.current;
+      setSearchFailed(false);
 
       if (append) {
         setLoadingMore(true);
       } else {
         setLoading(true);
+        setItems([]);
+        setHasMore(false);
+        nextCursor.current = undefined;
+        seenMessageIds.current.clear();
       }
 
       try {
-        const result = await ipcBridge.database.searchConversationMessages.invoke({
-          keyword: debouncedKeyword,
-          page: pageToLoad,
-          page_size: PAGE_SIZE,
-        });
+        let remaining = PAGE_SIZE;
+        while (isCurrent()) {
+          const cursor = nextCursor.current;
+          // Each scan depends on the cursor returned by its predecessor.
+          // eslint-disable-next-line no-await-in-loop
+          const result = await ipcBridge.database.searchConversationMessages.invoke({
+            keyword: debouncedKeyword,
+            cursor,
+            page_size: remaining,
+            ...(matchAllTerms ? { match_all: true } : {}),
+          });
+          if (!isCurrent()) return;
 
-        setItems((prev) => (append ? [...prev, ...result.items] : result.items));
-        setPage(pageToLoad);
-        setHasMore(result.has_more);
-      } catch (error) {
-        console.error('[ConversationSearchPopover] Search failed:', error);
-        if (!append) {
-          setItems([]);
-          setPage(0);
-          setHasMore(false);
+          const newItems = result.items.filter((item) => {
+            if (seenMessageIds.current.has(item.message_id)) return false;
+            seenMessageIds.current.add(item.message_id);
+            return true;
+          });
+          // Publish hits before inspecting older ranges, including sparse ones.
+          if (newItems.length) setItems((prev) => [...prev, ...newItems]);
+          if (result.has_more && (!result.next_cursor || result.next_cursor === cursor)) {
+            throw new Error('Message search did not advance its cursor');
+          }
+          nextCursor.current = result.next_cursor ?? undefined;
+          setHasMore(result.has_more);
+          remaining -= result.items.length;
+          if (!result.has_more || remaining <= 0) break;
+          // Yield between bounded scans; a closed/replaced search cannot start
+          // another request, and React can paint partial results immediately.
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
         }
+      } catch (error) {
+        if (!isCurrent()) return;
+        console.error('[ConversationSearchPopover] Search failed:', error);
+        setSearchFailed(true);
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (isCurrent()) {
+          searchInFlight.current = false;
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
-    [debouncedKeyword]
+    [debouncedKeyword, matchAllTerms, visible]
   );
 
   useEffect(() => {
-    void runSearch(0, false);
-  }, [runSearch]);
+    searchGeneration.current += 1;
+    searchInFlight.current = false;
+    nextCursor.current = undefined;
+    seenMessageIds.current.clear();
+    setItems([]);
+    setHasMore(false);
+    setLoading(false);
+    setLoadingMore(false);
+    setSearchFailed(false);
+    if (keyword.trim() === debouncedKeyword) void runSearch(false);
+    return () => {
+      searchGeneration.current += 1;
+      searchInFlight.current = false;
+    };
+  }, [debouncedKeyword, keyword, runSearch]);
 
   useEffect(() => {
     if (!debouncedKeyword) return;
@@ -241,26 +368,28 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
   }, [debouncedKeyword]);
 
   const resetSearchState = useCallback(() => {
+    searchGeneration.current += 1;
     setVisible(false);
     setKeyword('');
     setDebouncedKeyword('');
     setItems([]);
-    setPage(0);
+    setIdMatch(null);
+    nextCursor.current = undefined;
     setHasMore(false);
     setLoading(false);
     setLoadingMore(false);
   }, []);
 
   const handleLoadMore = useCallback(() => {
-    if (!visible || !debouncedKeyword || loading || loadingMore || !hasMore) {
+    if (!visible || !debouncedKeyword || loading || loadingMore || !hasMore || searchFailed) {
       return;
     }
 
-    void runSearch(page + 1, true);
-  }, [debouncedKeyword, hasMore, loading, loadingMore, page, runSearch, visible]);
+    void runSearch(true);
+  }, [debouncedKeyword, hasMore, loading, loadingMore, runSearch, searchFailed, visible]);
 
   const handleResultClick = useCallback(
-    async (item: IMessageSearchItem) => {
+    async (item: ConversationSearchResult) => {
       blockMobileInputFocus();
       blurActiveElement();
 
@@ -273,7 +402,7 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
       await Promise.resolve(
         navigate(`/conversation/${item.conversation.id}`, {
           state: {
-            targetMessageId: item.message_id,
+            ...(item.message_id ? { targetMessageId: item.message_id } : {}),
             fromConversationSearch: true,
           },
         })
@@ -288,10 +417,12 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
   }, [resetSearchState]);
 
   const handleClearKeyword = useCallback(() => {
+    searchGeneration.current += 1;
     setKeyword('');
     setDebouncedKeyword('');
     setItems([]);
-    setPage(0);
+    setIdMatch(null);
+    nextCursor.current = undefined;
     setHasMore(false);
     setLoading(false);
     setLoadingMore(false);
@@ -299,9 +430,10 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
 
   const handleOpen = useCallback(() => {
     if (!disabled) {
+      refreshConversationListPresence();
       setVisible(true);
     }
-  }, [disabled]);
+  }, [disabled, refreshConversationListPresence]);
 
   useEffect(() => {
     const handleGlobalSearchShortcut = (event: KeyboardEvent) => {
@@ -329,6 +461,21 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
 
   const triggerAriaLabel = t('conversation.historySearch.tooltip');
 
+  const results = useMemo<ConversationSearchResult[]>(
+    () =>
+      idMatch
+        ? [
+            {
+              conversation: idMatch,
+              message_created_at: idMatch.modified_at,
+              preview_text: t('conversation.historySearch.conversationIdMatch', { id: idMatch.id }),
+            },
+            ...items,
+          ]
+        : items,
+    [idMatch, items, t]
+  );
+
   const resultContent = useMemo(() => {
     if (!debouncedKeyword) {
       return (
@@ -354,7 +501,7 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
       );
     }
 
-    if (loading && items.length === 0) {
+    if ((loading || loadingMore || idLoading || keyword.trim() !== debouncedKeyword) && results.length === 0) {
       return (
         <div className='h-120px flex items-center justify-center'>
           <Spin size={20} />
@@ -362,7 +509,18 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
       );
     }
 
-    if (items.length === 0) {
+    const retrySearch = searchFailed ? (
+      <div role='alert' className='py-8px flex items-center justify-center gap-8px text-12px text-t-secondary'>
+        <span>{t('common.error')}</span>
+        <Button type='text' onClick={() => void runSearch(true)}>
+          {t('common.retry')}
+        </Button>
+      </div>
+    ) : null;
+
+    if (results.length === 0 && searchFailed) return retrySearch;
+
+    if (results.length === 0) {
       return (
         <div className='conversation-search-modal__state'>
           <Empty className='py-2px' description={t('conversation.historySearch.empty')} />
@@ -381,14 +539,28 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
         }}
       >
         <div className='conversation-search-modal__results flex flex-col'>
-          {items.map((item) => {
-            const snippet = buildSnippet(item.preview_text, debouncedKeyword);
+          {results.map((item) => {
+            const snippet = buildSnippet(item.preview_text, searchTerms);
+            const active = activeConversationIds.has(item.conversation.id);
+            const extra = item.conversation.extra;
+            const workspace = extra?.workspace;
+            const isTemporary = extra && 'is_temporary_workspace' in extra && extra.is_temporary_workspace === true;
+            const hasProject =
+              !isTemporary && Boolean(item.conversation.project_id || (extra?.custom_workspace && workspace));
+            const locationLabel = active
+              ? hasProject
+                ? t('conversation.historySearch.locationProject')
+                : t('conversation.historySearch.locationChats')
+              : hasCompleteConversationList
+                ? t('conversation.historySearch.locationArchived')
+                : undefined;
+            const projectPath = active && hasProject && workspace ? getParentAndCurrentDir(workspace) : undefined;
             return (
-              <button
-                key={`${item.message_id}-${item.message_created_at}`}
-                type='button'
+              <Button
+                key={item.message_id ? `message:${item.message_id}` : `conversation:${item.conversation.id}`}
+                type='text'
                 className={classNames(
-                  'conversation-search-modal__result w-full text-start cursor-pointer transition-all duration-150',
+                  'conversation-search-modal__result w-full !h-auto !block !whitespace-normal !text-start !rounded-none cursor-pointer transition-all duration-150',
                   'focus:outline-none'
                 )}
                 onClick={() => {
@@ -398,9 +570,14 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
                 <div className='flex items-start justify-between gap-8px mb-6px'>
                   <div className='min-w-0 flex-1'>
                     <div className='conversation-search-modal__result-title-row'>
-                      <ConversationAgentMark conversation={item.conversation} />
+                      <span className='relative inline-flex flex-shrink-0'>
+                        <ConversationAgentMark conversation={item.conversation} />
+                        <ConversationClaudeAccountBadge conversation={item.conversation} />
+                      </span>
                       <div className='conversation-search-modal__result-title text-15px font-600 text-t-primary truncate'>
-                        {item.conversation.name || t('conversation.historySearch.untitled')}
+                        <MindNProgressTitle conversationId={item.conversation.id}>
+                          {item.conversation.name || t('conversation.historySearch.untitled')}
+                        </MindNProgressTitle>
                       </div>
                     </div>
                   </div>
@@ -408,26 +585,60 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
                     {formatTime(item.message_created_at, i18n.language)}
                   </span>
                 </div>
+                {locationLabel ? (
+                  <div className='mb-4px flex items-start gap-4px text-11px text-t-secondary'>
+                    <span className='shrink-0'>{locationLabel}</span>
+                    {projectPath ? (
+                      <span className='min-w-0 break-all' title={workspace}>
+                        · {projectPath}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className='conversation-search-modal__snippet text-13px leading-22px text-t-primary/92 break-words'>
-                  {renderHighlightedText(snippet, debouncedKeyword)}
+                  {renderHighlightedText(snippet, searchTerms)}
                 </div>
-              </button>
+              </Button>
             );
           })}
 
-          {loadingMore && (
+          {(loading || loadingMore) && (
             <div className='py-8px flex items-center justify-center gap-8px text-12px text-t-secondary'>
               <Spin size={14} />
               <span>{t('conversation.historySearch.loadingMore')}</span>
             </div>
           )}
+          {retrySearch}
+          {hasMore && !loading && !loadingMore && !searchFailed && (
+            <Button type='text' onClick={handleLoadMore}>
+              {t('common.more')}
+            </Button>
+          )}
         </div>
       </div>
     );
-  }, [debouncedKeyword, handleLoadMore, handleResultClick, items, loading, loadingMore, recentKeywords, t]);
+  }, [
+    debouncedKeyword,
+    keyword,
+    handleLoadMore,
+    handleResultClick,
+    results,
+    activeConversationIds,
+    hasCompleteConversationList,
+    loading,
+    idLoading,
+    loadingMore,
+    hasMore,
+    runSearch,
+    searchFailed,
+    searchTerms,
+    recentKeywords,
+    t,
+    i18n.language,
+  ]);
 
-  const hasSearchResults = items.length > 0;
-  const useCompactHeight = !debouncedKeyword || (!loading && !hasSearchResults);
+  const hasSearchResults = results.length > 0;
+  const useCompactHeight = !debouncedKeyword || (!loading && !loadingMore && !idLoading && !hasSearchResults);
   const triggerClassName = fullWidth
     ? 'conversation-search-trigger-full h-34px w-full p-0 bg-transparent border-none outline-none flex items-center justify-start gap-8px ps-10px pe-8px rd-0.5rem cursor-pointer shrink-0 transition-all group text-t-primary focus:outline-none focus-visible:outline-none'
     : 'h-34px w-34px p-0 bg-transparent rd-0.5rem flex items-center justify-center cursor-pointer shrink-0 transition-all border border-solid border-transparent text-t-secondary hover:text-t-primary';
@@ -528,15 +739,20 @@ const ConversationSearchPopover: React.FC<ConversationSearchPopoverProps> = ({
             </button>
           </div>
 
-          <div className='mb-14px conversation-search-modal__input-wrap'>
+          <div className='mb-14px conversation-search-modal__input-wrap flex items-center gap-12px'>
             <AionSearchInput
-              className='w-full'
+              className='flex-1 min-w-0'
               autoFocus={visible}
               value={keyword}
               placeholder={t('conversation.historySearch.placeholder')}
               onChange={setKeyword}
               onClear={handleClearKeyword}
             />
+            <Tooltip content={t('conversation.historySearch.matchAllTooltip')}>
+              <Checkbox className='shrink-0 whitespace-nowrap' checked={matchAll} onChange={handleMatchAllChange}>
+                {t('conversation.historySearch.matchAll')}
+              </Checkbox>
+            </Tooltip>
           </div>
 
           <div className='flex-1 min-h-0'>{resultContent}</div>

@@ -1,4 +1,13 @@
 {
+  "externalLaunch": {
+    "loading": "正在准备请求的对话...",
+    "errorTitle": "无法开始对话",
+    "notFoundOrExpired": "此启动请求无效、已过期或已完成。",
+    "alreadyUsed": "此对话启动请求已被使用。",
+    "unavailableOptions": "请求的智能体、模型、技能或 MCP 工具不可用。",
+    "loadFailed": "无法加载对话启动请求，请重试。",
+    "callbackPending": "对话已创建，但无法通知关联应用，可能需要重试。"
+  },
   "promptExamplesHint": "试试这些指令",
   "defaultPrompts": {
     "understand": "了解一下这个项目，用大白话告诉我它是做什么的、从哪里入手",
@@ -13,5 +22,8 @@
     "specifyWorkspace": "选择项目文件夹",
     "searchPlaceholder": "搜索项目…",
     "noProject": "不使用项目"
+  },
+  "claudeAccount": {
+    "label": "Claude 账号"
   }
 }

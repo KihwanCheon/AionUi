@@ -10,8 +10,8 @@ import { Drag } from '@icon-park/react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
-import ConversationRow from './ConversationRow';
-import type { ConversationRowProps } from './types';
+import ConversationRow from '../ConversationRow';
+import type { ConversationRowProps } from '../types';
 
 const SortableConversationRow: React.FC<ConversationRowProps> = (props) => {
   const { t } = useTranslation();
@@ -41,7 +41,7 @@ const SortableConversationRow: React.FC<ConversationRowProps> = (props) => {
       {...attributes}
       {...listeners}
       role='button'
-      aria-label={t('conversation.history.reorderPinned')}
+      aria-label={t('conversation.history.reorderBookmarks')}
       data-testid={`conversation-drag-handle-${props.conversation.id}`}
       className={`absolute inset-0 flex-center text-t-secondary transition-opacity ${
         isDragging ? 'opacity-100 cursor-grabbing' : 'opacity-0 group-hover:opacity-100 cursor-grab'

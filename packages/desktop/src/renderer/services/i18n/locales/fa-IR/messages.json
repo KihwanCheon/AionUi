@@ -1,4 +1,10 @@
 {
+  "userQuestion": {
+    "fallback": "تأیید شما لازم است. لطفاً محتوای بالا را بررسی کنید.",
+    "prose": "درخواست پاسخ",
+    "choice": "درخواست پاسخ · انتخاب گزینه",
+    "freeText": "درخواست پاسخ · متن آزاد"
+  },
   "fileChanges": "تغییرات فایل",
   "fileChangesCount": "{{count}} تغییر فایل",
   "fileChangesCount_one": "{{count}} تغییر فایل",
@@ -7,6 +13,20 @@
   "confirm": "تأیید",
   "canceledExecution": "اجرا لغو شد",
   "openLinkFailed": "باز کردن لینک ناموفق بود",
+  "mindnprogress": {
+    "openLinkedCard": "باز کردن کارت پیوندخوردهٔ MindNProgress",
+    "selectionFailed": "کارت پیوندخوردهٔ MindNProgress انتخاب نشد.",
+    "titleSyncTooltip": "همگام‌سازی با عنوان MindNProgress: {{title}}",
+    "titleSyncSuccess": "عنوان گفتگو با MindNProgress همگام شد.",
+    "titleSyncFailed": "عنوان گفتگو با MindNProgress همگام نشد.",
+    "roleCoordinator": "هماهنگ‌کننده گروه",
+    "roleRoot": "والد",
+    "roleAuxiliary": "کمکی",
+    "rolePrimaryTooltip": "گفتگوی اصلی این کارت",
+    "roleAuxiliaryTooltip": "گفتگوی کمکی این کارت",
+    "roleNoPrimaryTooltip": "گفتگوی کمکی این کارت · گفتگوی اصلی تعیین نشده",
+    "roleUnknownTooltip": "نقش اصلی یا کمکی تأیید نشده"
+  },
   "imageGenerationModelDetected": "مدل تصویر شناسایی شد، ابزار تصویر به‌صورت خودکار فعال شد. مدل پیش‌فرض: {{platform}}:{{model}}",
   "auto_handling_permissions": "پردازش خودکار درخواست مجوز: {{request}}",
   "copy": "کپی",
@@ -92,6 +112,7 @@
   "askDecline": "پاسخ ندادن",
   "askAnswered": "پاسخ داده شد",
   "askDeclined": "رد شد",
+  "askClosed": "این پرسش دیگر منتظر پاسخ نیست.",
   "askOther": "سایر",
   "askOtherPlaceholder": "پاسخ خود را بنویسید",
   "requestDetails": "جزئیات درخواست:",

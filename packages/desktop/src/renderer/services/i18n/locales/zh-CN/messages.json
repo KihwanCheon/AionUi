@@ -1,4 +1,10 @@
 {
+  "userQuestion": {
+    "fallback": "需要您的确认。请查看上方内容。",
+    "prose": "回答请求",
+    "choice": "回答请求 · 选项",
+    "freeText": "回答请求 · 自由输入"
+  },
   "fileChanges": "文件变更",
   "fileChangesCount": "{{count}} 个文件变更",
   "fileChangesCount_one": "{{count}} 个文件变更",
@@ -7,6 +13,20 @@
   "confirm": "确认",
   "canceledExecution": "已取消执行",
   "openLinkFailed": "打开链接失败",
+  "mindnprogress": {
+    "openLinkedCard": "打开关联的 MindNProgress 卡片",
+    "selectionFailed": "无法选择关联的 MindNProgress 卡片。",
+    "titleSyncTooltip": "同步为 MindNProgress 标题：{{title}}",
+    "titleSyncSuccess": "对话标题已与 MindNProgress 同步。",
+    "titleSyncFailed": "无法将对话标题与 MindNProgress 同步。",
+    "roleCoordinator": "组协调",
+    "roleRoot": "上级",
+    "roleAuxiliary": "辅助",
+    "rolePrimaryTooltip": "此卡片的主对话",
+    "roleAuxiliaryTooltip": "此卡片的辅助对话",
+    "roleNoPrimaryTooltip": "此卡片的辅助对话 · 尚未指定主对话",
+    "roleUnknownTooltip": "主对话/辅助角色未确认"
+  },
   "imageGenerationModelDetected": "检测到图片模型，已自动开启图片工具，设置为默认模型：{{platform}}:{{model}}",
   "auto_handling_permissions": "自动处理权限请求：{{request}}",
   "copy": "复制",
@@ -92,6 +112,7 @@
   "askDecline": "不回答",
   "askAnswered": "已回答",
   "askDeclined": "已跳过",
+  "askClosed": "此问题已不再等待回答。",
   "askOther": "其它",
   "askOtherPlaceholder": "输入你的回答",
   "requestDetails": "请求内容：",

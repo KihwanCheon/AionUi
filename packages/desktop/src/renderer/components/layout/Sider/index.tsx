@@ -224,7 +224,10 @@ const Sider: React.FC<SiderProps> = ({ onSessionClick, collapsed = false }) => {
               )}
             />
             {/* Scrollable content: pinned → team (slot) → projects → conversations */}
-            <div className={classNames('flex-1 min-h-0 overflow-y-auto', siderStyles.scrollArea)}>
+            <div
+              data-conversation-scroll
+              className={classNames('flex-1 min-h-0 overflow-y-auto', siderStyles.scrollArea)}
+            >
               <Suspense fallback={<div className='min-h-200px' />}>
                 <WorkspaceGroupedHistory
                   {...workspaceHistoryProps}

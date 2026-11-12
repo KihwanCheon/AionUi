@@ -176,5 +176,15 @@
     "conversationNotFound": "Konuşma bulunamadı",
     "scheduledTimePassed": "Zamanlanmış saat geçti",
     "conversationBusy": "Konuşma meşgul, {{count}} denemeden sonra atlandı"
+  },
+  "backup": {
+    "backup": "Yedekle",
+    "restore": "Geri Yükle",
+    "backupEmpty": "Yedeklenecek zamanlanmış görev yok",
+    "backupSuccess": "{{count}} zamanlanmış görev yedeklendi",
+    "backupFailed": "Zamanlanmış görevler yedeklenemedi",
+    "restoreSuccess": "Geri yüklendi: {{imported}} yeni, {{updated}} üzerine yazıldı, {{skipped}} başarısız",
+    "restoreInvalid": "Geçerli bir zamanlanmış görev yedek dosyası değil",
+    "restoreFailed": "Zamanlanmış görevler geri yüklenemedi"
   }
 }

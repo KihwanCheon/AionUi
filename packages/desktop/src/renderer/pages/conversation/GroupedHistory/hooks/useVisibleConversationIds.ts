@@ -3,18 +3,22 @@ import { useConversationHistoryContext } from '@/renderer/hooks/context/Conversa
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { buildVisibleConversationIds } from '../utils/visibleConversationOrder';
 import { useWorkspaceExpansionState } from './useWorkspaceExpansionState';
+import { useProjectPins } from '../ProjectPins';
 
 export const useVisibleConversationIds = (): string[] => {
   const layout = useLayoutContext();
   const siderCollapsed = layout?.siderCollapsed ?? false;
-  const { groupedHistory } = useConversationHistoryContext();
+  const { groupedHistory, historyView } = useConversationHistoryContext();
   const expandedWorkspaces = useWorkspaceExpansionState();
+  const { pinnedWorkspaces } = useProjectPins();
 
   return useMemo(() => {
     return buildVisibleConversationIds({
       ...groupedHistory,
       expandedWorkspaces,
+      historyView,
       siderCollapsed,
+      pinnedWorkspaces,
     });
-  }, [groupedHistory, expandedWorkspaces, siderCollapsed]);
+  }, [groupedHistory, expandedWorkspaces, historyView, siderCollapsed, pinnedWorkspaces]);
 };

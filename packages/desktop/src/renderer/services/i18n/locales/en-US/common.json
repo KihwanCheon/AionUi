@@ -202,5 +202,17 @@
   },
   "selectedCount": "Selected {{count}}",
   "selectedSkills": "Selected skills",
-  "aiAssistant": "AI Assistant"
+  "aiAssistant": "AI Assistant",
+  "claudeUsage": {
+    "refreshDelayed": "Refresh delayed",
+    "title": "Claude Usage",
+    "codexTitle": "Codex Usage",
+    "session": "5-hour limit",
+    "weekly": "Weekly (all models)",
+    "resets": "Resets {{time}}",
+    "reached": "Usage limit reached",
+    "ok": "Within limit",
+    "approaching": "Approaching limit",
+    "noData": "No usage data yet"
+  }
 }

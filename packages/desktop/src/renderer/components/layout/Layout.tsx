@@ -7,6 +7,7 @@
 import { ipcBridge } from '@/common';
 import { TEAM_MODE_ENABLED } from '@/common/config/constants';
 import PwaPullToRefresh from '@/renderer/components/layout/PwaPullToRefresh';
+import TaskbarBadgeSync from '@/renderer/components/layout/Taskbar';
 import Titlebar from '@/renderer/components/layout/Titlebar';
 import { Layout as ArcoLayout, Tooltip } from '@arco-design/web-react';
 import classNames from 'classnames';
@@ -20,6 +21,7 @@ import { ProjectPanelMobileOverlay } from '@renderer/components/layout/ProjectPa
 import { setCurrentProject, useCurrentProject } from '@renderer/pages/conversation/explorer/currentProjectStore';
 import { setCurrentConversation } from '@renderer/pages/conversation/explorer/currentConversationStore';
 import { useContainerWidth } from '@renderer/pages/conversation/hooks/useContainerWidth';
+import { useTabletPanelWidths } from '@renderer/pages/conversation/hooks/useTabletPanelWidths';
 import { useProjectExplorerColumnWidth } from '@renderer/hooks/ui/useProjectExplorerColumnWidth';
 import { useResizableSplit } from '@renderer/hooks/ui/useResizableSplit';
 import { useProjectPreviewRegionWidth } from '@renderer/hooks/ui/useProjectPreviewRegionWidth';
@@ -27,12 +29,12 @@ import { useProjectPanelCollapse } from '@renderer/hooks/ui/useProjectPanelColla
 import { dispatchWorkspaceToggleEvent } from '@renderer/utils/workspace/workspaceEvents';
 import { MIN_PREVIEW_PANEL_PX } from '@renderer/pages/conversation/utils/layoutCalc';
 import { PreviewPanel } from '@renderer/pages/conversation/Preview';
-import { LayoutContext } from '@renderer/hooks/context/LayoutContext';
 import { NavigationHistoryProvider } from '@renderer/hooks/context/NavigationHistoryContext';
 import { useDeepLink } from '@renderer/hooks/system/useDeepLink';
 import { useNotificationClick } from '@renderer/hooks/system/notification/useNotificationClick';
 import { useBrowserNotification } from '@renderer/hooks/system/notification/useBrowserNotification';
 import { useDesktopTurnNotification } from '@renderer/hooks/system/notification/useDesktopTurnNotification';
+import { ChoiceNotificationLayoutProvider } from '@renderer/hooks/context/UserChoiceNotifications';
 import { cleanupSiderTooltips } from '@renderer/utils/ui/siderTooltip';
 import { useConversationShortcuts } from '@renderer/hooks/ui/useConversationShortcuts';
 import { isElectronDesktop } from '@renderer/utils/platform';
@@ -197,8 +199,11 @@ const Layout: React.FC<{
   const toggleExplorer = useCallback(() => {
     dispatchWorkspaceToggleEvent();
   }, []);
-  // Mobile overlay width: most of the viewport, capped.
-  const explorerMobileWidthPx = Math.min(420, Math.max(280, Math.round(viewportWidth * 0.85)));
+  // Phones keep the fixed overlay width; tablets restore their independently resized width.
+  const tabletPanels = useTabletPanelWidths(isMobile, viewportWidth);
+  const explorerMobileWidthPx = tabletPanels.resizable
+    ? tabletPanels.explorerWidthPx
+    : Math.min(420, Math.max(280, Math.round(viewportWidth * 0.85)));
   // P4 (②B): hoist the preview region to the Layout host for project
   // conversations so it is structurally persistent (no remount on same-project
   // switches). ChatLayout renders chat only in that case (previewHosted).
@@ -345,16 +350,20 @@ const Layout: React.FC<{
     };
   }, [navigate]);
 
-  const siderWidth = isMobile
-    ? Math.max(
-        MOBILE_SIDER_MIN_WIDTH,
-        Math.min(MOBILE_SIDER_MAX_WIDTH, Math.round(viewportWidth * MOBILE_SIDER_WIDTH_RATIO))
-      )
-    : desktopSiderWidth;
+  const siderWidth = tabletPanels.resizable
+    ? tabletPanels.siderWidthPx
+    : isMobile
+      ? Math.max(
+          MOBILE_SIDER_MIN_WIDTH,
+          Math.min(MOBILE_SIDER_MAX_WIDTH, Math.round(viewportWidth * MOBILE_SIDER_WIDTH_RATIO))
+        )
+      : desktopSiderWidth;
   useEffect(() => {
     collapsedRef.current = collapsed;
   }, [collapsed]);
 
+  // Mobile hides the overlay without changing its layout, preserving the list's scroll position.
+  const siderContentCollapsed = !isMobile && collapsed;
   const siderStyle = isMobile
     ? {
         position: 'fixed' as const,
@@ -363,6 +372,7 @@ const Layout: React.FC<{
         transform: collapsed ? 'translateX(-100%)' : 'translateX(0)',
         transition: 'none',
         pointerEvents: collapsed ? ('none' as const) : ('auto' as const),
+        visibility: collapsed ? ('hidden' as const) : ('visible' as const),
       }
     : {
         position: 'relative' as const,
@@ -370,8 +380,9 @@ const Layout: React.FC<{
       };
 
   return (
-    <LayoutContext.Provider value={{ isMobile, siderCollapsed: collapsed, setSiderCollapsed: setCollapsed }}>
+    <ChoiceNotificationLayoutProvider value={{ isMobile, siderCollapsed: collapsed, setSiderCollapsed: setCollapsed }}>
       <NavigationHistoryProvider>
+        <TaskbarBadgeSync />
         <div className='app-shell flex flex-col size-full min-h-0'>
           <Titlebar workspaceAvailable={workspaceAvailable} />
           {/* 移动端左侧边栏蒙板 / Mobile left sider backdrop */}
@@ -382,10 +393,10 @@ const Layout: React.FC<{
           <ArcoLayout className={'size-full layout flex-1 min-h-0'}>
             <ArcoLayout.Sider
               collapsedWidth={isMobile ? 0 : 0}
-              collapsed={collapsed}
+              collapsed={siderContentCollapsed}
               width={siderWidth}
               className={classNames('!bg-2 layout-sider', {
-                collapsed: collapsed,
+                collapsed: siderContentCollapsed,
               })}
               style={siderStyle}
             >
@@ -394,19 +405,19 @@ const Layout: React.FC<{
                   'flex items-center justify-start pt-8px pb-8px ps-18px pe-16px gap-12px layout-sider-header',
                   isMobile && 'layout-sider-header--mobile',
                   {
-                    'cursor-pointer group ': collapsed,
+                    'cursor-pointer group ': siderContentCollapsed,
                   }
                 )}
               >
                 <div
                   className={classNames('bg-black shrink-0 size-32px relative rd-0.5rem', {
-                    '!size-24px': collapsed,
+                    '!size-24px': siderContentCollapsed,
                   })}
                   onClick={onClick}
                 >
                   <svg
                     className={classNames('w-5.5 h-5.5 absolute inset-0 m-auto', {
-                      'scale-140': !collapsed,
+                      'scale-140': !siderContentCollapsed,
                     })}
                     viewBox='0 0 80 80'
                     fill='none'
@@ -448,7 +459,7 @@ const Layout: React.FC<{
                 ) : (
                   <div className='text-16px text-t-primary collapsed-hidden font-semibold'>AionUi</div>
                 )}
-                {isMobile && !collapsed && (
+                {isMobile && (
                   <button
                     type='button'
                     className='app-titlebar__button app-titlebar__button--mobile'
@@ -468,16 +479,24 @@ const Layout: React.FC<{
                         cleanupSiderTooltips();
                         if (isMobile) setCollapsed(true);
                       },
-                      collapsed,
+                      collapsed: siderContentCollapsed,
                     } as any)
                   : sider}
               </ArcoLayout.Content>
-              {!isMobile &&
-                createSiderDragHandle({
-                  className: 'z-20',
-                  style: { right: '-4px', width: '8px' },
-                  linePlacement: 'start',
-                })}
+              {!isMobile
+                ? createSiderDragHandle({
+                    className: 'z-20',
+                    style: { right: '-4px', width: '8px' },
+                    linePlacement: 'start',
+                  })
+                : tabletPanels.resizable
+                  ? tabletPanels.createSiderDragHandle({
+                      className: 'z-20',
+                      style: { right: '-12px', width: '24px' },
+                      linePlacement: 'start',
+                      lineClassName: 'opacity-45 group-active:opacity-100',
+                    })
+                  : null}
             </ArcoLayout.Sider>
 
             {/* Content + project Explorer share one measured flex row (stage3
@@ -572,12 +591,23 @@ const Layout: React.FC<{
                 collapsed={explorerCollapsed}
                 onCollapse={toggleExplorer}
                 widthPx={explorerMobileWidthPx}
+                dragHandle={
+                  tabletPanels.resizable
+                    ? tabletPanels.createExplorerDragHandle({
+                        className: 'absolute start-0 top-0 bottom-0 z-20',
+                        style: { width: '24px' },
+                        reverse: true,
+                        linePlacement: 'start',
+                        lineClassName: 'opacity-45 group-active:opacity-100',
+                      })
+                    : undefined
+                }
               />
             )}
           </ArcoLayout>
         </div>
       </NavigationHistoryProvider>
-    </LayoutContext.Provider>
+    </ChoiceNotificationLayoutProvider>
   );
 };
 

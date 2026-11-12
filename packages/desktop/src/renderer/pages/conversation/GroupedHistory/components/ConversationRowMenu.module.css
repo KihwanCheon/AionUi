@@ -1,0 +1,8 @@
+/* Conversation row context menu.
+ *
+ * The class lands on the dropdown menu root, which Arco caps at 200px. Let this
+ * menu size to its content while keeping the override local to the component. */
+.rowMenu {
+  max-height: none !important;
+  overflow: visible !important;
+}

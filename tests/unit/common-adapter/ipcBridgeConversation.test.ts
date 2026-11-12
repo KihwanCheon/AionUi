@@ -21,7 +21,7 @@ const httpBridgeMocks = vi.hoisted(() => {
         calls.push({
           method,
           path: resolvedPath,
-          body: mapBody && params !== undefined ? mapBody(params as Params) : undefined,
+          body: typeof mapBody === 'function' && params !== undefined ? mapBody(params as Params) : undefined,
         });
         return true as Data;
       }),

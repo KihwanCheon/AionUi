@@ -59,6 +59,8 @@
 
 ---
 
+> **개인 fork 기능:** Windows AionUi의 확인 요청을 휴대폰으로 받으려면 [Android 푸시 알리미 설치·연결 안내(한국어)](./packages/notifier-android/README.md)를 참고하세요. 본인 Firebase 프로젝트를 준비해 사용하는 기능입니다.
+
 ## 📋 Quick Navigation
 
 <p align="center">

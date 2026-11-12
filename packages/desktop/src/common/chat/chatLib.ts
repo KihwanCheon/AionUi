@@ -123,6 +123,11 @@ export type CronMessageMeta = {
   triggered_at: number;
 };
 
+export type UserQuestionMeta = {
+  title: string;
+  options?: string[] | null;
+};
+
 export type IMessageText = IMessage<
   'text',
   {
@@ -130,6 +135,8 @@ export type IMessageText = IMessage<
     /** Backend explicitly replaced the accumulated text for this msg_id. */
     replace?: boolean;
     cronMeta?: CronMessageMeta;
+    /** Structured question metadata; does not imply a blocked turn or pending approval. */
+    user_choice?: UserQuestionMeta;
     teammateMessage?: boolean;
     senderName?: string;
     senderAgentType?: string;
@@ -321,8 +328,22 @@ export type IMessageAsk = IMessage<
     session_id: string;
     request_id: string;
     questions: IAskQuestion[];
+    persisted?: boolean;
+    pendingVerified?: boolean;
+    resolution?: 'answered' | 'declined' | 'closed';
+    answers?: Array<{ question: string; labels: string[] }>;
   }
 >;
+
+/** Keep one question request across recovery, streaming and persisted history. */
+export const mergeAskMessage = (existing: IMessageAsk, incoming: IMessageAsk): IMessageAsk => {
+  if (existing.content.persisted && !incoming.content.persisted) return existing;
+  return {
+    ...incoming,
+    id: existing.id,
+    content: { ...existing.content, ...incoming.content },
+  };
+};
 
 export type IMessagePermission = IMessage<'permission', IConfirmation>;
 
@@ -461,6 +482,7 @@ type RawTextMessageContent = {
   content?: unknown;
   replace?: unknown;
   cronMeta?: unknown;
+  user_choice?: unknown;
   teammateMessage?: unknown;
   teammate_message?: unknown;
   senderName?: unknown;
@@ -484,6 +506,13 @@ const isCronMessageMeta = (value: unknown): value is CronMessageMeta =>
   typeof value.cron_job_id === 'string' &&
   typeof value.cron_job_name === 'string' &&
   typeof value.triggered_at === 'number';
+
+const isUserQuestionMeta = (value: unknown): value is UserQuestionMeta =>
+  isObject(value) &&
+  typeof value.title === 'string' &&
+  value.title.trim().length > 0 &&
+  (value.options == null ||
+    (Array.isArray(value.options) && value.options.every((option) => typeof option === 'string')));
 
 const firstStringField = (
   data: RawTextMessageContent,
@@ -511,6 +540,7 @@ const normalizeTextMessageContentObject = (
     'senderConversationID',
   ]);
   const cronMeta = isCronMessageMeta(data.cronMeta) ? data.cronMeta : undefined;
+  const userQuestion = isUserQuestionMeta(data.user_choice) ? data.user_choice : undefined;
   const replace = options?.replace === true || data.replace === true;
   const teammateMessage = Boolean(data.teammateMessage) || Boolean(data.teammate_message);
 
@@ -518,6 +548,7 @@ const normalizeTextMessageContentObject = (
     content,
     ...(replace ? { replace: true } : {}),
     ...(cronMeta ? { cronMeta } : {}),
+    ...(userQuestion ? { user_choice: userQuestion } : {}),
     ...(teammateMessage ? { teammateMessage: true } : {}),
     ...(senderName ? { senderName } : {}),
     ...(senderAgentType ? { senderAgentType } : {}),
@@ -697,7 +728,7 @@ const transformMessageInner = (message: IResponseMessage): TMessage | undefined 
           ? errorData
           : ((errorData as { message?: string })?.message ?? JSON.stringify(errorData));
       return {
-        id: uuid(),
+        id: message.msg_id ? `error:${message.conversation_id}:${message.msg_id}` : uuid(),
         type: 'tips',
         msg_id: message.msg_id,
         position: 'center',
@@ -1078,6 +1109,19 @@ export const composeMessage = (
     return pushMessage(message);
   }
 
+  if (message.type === 'ask' && message.content.request_id) {
+    const existingIndex = list.findIndex(
+      (item) =>
+        item.type === 'ask' &&
+        item.conversation_id === message.conversation_id &&
+        item.content.request_id === message.content.request_id
+    );
+    if (existingIndex >= 0) {
+      const existing = list[existingIndex] as IMessageAsk;
+      const merged = mergeAskMessage(existing, message);
+      return merged === existing ? list : updateMessage(existingIndex, merged);
+    }
+  }
   if (last.msg_id !== message.msg_id || last.type !== message.type) {
     return pushMessage(message);
   }
@@ -1128,4 +1172,24 @@ export const transformMessage = (message: IResponseMessage): TMessage | undefine
     transformed.backend_turn_id = message.backend_turn_id;
   }
   return transformed;
+};
+
+/** Recognize both relay errors and persisted send-failure tips, excluding advisory tips. */
+export const isTerminalErrorStreamMessage = (message: {
+  type?: string;
+  data?: unknown;
+  status?: string;
+  replace?: boolean;
+}): boolean =>
+  message.type === 'error' ||
+  (message.type === 'tips' &&
+    message.status === 'error' &&
+    message.replace === true &&
+    (message.data as { type?: unknown } | null)?.type === 'error');
+
+/** Read the visible error reason from either terminal wire shape. */
+export const getTerminalErrorMessage = (data: unknown): string | undefined => {
+  const record = data as { message?: unknown; content?: unknown; error?: { message?: unknown } } | null;
+  const value = typeof data === 'string' ? data : (record?.error?.message ?? record?.message ?? record?.content);
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 };

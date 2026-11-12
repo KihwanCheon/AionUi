@@ -204,5 +204,17 @@
   },
   "selectedCount": "Выбрано {{count}}",
   "selectedSkills": "Выбранные навыки",
-  "aiAssistant": "ИИ-ассистент"
+  "aiAssistant": "ИИ-ассистент",
+  "claudeUsage": {
+    "refreshDelayed": "Обновление задерживается",
+    "title": "Использование Claude",
+    "codexTitle": "Использование Codex",
+    "session": "5-часовой лимит",
+    "weekly": "За неделю (все модели)",
+    "resets": "Сброс в {{time}}",
+    "reached": "Достигнут лимит использования",
+    "ok": "В пределах лимита",
+    "approaching": "Приближается к лимиту",
+    "noData": "Данных об использовании пока нет"
+  }
 }

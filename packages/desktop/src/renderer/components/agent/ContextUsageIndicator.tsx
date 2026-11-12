@@ -33,6 +33,22 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
   const locale = i18n.language;
 
   const hasWindow = context_limit > 0;
+  const freshness = tokenUsage?.freshness;
+  const compaction = tokenUsage?.compaction;
+  const unconfirmed = freshness !== undefined && freshness.status !== 'current';
+  const hasReading = (!freshness && !compaction) || (tokenUsage?.total_tokens ?? 0) > 0;
+  const hasCompactionCount = compaction !== undefined && (compaction.history_complete || compaction.count > 0);
+  const compactionLabel = hasCompactionCount
+    ? t('conversation.contextUsage.compactionCount', 'Conversation compacted {{count}} time(s)', {
+        count: compaction.count,
+      })
+    : t('conversation.contextUsage.compactionUnknown', 'Compaction count unknown');
+  const freshnessLabel =
+    freshness?.status === 'pending'
+      ? t('conversation.contextUsage.pending', 'Confirming usage')
+      : freshness?.status === 'unavailable'
+        ? t('conversation.contextUsage.unavailable', 'Usage confirmation failed')
+        : null;
 
   const { percentage, displayTotal, displayLimit, isWarning, isDanger } = useMemo(() => {
     if (!tokenUsage) {
@@ -79,6 +95,7 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
 
   // 根据状态获取颜色
   const getStrokeColor = () => {
+    if (unconfirmed) return 'var(--color-text-3)';
     if (isDanger) return 'rgb(var(--danger-6))';
     if (isWarning) return 'rgb(var(--warning-6))';
     return 'rgb(var(--primary-6))';
@@ -121,6 +138,32 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
 
   const details = (
     <>
+      <div className='text-12px text-t-secondary mt-4px'>{compactionLabel}</div>
+      {compaction && !compaction.history_complete && (
+        <div className='text-12px text-t-secondary mt-4px'>
+          {t('conversation.contextUsage.compactionIncomplete', 'Earlier compactions may be missing')}
+        </div>
+      )}
+      {compaction?.last_compacted_at != null && (
+        <div className='text-12px text-t-secondary mt-4px'>
+          {t('conversation.contextUsage.compactionLast', 'Last compaction: {{time}}', {
+            time: new Date(compaction.last_compacted_at).toLocaleString(locale),
+          })}
+        </div>
+      )}
+      {freshnessLabel && <div className='text-12px text-t-secondary mt-4px'>{freshnessLabel}</div>}
+      {unconfirmed && hasReading && (
+        <div className='text-12px text-t-secondary mt-4px'>
+          {t('conversation.contextUsage.previousReading', 'Showing the last confirmed reading')}
+        </div>
+      )}
+      {freshness?.updated_at != null && (
+        <div className='text-12px text-t-secondary mt-4px'>
+          {t('conversation.contextUsage.lastUpdated', 'Last confirmed: {{time}}', {
+            time: new Date(freshness.updated_at).toLocaleString(locale),
+          })}
+        </div>
+      )}
       {tokenUsage.cost && (
         <div className='text-12px text-t-secondary mt-4px'>
           {t('conversation.contextUsage.sessionCost', 'Session cost')} ≈ {formatCostAmount(tokenUsage.cost, locale)}
@@ -135,7 +178,14 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
   // Percentages are only honest against an agent-reported window size —
   // never substitute a hardcoded per-model default here. Without a window
   // the popover reports the raw count and says the window is unknown.
-  const popoverContent = hasWindow ? (
+  const popoverContent = !hasReading ? (
+    <div className='p-8px min-w-160px'>
+      <div className='text-14px font-medium text-t-primary'>
+        {t('conversation.contextUsage.noReading', 'No confirmed usage yet')}
+      </div>
+      {details}
+    </div>
+  ) : hasWindow ? (
     <div className='p-8px min-w-160px'>
       <div className='text-14px font-medium text-t-primary'>
         {formatPercentage(percentage, locale)} · {displayTotal} / {displayLimit}{' '}
@@ -158,10 +208,12 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
   return (
     <Popover content={popoverContent} position='top' trigger='hover' className='context-usage-popover'>
       <div
-        className={`context-usage-indicator cursor-pointer flex items-center justify-center ${className}`}
+        className={`context-usage-indicator cursor-pointer relative flex items-center justify-center ${className}`}
+        data-usage-status={freshness?.status}
+        aria-label={[freshnessLabel, compactionLabel].filter(Boolean).join(' · ')}
         style={{ width: 32, height: 32 }}
       >
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
           {/* 背景圆环 */}
           <circle
             cx={size / 2}
@@ -172,7 +224,7 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
             strokeWidth={strokeWidth}
           />
           {/* 进度圆环 — only when the denominator is known; otherwise the hollow track alone signals "count available, window unknown" */}
-          {hasWindow && (
+          {hasWindow && hasReading && (
             <circle
               cx={size / 2}
               cy={size / 2}
@@ -183,10 +235,34 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
               strokeLinecap='round'
               strokeDasharray={circumference}
               strokeDashoffset={strokeDashoffset}
-              style={{ transition: 'stroke-dashoffset 0.3s ease, stroke 0.3s ease' }}
+              transform={`rotate(-90 ${size / 2} ${size / 2})`}
+              style={{ transition: 'stroke-dashoffset 0.3s ease, stroke 0.3s ease', opacity: unconfirmed ? 0.35 : 1 }}
             />
           )}
+          {hasCompactionCount && (
+            <text
+              className='context-compaction-count font-medium text-t-secondary tabular-nums'
+              x={size / 2}
+              y={size / 2}
+              dy='0.35em'
+              textAnchor='middle'
+              fill='currentColor'
+              style={{ fontSize: compaction.count > 99 ? 8 : 10 }}
+              aria-hidden
+            >
+              {compaction.count > 99 ? '99+' : compaction.count}
+            </text>
+          )}
         </svg>
+        {unconfirmed && (
+          <span
+            className='context-usage-status absolute text-10px text-t-secondary flex items-center justify-center'
+            style={{ right: 0, top: 0, width: 12, height: 12, borderRadius: '50%', background: 'var(--color-bg-1)' }}
+            aria-hidden
+          >
+            {freshness?.status === 'pending' ? '…' : '!'}
+          </span>
+        )}
       </div>
     </Popover>
   );

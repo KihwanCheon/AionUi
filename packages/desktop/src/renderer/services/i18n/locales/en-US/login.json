@@ -1,7 +1,7 @@
 {
-  "pageTitle": "AionUi - Sign In",
-  "brand": "AionUi",
-  "subtitle": "Welcome back, please sign in to your account",
+  "pageTitle": "Royal Hold'em Admin - Sign In",
+  "brand": "Royal Hold'em Admin",
+  "subtitle": "Sign in to edit the betting odds",
   "username": "Username",
   "usernamePlaceholder": "Enter your username",
   "password": "Password",
@@ -13,8 +13,8 @@
   "showPassword": "Show password",
   "hidePassword": "Hide password",
   "languageToggle": "Change language",
-  "footerPrimary": "Transform your command-line AI",
-  "footerSecondary": "Modern & Efficient",
+  "footerPrimary": "Please request an account",
+  "footerSecondary": "(Contact: YongMin.Kim)",
   "errors": {
     "empty": "Please enter username and password",
     "invalidCredentials": "Invalid username or password",

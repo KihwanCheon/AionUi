@@ -40,6 +40,11 @@ export type UseAcpModelInfoResult = {
   isConfigOptionBlocked: (optionId: string) => boolean;
 };
 
+type LegacyModelState = {
+  conversationId: string;
+  modelInfo: AcpModelInfo;
+};
+
 function sameModelInfo(a: AcpModelInfo | null, b: AcpModelInfo | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -85,7 +90,8 @@ export const useAcpModelInfo = ({
   });
   const { model, thoughtLevel, setStatus, setConfigOption, isLoading } = runtimeConfig;
   const isConfigOptionBlocked = runtimeConfig.isConfigOptionBlocked ?? (() => false);
-  const [legacyModelInfo, setLegacyModelInfo] = useState<AcpModelInfo | null>(null);
+  const [legacyModelState, setLegacyModelState] = useState<LegacyModelState | null>(null);
+  const legacyModelInfo = legacyModelState?.conversationId === conversation_id ? legacyModelState.modelInfo : null;
 
   const configModelInfo = useMemo<AcpModelInfo | null>(() => {
     if (!model) return null;
@@ -111,7 +117,7 @@ export const useAcpModelInfo = ({
 
   useEffect(() => {
     if (!enabled) {
-      setLegacyModelInfo(null);
+      setLegacyModelState(null);
     }
   }, [enabled]);
 
@@ -121,7 +127,11 @@ export const useAcpModelInfo = ({
       if (message.conversation_id !== conversation_id) return;
       if (message.type === 'acp_model_info' && message.data) {
         const incoming = normalizeInitialModel(message.data as AcpModelInfo, initialModelId);
-        setLegacyModelInfo((previous) => (sameModelInfo(previous, incoming) ? previous : incoming));
+        setLegacyModelState((previous) =>
+          previous?.conversationId === conversation_id && sameModelInfo(previous.modelInfo, incoming)
+            ? previous
+            : { conversationId: conversation_id, modelInfo: incoming }
+        );
       } else if (message.type === 'codex_model_info' && message.data) {
         const data = message.data as { model?: string };
         if (!data.model) return;
@@ -130,7 +140,11 @@ export const useAcpModelInfo = ({
           current_model_label: data.model,
           available_models: [],
         };
-        setLegacyModelInfo((previous) => (sameModelInfo(previous, incoming) ? previous : incoming));
+        setLegacyModelState((previous) =>
+          previous?.conversationId === conversation_id && sameModelInfo(previous.modelInfo, incoming)
+            ? previous
+            : { conversationId: conversation_id, modelInfo: incoming }
+        );
       }
     };
     return ipcBridge.acpConversation.responseStream.on(handler);

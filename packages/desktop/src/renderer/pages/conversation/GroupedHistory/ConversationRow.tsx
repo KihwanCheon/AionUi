@@ -10,28 +10,49 @@ import FlexFullContainer from '@/renderer/components/layout/FlexFullContainer';
 import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
 import { CronJobIndicator } from '@/renderer/pages/cron';
 import { resolveConversationLeadingMark } from '@/renderer/pages/conversation/utils/conversationAssistantIdentity';
+import { ConversationClaudeAccountBadge } from '@/renderer/pages/conversation/platforms/acp/claudeAccounts';
 import { cleanupSiderTooltips, getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
-import { Checkbox, Dropdown, Menu, Spin, Tooltip } from '@arco-design/web-react';
-import {
-  Attention,
-  EditOne,
-  Export,
-  FolderClose,
-  Inbox,
-  MessageOne,
-  MoreOne,
-  Pushpin,
-  Robot,
-  Timer,
-} from '@icon-park/react';
+import { Checkbox, Tooltip } from '@arco-design/web-react';
+import { MessageOne, Pushpin, Robot } from '@icon-park/react';
 import ForkBranchIcon from '@renderer/components/base/ForkBranchIcon';
 import classNames from 'classnames';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
+import ConversationRowMenu from './components/ConversationRowMenu';
 import type { ConversationRowProps } from './types';
 import { isConversationPinned } from './utils/groupingHelpers';
+import ConversationBookmarkButton from './components/ConversationBookmarkButton';
+import ConversationLeadingStatus from './components/ConversationLeadingStatus';
+import MindNProgressTitle from './components/MindNProgressTitle';
+import {
+  ConversationChoiceBadge,
+  notificationHighlightStyles,
+  useConversationHighlight,
+  useUserChoiceNotifications,
+} from '@renderer/hooks/context/UserChoiceNotifications';
+
+const getConversationTitlePopupContainer = (_node: HTMLElement): HTMLElement => document.body;
+const MNP_TITLE_TOOLTIP_STYLE: React.CSSProperties = { width: 'max-content', maxWidth: 'none' };
+const TITLE_OVERFLOW_TOLERANCE_PX = 1;
+// Rows scrolling under a still cursor fire hover events in quick succession; a
+// popup opened at once could flash at the top-left before Arco positioned it.
+const TITLE_TOOLTIP_SHOW_DELAY_MS = 300;
+
+const renderConversationTitleTooltip = (title: string): React.ReactNode => {
+  const separatorIndex = title.indexOf(':');
+  if (separatorIndex < 0) return title;
+
+  const documentTitle = title.slice(0, separatorIndex).trim();
+  const cardTitle = title.slice(separatorIndex + 1).trim();
+  return (
+    <div className='flex flex-col'>
+      <div className='whitespace-nowrap'>{documentTitle}</div>
+      <div className='whitespace-nowrap'>{cardTitle}</div>
+    </div>
+  );
+};
 
 const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const {
@@ -39,6 +60,8 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     isGenerating,
     isWaitingConfirmation,
     hasUnread,
+    hasFailureUnread = false,
+    failureMessage,
     collapsed,
     tooltipEnabled,
     batchMode,
@@ -51,6 +74,9 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const logos = useAgentLogos();
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
+  const { notices } = useUserChoiceNotifications();
+  const highlightTone = useConversationHighlight(conversation.id);
+  const hasChoiceNotice = notices.some((notice) => notice.conversationId === conversation.id);
   const {
     onToggleChecked,
     onConversationClick,
@@ -59,13 +85,20 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     onEditStart,
     onCreateCronTask,
     onArchive,
+    onPermanentDelete,
     onExport,
+    onCopy,
+    onCopyAll,
     onTogglePin,
     onToggleManualUnread,
     isManualUnread,
     getJobStatus,
   } = props;
   const { t } = useTranslation();
+  const titleRef = React.useRef<HTMLSpanElement>(null);
+  const [isTitleTooltipVisible, setIsTitleTooltipVisible] = React.useState(false);
+  const titleTooltipTimerRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const titleTooltipScrollCleanupRef = React.useRef<(() => void) | undefined>(undefined);
   const { info: assistantInfo } = usePresetAssistantInfo(conversation);
   const isPinned = isConversationPinned(conversation);
   // Fork-lineage badge: present only on forked conversations (extra.fork is
@@ -77,7 +110,19 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     : undefined;
   const cronStatus = getJobStatus(conversation.id);
   const siderTooltipProps = getSiderTooltipProps(tooltipEnabled);
-  const inlineNameTooltipEnabled = !collapsed && !isMobile && !!conversation.name;
+  const titleTooltipProps = collapsed
+    ? siderTooltipProps
+    : {
+        className: 'conversation-title-tooltip-popup',
+        trigger: [] as [],
+        disabled: isMobile,
+        unmountOnExit: true,
+        popupHoverStay: false,
+        popupVisible: isTitleTooltipVisible,
+        getPopupContainer: getConversationTitlePopupContainer,
+      };
+  const conversationTitle = conversation.name || t('conversation.welcome.newConversation');
+  const hasMnPTitleSeparator = conversationTitle.includes(':');
 
   const renderLeadingIcon = () => {
     if (cronStatus !== 'none') {
@@ -87,7 +132,10 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     // When the row is pinned, hovering reveals an overlay on the leading icon —
     // the drag handle when the row is sortable, otherwise a pushpin marker.
     // We dim the resting icon on hover so the overlay reads cleanly.
-    const pinnedHoverFade = isPinned ? 'group-hover:opacity-0 transition-opacity' : '';
+    const pinnedHoverFade =
+      isPinned && !batchMode && !isMobile && !isGenerating && !isWaitingConfirmation && !hasFailureUnread
+        ? 'group-hover:opacity-0 transition-opacity'
+        : '';
     const composedClass = classNames(pinnedHoverFade);
 
     const leadingMark = resolveConversationLeadingMark(conversation, assistantInfo, logos);
@@ -124,7 +172,28 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     );
   };
 
+  const cancelTitleTooltip = () => {
+    if (titleTooltipTimerRef.current) clearTimeout(titleTooltipTimerRef.current);
+    titleTooltipTimerRef.current = undefined;
+    titleTooltipScrollCleanupRef.current?.();
+    titleTooltipScrollCleanupRef.current = undefined;
+  };
+
+  const hideTitleTooltip = () => {
+    cancelTitleTooltip();
+    setIsTitleTooltipVisible(false);
+  };
+
+  React.useEffect(
+    () => () => {
+      if (titleTooltipTimerRef.current) clearTimeout(titleTooltipTimerRef.current);
+      titleTooltipScrollCleanupRef.current?.();
+    },
+    []
+  );
+
   const handleRowClick = () => {
+    hideTitleTooltip();
     cleanupSiderTooltips();
     if (batchMode) {
       onToggleChecked(conversation);
@@ -136,6 +205,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const handleRowContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    hideTitleTooltip();
     cleanupSiderTooltips();
     if (batchMode) {
       return;
@@ -143,19 +213,37 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     onOpenMenu(conversation);
   };
 
-  // Waiting on the user takes visual precedence over the generating spinner: a
-  // paused turn still streams frames that mark it "generating", so without this
-  // the distinct icon would never win.
-  const showWaitingConfirmation = isWaitingConfirmation && !batchMode;
+  const handleRowMouseEnter = () => {
+    if (collapsed || isMobile || !conversation.name) return;
+    hideTitleTooltip();
+    // Only the hovered row listens, and any scroll closes its pending or open tooltip.
+    const handleScroll = () => hideTitleTooltip();
+    document.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    titleTooltipScrollCleanupRef.current = () => document.removeEventListener('scroll', handleScroll, true);
+    titleTooltipTimerRef.current = setTimeout(() => {
+      titleTooltipTimerRef.current = undefined;
+      const titleElement = titleRef.current;
+      setIsTitleTooltipVisible(
+        Boolean(titleElement && titleElement.scrollWidth > titleElement.clientWidth + TITLE_OVERFLOW_TOLERANCE_PX)
+      );
+    }, TITLE_TOOLTIP_SHOW_DELAY_MS);
+  };
+
+  const handleRowMouseLeave = () => {
+    if (!collapsed) hideTitleTooltip();
+  };
 
   const renderCompletionUnreadDot = () => {
-    if (batchMode || !hasUnread || isGenerating || isWaitingConfirmation) {
+    if (batchMode || !hasUnread || hasFailureUnread) {
       return null;
     }
 
     return (
       <span className='absolute end-8px top-1/2 -translate-y-1/2 flex items-center justify-center group-hover:hidden'>
-        <span className='h-8px w-8px rounded-full bg-#2C7FFF shadow-[0_0_0_2px_rgba(44,127,255,0.18)]' />
+        <span
+          data-testid={`conversation-completion-unread-${conversation.id}`}
+          className='h-8px w-8px rounded-full bg-[var(--conversation-completion-unread)] shadow-[0_0_0_2px_var(--conversation-completion-unread-ring)]'
+        />
       </span>
     );
   };
@@ -163,25 +251,32 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   return (
     <Tooltip
       key={conversation.id}
-      {...siderTooltipProps}
-      content={conversation.name || t('conversation.welcome.newConversation')}
+      {...titleTooltipProps}
+      content={renderConversationTitleTooltip(conversationTitle)}
       position='right'
+      style={hasMnPTitleSeparator ? MNP_TITLE_TOOLTIP_STYLE : undefined}
     >
       <div
         id={'c-' + conversation.id}
+        data-notification-highlight={highlightTone === 'notification' || undefined}
+        data-source-highlight={highlightTone === 'source' || undefined}
         className={classNames(
           'chat-history__item h-34px rd-8px flex items-center group cursor-pointer relative overflow-hidden shrink-0 conversation-item [&.conversation-item+&.conversation-item]:mt-2px min-w-0 transition-colors',
-          collapsed ? 'justify-center px-0' : 'justify-start gap-8px pe-16px',
+          collapsed ? 'justify-center px-0' : `justify-start gap-8px ${hasChoiceNotice ? 'pe-56px' : 'pe-16px'}`,
           // dimIcon means this row sits inside a project/cron parent — visually indent the row content while keeping the bg full-width
           !collapsed && (dimIcon ? 'ps-34px' : 'ps-10px'),
+          highlightTone && notificationHighlightStyles.conversation,
+          highlightTone === 'source' && notificationHighlightStyles.sourceConversation,
           {
-            'hover:bg-fill-3': !batchMode && !selected,
+            'hover:bg-fill-2': !batchMode && !selected,
             '!bg-fill-3': selected,
             'bg-[rgba(var(--primary-6),0.08)]': batchMode && checked,
           }
         )}
         onClick={handleRowClick}
         onContextMenu={handleRowContextMenu}
+        onMouseEnter={handleRowMouseEnter}
+        onMouseLeave={handleRowMouseLeave}
       >
         {batchMode && (
           <span
@@ -194,25 +289,38 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             <Checkbox checked={checked} />
           </span>
         )}
-        <span className='size-22px flex items-center justify-center shrink-0 relative'>
-          {showWaitingConfirmation ? (
-            <Attention
-              theme='filled'
-              size='16'
-              className='line-height-0 flex-shrink-0 text-warning animate-wiggle'
-              data-testid={`conversation-waiting-confirmation-${conversation.id}`}
-            />
-          ) : isGenerating && !batchMode ? (
-            <Spin size={16} />
-          ) : (
-            renderLeadingIcon()
-          )}
+        {!batchMode && !collapsed && (
+          <ConversationBookmarkButton
+            conversation={conversation}
+            isPinned={isPinned}
+            isMobile={isMobile}
+            onTogglePin={onTogglePin}
+            statusLayout={dimIcon ? 'gutter' : 'compact'}
+          />
+        )}
+        <span
+          data-testid={`conversation-leading-icon-${conversation.id}`}
+          className='size-22px flex items-center justify-center shrink-0 relative'
+        >
+          <ConversationLeadingStatus
+            conversationId={conversation.id}
+            isGenerating={isGenerating}
+            isWaitingConfirmation={isWaitingConfirmation}
+            hasFailure={hasFailureUnread}
+            failureMessage={failureMessage}
+            batchMode={batchMode}
+            useLeadingGutter={!collapsed && dimIcon}
+          >
+            {renderLeadingIcon()}
+          </ConversationLeadingStatus>
+          {!batchMode && <ConversationClaudeAccountBadge conversation={conversation} />}
           {/* Hover overlay on the leading icon: drag handle for sortable pinned rows, pushpin marker otherwise */}
           {!batchMode &&
             isPinned &&
             !isMobile &&
             !isGenerating &&
             !isWaitingConfirmation &&
+            !hasFailureUnread &&
             (dragHandle ?? (
               <span
                 className='absolute inset-0 flex-center text-t-secondary pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity'
@@ -223,35 +331,35 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             ))}
         </span>
         <FlexFullContainer className='h-24px min-w-0 flex-1 collapsed-hidden'>
-          <Tooltip
-            content={conversation.name}
-            disabled={!inlineNameTooltipEnabled}
-            trigger='hover'
-            popupVisible={inlineNameTooltipEnabled ? undefined : false}
-            unmountOnExit
-            popupHoverStay={false}
-            position='top'
-          >
-            <div className='chat-history__item-name overflow-hidden text-ellipsis flex items-center gap-4px w-full text-14px font-[500] lh-24px whitespace-nowrap min-w-0 text-t-primary'>
-              <span className='block overflow-hidden text-ellipsis whitespace-nowrap min-w-0'>{conversation.name}</span>
-              {forkLineage && (
-                <Tooltip
-                  content={
-                    forkParentName
-                      ? t('conversation.history.forkedFrom', { name: forkParentName })
-                      : t('conversation.history.forkedConversation')
-                  }
-                  position='top'
-                >
-                  <span className='flex-shrink-0 line-height-0 text-t-tertiary' data-testid='conversation-fork-badge'>
-                    <ForkBranchIcon size={12} />
-                  </span>
-                </Tooltip>
-              )}
-            </div>
-          </Tooltip>
+          <div className='chat-history__item-name overflow-hidden text-ellipsis flex items-center gap-4px w-full text-14px font-[500] lh-24px whitespace-nowrap min-w-0 text-t-primary'>
+            <span
+              ref={titleRef}
+              className='conversation-title-text block overflow-hidden text-ellipsis whitespace-nowrap min-w-0'
+            >
+              <MindNProgressTitle conversationId={conversation.id}>{conversation.name}</MindNProgressTitle>
+            </span>
+            {forkLineage && (
+              <Tooltip
+                content={
+                  forkParentName
+                    ? t('conversation.history.forkedFrom', { name: forkParentName })
+                    : t('conversation.history.forkedConversation')
+                }
+                position='top'
+              >
+                <span className='flex-shrink-0 line-height-0 text-t-tertiary' data-testid='conversation-fork-badge'>
+                  <ForkBranchIcon size={12} />
+                </span>
+              </Tooltip>
+            )}
+          </div>
         </FlexFullContainer>
 
+        {hasChoiceNotice && (
+          <span className={collapsed ? 'absolute end-0 top-0' : 'absolute end-32px top-1/2 -translate-y-1/2'}>
+            <ConversationChoiceBadge conversationId={conversation.id} />
+          </span>
+        )}
         {renderCompletionUnreadDot()}
         {!batchMode && (
           <div
@@ -266,101 +374,24 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
               event.stopPropagation();
             }}
           >
-            <Dropdown
-              droplist={
-                <Menu
-                  onClickMenuItem={(key) => {
-                    if (key === 'pin') {
-                      onTogglePin(conversation);
-                      return;
-                    }
-                    if (key === 'toggleManualUnread') {
-                      onToggleManualUnread(conversation);
-                      return;
-                    }
-                    if (key === 'rename') {
-                      onEditStart(conversation);
-                      return;
-                    }
-                    if (key === 'createCronTask') {
-                      onCreateCronTask(conversation);
-                      return;
-                    }
-                    if (key === 'export') {
-                      onExport?.(conversation);
-                      return;
-                    }
-                    if (key === 'archive') {
-                      onArchive(conversation);
-                    }
-                  }}
-                >
-                  <Menu.Item key='pin'>
-                    <div className='flex items-center gap-8px'>
-                      <Pushpin theme='outline' size='14' />
-                      <span>{isPinned ? t('conversation.history.unpin') : t('conversation.history.pin')}</span>
-                    </div>
-                  </Menu.Item>
-                  <Menu.Item key='toggleManualUnread'>
-                    <div className='flex items-center gap-8px'>
-                      <Inbox theme='outline' size='14' />
-                      <span>
-                        {isManualUnread ? t('conversation.history.markAsRead') : t('conversation.history.markAsUnread')}
-                      </span>
-                    </div>
-                  </Menu.Item>
-                  <Menu.Item key='rename'>
-                    <div className='flex items-center gap-8px'>
-                      <EditOne theme='outline' size='14' />
-                      <span>{t('conversation.history.rename')}</span>
-                    </div>
-                  </Menu.Item>
-                  <Menu.Item key='createCronTask'>
-                    <div className='flex items-center gap-8px'>
-                      <Timer theme='outline' size='14' />
-                      <span>{t('conversation.history.createCronTask')}</span>
-                    </div>
-                  </Menu.Item>
-                  {onExport && (
-                    <Menu.Item key='export'>
-                      <div className='flex items-center gap-8px'>
-                        <Export theme='outline' size='14' />
-                        <span>{t('conversation.history.export')}</span>
-                      </div>
-                    </Menu.Item>
-                  )}
-                  <Menu.Item key='archive'>
-                    <div className='flex items-center gap-8px'>
-                      <FolderClose theme='outline' size='14' />
-                      <span>{t('conversation.history.archive')}</span>
-                    </div>
-                  </Menu.Item>
-                </Menu>
-              }
-              trigger='click'
-              position='br'
-              popupVisible={menuVisible}
-              onVisibleChange={(visible) => onMenuVisibleChange(conversation.id, visible)}
-              getPopupContainer={() => document.body}
-              unmountOnExit={false}
-            >
-              <span
-                data-testid={`conversation-row-menu-${conversation.id}`}
-                className={classNames(
-                  'flex-center cursor-pointer transition-colors text-t-secondary hover:text-t-primary size-20px rd-4px sider-action-btn',
-                  {
-                    flex: isMobile || menuVisible,
-                    'hidden group-hover:flex': !isMobile && !menuVisible,
-                  }
-                )}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpenMenu(conversation);
-                }}
-              >
-                <MoreOne theme='outline' size='14' fill='currentColor' className='block leading-none' />
-              </span>
-            </Dropdown>
+            <ConversationRowMenu
+              conversation={conversation}
+              isMobile={isMobile}
+              isPinned={isPinned}
+              menuVisible={menuVisible}
+              onOpenMenu={onOpenMenu}
+              onMenuVisibleChange={onMenuVisibleChange}
+              onEditStart={onEditStart}
+              onCreateCronTask={onCreateCronTask}
+              onExport={onExport}
+              onCopy={onCopy}
+              onCopyAll={onCopyAll}
+              onArchive={onArchive}
+              onPermanentDelete={onPermanentDelete}
+              onTogglePin={onTogglePin}
+              onToggleManualUnread={onToggleManualUnread}
+              isManualUnread={isManualUnread}
+            />
           </div>
         )}
       </div>

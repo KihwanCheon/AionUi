@@ -8,27 +8,26 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { fromApiSearchResult, type ApiMessageSearchItem } from '@/common/adapter/searchMapper';
-import type { PaginatedResult } from '@/common/adapter/ipcBridge';
+import { fromApiSearchResult, type ApiMessageSearchResponse } from '@/common/adapter/searchMapper';
 
 describe('searchMapper', () => {
   describe('fromApiSearchResult', () => {
-    it('preserves total and has_more fields', () => {
-      const input: PaginatedResult<ApiMessageSearchItem> = {
+    it('preserves the continuation cursor and has_more fields without a total', () => {
+      const input: ApiMessageSearchResponse = {
         items: [],
-        total: 42,
+        next_cursor: 'next-range',
         has_more: true,
       };
 
       const result = fromApiSearchResult(input);
 
-      expect(result.total).toBe(42);
+      expect(result.next_cursor).toBe('next-range');
       expect(result.has_more).toBe(true);
       expect(result.items).toHaveLength(0);
     });
 
     it('maps item with complete conversation fields including model', () => {
-      const input: PaginatedResult<ApiMessageSearchItem> = {
+      const input: ApiMessageSearchResponse = {
         items: [
           {
             message_id: 'msg1',
@@ -54,7 +53,7 @@ describe('searchMapper', () => {
             },
           },
         ],
-        total: 1,
+        next_cursor: null,
         has_more: false,
       };
 
@@ -81,7 +80,7 @@ describe('searchMapper', () => {
     });
 
     it('handles conversation with null model field', () => {
-      const input: PaginatedResult<ApiMessageSearchItem> = {
+      const input: ApiMessageSearchResponse = {
         items: [
           {
             message_id: 'msg1',
@@ -101,7 +100,7 @@ describe('searchMapper', () => {
             },
           },
         ],
-        total: 1,
+        next_cursor: null,
         has_more: false,
       };
 
@@ -111,7 +110,7 @@ describe('searchMapper', () => {
     });
 
     it('handles conversation with missing optional fields', () => {
-      const input: PaginatedResult<ApiMessageSearchItem> = {
+      const input: ApiMessageSearchResponse = {
         items: [
           {
             message_id: 'msg1',
@@ -130,7 +129,7 @@ describe('searchMapper', () => {
             },
           },
         ],
-        total: 1,
+        next_cursor: null,
         has_more: false,
       };
 
@@ -141,7 +140,7 @@ describe('searchMapper', () => {
     });
 
     it('passes message_type as TMessage type', () => {
-      const input: PaginatedResult<ApiMessageSearchItem> = {
+      const input: ApiMessageSearchResponse = {
         items: [
           {
             message_id: 'msg1',
@@ -160,7 +159,7 @@ describe('searchMapper', () => {
             },
           },
         ],
-        total: 1,
+        next_cursor: null,
         has_more: false,
       };
 
@@ -170,7 +169,7 @@ describe('searchMapper', () => {
     });
 
     it('maps multiple items correctly', () => {
-      const input: PaginatedResult<ApiMessageSearchItem> = {
+      const input: ApiMessageSearchResponse = {
         items: [
           {
             message_id: 'msg1',
@@ -209,7 +208,7 @@ describe('searchMapper', () => {
             },
           },
         ],
-        total: 2,
+        next_cursor: null,
         has_more: false,
       };
 
@@ -226,7 +225,7 @@ describe('searchMapper', () => {
     });
 
     it('applies fromApiConversation transformation including custom_workspace inference', () => {
-      const input: PaginatedResult<ApiMessageSearchItem> = {
+      const input: ApiMessageSearchResponse = {
         items: [
           {
             message_id: 'msg1',
@@ -248,7 +247,7 @@ describe('searchMapper', () => {
             },
           },
         ],
-        total: 1,
+        next_cursor: null,
         has_more: false,
       };
 

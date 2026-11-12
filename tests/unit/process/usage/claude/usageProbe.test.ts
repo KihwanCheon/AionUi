@@ -1,0 +1,503 @@
+/**
+ * @license
+ * Copyright 2025 AionUi (aionui.com)
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+import type { IPty } from 'node-pty';
+import { ClaudeUsageProbe, resolveExecutableFromPath, type SpawnPty } from '@process/usage/claude/usageProbe';
+
+class FakePty {
+  readonly kill = vi.fn();
+  readonly write = vi.fn();
+  #dataListener: ((data: string) => void) | undefined;
+  #exitListener: (() => void) | undefined;
+
+  readonly onData = (listener: (data: string) => void): { dispose(): void } => {
+    this.#dataListener = listener;
+    return { dispose: vi.fn() };
+  };
+
+  readonly onExit = (listener: () => void): { dispose(): void } => {
+    this.#exitListener = listener;
+    return { dispose: vi.fn() };
+  };
+
+  emitData(data: string): void {
+    this.#dataListener?.(data);
+  }
+
+  emitExit(): void {
+    this.#exitListener?.();
+  }
+}
+
+const completeUsage = `
+Current session
+25% used
+Resets 8:30am
+Current week (all models)
+24% used
+Resets Aug 4, 9pm
+`;
+
+const windowsPathExists = (path: string): boolean => path === 'C:\\tools\\claude.EXE';
+
+// Screen-reader output captured from Claude Code 2.1.319: the first Enter
+// leaves /usage at the prompt with the autocomplete menu still visible.
+const pendingUsage =
+  '/usage    Show session cost, plan usage, and activity stats\n/usage-credits    Configure usage credits\n$  /usage';
+
+describe('ClaudeUsageProbe', () => {
+  it('retries only Enter for a pending autocomplete command and reads the resulting usage', async () => {
+    vi.useFakeTimers();
+    try {
+      const terminal = new FakePty();
+      const probe = new ClaudeUsageProbe({
+        command: process.execPath,
+        commandDelayMs: 1,
+        spawnPty: (() => terminal) as unknown as SpawnPty,
+      });
+      const result = probe.getUsage(process.cwd());
+      await vi.advanceTimersByTimeAsync(1);
+      terminal.emitData(pendingUsage);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(terminal.write.mock.calls).toEqual([['/usage\r'], ['\r']]);
+      terminal.emitData('you: /usage\n' + completeUsage);
+      terminal.emitExit();
+      await expect(result).resolves.toMatchObject({ session: { utilization: 25 } });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(terminal.write.mock.calls.filter(([text]) => text === '\r')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    pendingUsage + 'you: /usage\nIdeating…',
+    pendingUsage + '\nSettings  Status   Config   Usage   Stats\nRefreshing…',
+    'Sign in to continue',
+    'Quick safety check\nYes, I trust this folder\nNo, exit\n',
+    '$ /context',
+    pendingUsage + '\nSome other question?',
+  ])('does not retry Enter outside a pending autocomplete prompt: %s', async (output) => {
+    vi.useFakeTimers();
+    try {
+      const terminal = new FakePty();
+      const probe = new ClaudeUsageProbe({
+        command: process.execPath,
+        commandDelayMs: 1,
+        spawnPty: (() => terminal) as unknown as SpawnPty,
+      });
+      const result = probe.getUsage(process.cwd());
+      await vi.advanceTimersByTimeAsync(1);
+      terminal.emitData(output);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(terminal.write).not.toHaveBeenCalledWith('\r');
+      terminal.emitExit();
+      await result;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds Enter retries and logs account/phase without terminal or credential contents', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const terminal = new FakePty();
+      const probe = new ClaudeUsageProbe({
+        accountId: 'secondary',
+        command: process.execPath,
+        commandDelayMs: 1,
+        spawnPty: (() => terminal) as unknown as SpawnPty,
+      });
+      const result = probe.getUsage(process.cwd());
+      await vi.advanceTimersByTimeAsync(1);
+      terminal.emitData('private-token-value\n' + pendingUsage);
+      await vi.advanceTimersByTimeAsync(120_000);
+      await expect(result).resolves.toBeNull();
+      expect(terminal.write.mock.calls).toEqual([['/usage\r'], ['\r'], ['\r']]);
+      expect(warn).toHaveBeenCalledWith(
+        '[ClaudeUsageProbe] Probe ended without usage',
+        expect.objectContaining({ accountId: 'secondary', phase: 'autocomplete', commandRetries: 2 })
+      );
+      expect(JSON.stringify([warn.mock.calls, info.mock.calls])).not.toContain('private-token-value');
+    } finally {
+      warn.mockRestore();
+      info.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('waits for startup, runs /usage, releases the live PTY, and caches concurrent reads', async () => {
+    vi.useFakeTimers();
+    try {
+      const terminal = new FakePty();
+      const spawnPty = vi.fn(() => terminal as unknown as IPty) as unknown as SpawnPty;
+      const now = new Date(2026, 6, 31, 7, 0, 0).getTime();
+      const probe = new ClaudeUsageProbe({
+        command: process.execPath,
+        commandDelayMs: 100,
+        exitCommandDelayMs: 50,
+        now: () => now,
+        spawnPty,
+      });
+
+      const first = probe.getUsage(process.cwd());
+      const concurrent = probe.getUsage(process.cwd());
+      expect(spawnPty).toHaveBeenCalledWith(
+        process.execPath,
+        ['--ax-screen-reader', '--safe-mode'],
+        expect.objectContaining({ cwd: process.cwd() })
+      );
+
+      await vi.advanceTimersByTimeAsync(99);
+      expect(terminal.write).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(terminal.write).toHaveBeenCalledWith('/usage\r');
+
+      terminal.emitData(completeUsage);
+      expect(terminal.write).toHaveBeenCalledWith('\u001b');
+      terminal.emitData('Settings dialog dismissed');
+      await vi.advanceTimersByTimeAsync(50);
+      expect(terminal.write).not.toHaveBeenCalledWith('/exit\r');
+      expect(terminal.kill).toHaveBeenCalledTimes(1);
+
+      await expect(first).resolves.toMatchObject({
+        session: { utilization: 25 },
+        weekly: { utilization: 24 },
+      });
+      await expect(concurrent).resolves.toMatchObject({
+        session: { utilization: 25 },
+        weekly: { utilization: 24 },
+      });
+      await expect(probe.getUsage(process.cwd())).resolves.toMatchObject({
+        session: { utilization: 25 },
+      });
+      expect(spawnPty).toHaveBeenCalledTimes(1);
+      expect(terminal.kill).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts in the dedicated working directory and reports each finished run', async () => {
+    const directory = join(tmpdir(), `aionui-usage-probe-test-${process.pid}-${Date.now()}`);
+    const terminal = new FakePty();
+    const spawnPty = vi.fn(() => terminal as unknown as IPty) as unknown as SpawnPty;
+    const onFinished = vi.fn();
+    const probe = new ClaudeUsageProbe({
+      command: process.execPath,
+      onFinished,
+      spawnPty,
+      workingDirectory: () => directory,
+    });
+    try {
+      const result = probe.getUsage(process.cwd());
+      expect(spawnPty).toHaveBeenCalledWith(
+        process.execPath,
+        expect.any(Array),
+        expect.objectContaining({ cwd: directory })
+      );
+      expect(existsSync(directory)).toBe(true);
+      expect(onFinished).not.toHaveBeenCalled();
+
+      terminal.emitData(completeUsage);
+      terminal.emitExit();
+      await expect(result).resolves.toMatchObject({ session: { utilization: 25 } });
+      expect(terminal.kill).toHaveBeenCalledTimes(1);
+      expect(onFinished).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('finishes with the weekly bucket alone once a weekly-only plan view settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const terminal = new FakePty();
+      const spawnPty = vi.fn(() => terminal as unknown as IPty) as unknown as SpawnPty;
+      const probe = new ClaudeUsageProbe({
+        command: process.execPath,
+        commandDelayMs: 100,
+        exitCommandDelayMs: 50,
+        partialSettleMs: 1_000,
+        spawnPty,
+      });
+
+      const result = probe.getUsage(process.cwd());
+      await vi.advanceTimersByTimeAsync(100);
+      expect(terminal.write).toHaveBeenCalledWith('/usage\r');
+
+      terminal.emitData('Current week (all models)\n64% used\nResets Nov 7, 4pm\n');
+      await vi.advanceTimersByTimeAsync(999);
+      expect(terminal.write).not.toHaveBeenCalledWith('\u001b');
+      await vi.advanceTimersByTimeAsync(1);
+      expect(terminal.write).toHaveBeenCalledWith('\u001b');
+
+      terminal.emitData('Settings dialog dismissed');
+      await vi.advanceTimersByTimeAsync(50);
+      const usage = await result;
+      expect(usage).toMatchObject({ weekly: { utilization: 64 } });
+      expect(usage?.session).toBeUndefined();
+      expect(terminal.kill).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not finish early from usage text shown before /usage is sent', async () => {
+    vi.useFakeTimers();
+    try {
+      const terminal = new FakePty();
+      const spawnPty = vi.fn(() => terminal as unknown as IPty) as unknown as SpawnPty;
+      const probe = new ClaudeUsageProbe({
+        command: process.execPath,
+        commandDelayMs: 100,
+        exitCommandDelayMs: 50,
+        partialSettleMs: 1_000,
+        spawnPty,
+      });
+
+      const result = probe.getUsage(process.cwd());
+      terminal.emitData('Current week (all models)\n76% used\nResets Nov 3, 9pm\n');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(terminal.write).toHaveBeenCalledWith('/usage\r');
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(terminal.write).not.toHaveBeenCalledWith('\u001b');
+
+      terminal.emitData(completeUsage);
+      expect(terminal.write).toHaveBeenCalledWith('\u001b');
+      terminal.emitData('Settings dialog dismissed');
+      await vi.advanceTimersByTimeAsync(50);
+      await expect(result).resolves.toMatchObject({ session: { utilization: 25 }, weekly: { utilization: 24 } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('caches successful usage for two minutes', async () => {
+    let now = new Date(2026, 6, 31, 7, 0, 0).getTime();
+    const firstTerminal = new FakePty();
+    const secondTerminal = new FakePty();
+    const terminals = [firstTerminal, secondTerminal];
+    const spawnPty = vi.fn(() => terminals.shift() as unknown as IPty) as unknown as SpawnPty;
+    const probe = new ClaudeUsageProbe({
+      command: process.execPath,
+      now: () => now,
+      spawnPty,
+    });
+
+    const first = probe.getUsage(process.cwd());
+    firstTerminal.emitData(completeUsage);
+    firstTerminal.emitExit();
+    await expect(first).resolves.toMatchObject({ session: { utilization: 25 } });
+
+    now += 119_999;
+    await expect(probe.getUsage(process.cwd())).resolves.toMatchObject({ session: { utilization: 25 } });
+    expect(spawnPty).toHaveBeenCalledTimes(1);
+
+    now += 1;
+    const refreshed = probe.getUsage(process.cwd());
+    expect(spawnPty).toHaveBeenCalledTimes(2);
+    secondTerminal.emitData(completeUsage);
+    secondTerminal.emitExit();
+    await expect(refreshed).resolves.toMatchObject({ session: { utilization: 25 } });
+  });
+
+  it('returns and caches null when the executable cannot be resolved', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const spawnPty = vi.fn();
+    const probe = new ClaudeUsageProbe({
+      command: 'missing-claude-command',
+      env: { PATH: '' },
+      spawnPty: spawnPty as unknown as SpawnPty,
+    });
+
+    await expect(probe.getUsage(process.cwd())).resolves.toBeNull();
+    await expect(probe.getUsage(process.cwd())).resolves.toBeNull();
+    expect(spawnPty).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('returns partial usage when Claude exits after rendering one bucket', async () => {
+    const terminal = new FakePty();
+    const spawnPty = vi.fn(() => terminal as unknown as IPty) as unknown as SpawnPty;
+    const probe = new ClaudeUsageProbe({
+      command: process.execPath,
+      spawnPty,
+    });
+
+    const result = probe.getUsage(process.cwd());
+    terminal.emitData('Current session\n18% used\nResets 11pm\n');
+    terminal.emitExit();
+
+    await expect(result).resolves.toMatchObject({
+      session: { utilization: 18 },
+    });
+    expect(terminal.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers an interactive workspace trust prompt once', async () => {
+    const terminal = new FakePty();
+    const spawnPty = vi.fn(() => terminal as unknown as IPty) as unknown as SpawnPty;
+    const probe = new ClaudeUsageProbe({
+      command: process.execPath,
+      spawnPty,
+    });
+
+    const result = probe.getUsage(process.cwd());
+    terminal.emitData('Quick safety check\nYes, I trust this folder\nNo, exit\n');
+    terminal.emitData('Quick safety check\nYes, I trust this folder\nNo, exit\n');
+    terminal.emitExit();
+
+    await expect(result).resolves.toBeNull();
+    expect(terminal.write).toHaveBeenCalledTimes(1);
+    expect(terminal.write).toHaveBeenCalledWith('y\r');
+    expect(terminal.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for Claude input to become interactive after rendering its screen', async () => {
+    vi.useFakeTimers();
+    try {
+      const terminal = new FakePty();
+      const spawnPty = vi.fn(() => terminal as unknown as IPty) as unknown as SpawnPty;
+      const probe = new ClaudeUsageProbe({
+        command: process.execPath,
+        commandDelayMs: 30_000,
+        spawnPty,
+      });
+
+      const result = probe.getUsage(process.cwd());
+      terminal.emitData('Welcome to Claude Code\n');
+      await vi.advanceTimersByTimeAsync(11_999);
+      expect(terminal.write).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(terminal.write).toHaveBeenCalledTimes(1);
+      expect(terminal.write).toHaveBeenCalledWith('/usage\r');
+
+      terminal.emitData(completeUsage);
+      terminal.emitExit();
+      await expect(result).resolves.toMatchObject({
+        session: { utilization: 25 },
+        weekly: { utilization: 24 },
+      });
+      expect(terminal.kill).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not write a delayed command after Claude exits during startup', async () => {
+    vi.useFakeTimers();
+    try {
+      const terminal = new FakePty();
+      const spawnPty = vi.fn(() => terminal as unknown as IPty) as unknown as SpawnPty;
+      const probe = new ClaudeUsageProbe({
+        command: process.execPath,
+        commandDelayMs: 100,
+        spawnPty,
+      });
+
+      const result = probe.getUsage(process.cwd());
+      terminal.emitExit();
+      await expect(result).resolves.toBeNull();
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(terminal.write).not.toHaveBeenCalled();
+      expect(terminal.kill).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('allows two minutes before timing out', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const terminal = new FakePty();
+      const spawnPty = vi.fn(() => terminal as unknown as IPty) as unknown as SpawnPty;
+      const probe = new ClaudeUsageProbe({
+        command: process.execPath,
+        spawnPty,
+      });
+
+      const result = probe.getUsage(process.cwd());
+      await vi.advanceTimersByTimeAsync(119_999);
+      expect(terminal.kill).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(result).resolves.toBeNull();
+      expect(terminal.kill).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries a failed probe after the thirty-second failure cache expires', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      let now = new Date(2026, 6, 31, 7, 0, 0).getTime();
+      const firstTerminal = new FakePty();
+      const secondTerminal = new FakePty();
+      const terminals = [firstTerminal, secondTerminal];
+      const spawnPty = vi.fn(() => terminals.shift() as unknown as IPty) as unknown as SpawnPty;
+      const probe = new ClaudeUsageProbe({
+        command: process.execPath,
+        commandDelayMs: 10_000,
+        now: () => now,
+        spawnPty,
+        timeoutMs: 100,
+      });
+
+      const first = probe.getUsage(process.cwd());
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(first).resolves.toBeNull();
+      expect(spawnPty).toHaveBeenCalledTimes(1);
+      expect(firstTerminal.kill).toHaveBeenCalledTimes(1);
+
+      now += 29_999;
+      await expect(probe.getUsage(process.cwd())).resolves.toBeNull();
+      expect(spawnPty).toHaveBeenCalledTimes(1);
+
+      now += 1;
+      const retried = probe.getUsage(process.cwd());
+      expect(spawnPty).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(retried).resolves.toBeNull();
+      expect(secondTerminal.kill).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('resolveExecutableFromPath', () => {
+  it('applies PATHEXT lookup before spawning on Windows', () => {
+    expect(
+      resolveExecutableFromPath(
+        'claude',
+        {
+          PATH: 'C:\\tools',
+          PATHEXT: '.COM;.EXE',
+        },
+        'win32',
+        windowsPathExists
+      )
+    ).toBe('C:\\tools\\claude.EXE');
+  });
+
+  it('returns undefined when no candidate exists', () => {
+    expect(resolveExecutableFromPath('claude', { PATH: '/bin' }, 'linux', () => false)).toBeUndefined();
+  });
+});

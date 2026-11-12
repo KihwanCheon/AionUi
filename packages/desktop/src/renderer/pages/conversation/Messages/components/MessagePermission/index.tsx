@@ -6,6 +6,7 @@
 
 import { ipcBridge } from '@/common';
 import type { IMessagePermission } from '@/common/chat/chatLib';
+import { submitClaudePermission, useClaudePermissionResponse } from '../../../platforms/acp/claudePermissions';
 import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PermissionRequestPanel } from './PermissionRequestPanel';
@@ -23,6 +24,7 @@ const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ messag
   const { t } = useTranslation();
   const content = message.content || ({} as IMessagePermission['content']);
   const { description, title, action, call_id, command_type } = content;
+  const responseState = useClaudePermissionResponse(message.conversation_id, call_id);
   const options = Array.isArray(content.options) ? content.options : [];
   const displayTitle = title || description || t('messages.permissionRequest');
 
@@ -45,13 +47,15 @@ const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ messag
 
   const handleConfirm = useCallback(
     async (selectedValue: string) => {
-      await ipcBridge.conversation.confirmation.confirm.invoke({
-        conversation_id: message.conversation_id,
-        call_id,
-        msg_id: message.msg_id || '',
-        data: { value: selectedValue },
-        always_allow: selectedValue === 'proceed_always',
-      });
+      await submitClaudePermission(message.conversation_id, call_id, () =>
+        ipcBridge.conversation.confirmation.confirm.invoke({
+          conversation_id: message.conversation_id,
+          call_id,
+          msg_id: message.msg_id || '',
+          data: { value: selectedValue },
+          always_allow: selectedValue === 'proceed_always',
+        })
+      );
     },
     [call_id, message.conversation_id, message.msg_id]
   );
@@ -66,6 +70,7 @@ const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ messag
       detail={command_type}
       options={panelOptions}
       onConfirm={handleConfirm}
+      responseState={responseState}
     />
   );
 });

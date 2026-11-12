@@ -101,11 +101,11 @@ export const DEFAULT_IMAGE_EXTENSION = '.png';
 
 // ===== WebUI 相关常量 =====
 
-/** WebUI default port: 25808 for production, 25809 for development, 25810 for multi-instance dev */
+/** WebUI default port: 25808 for production, 7777 for development, 25810 for multi-instance dev */
 export const WEBUI_DEFAULT_PORT = (() => {
   if (process.env.NODE_ENV === 'production') return 25808;
   if (process.env.AIONUI_MULTI_INSTANCE === '1') return 25810;
-  return 25809;
+  return 7777;
 })();
 
 export const TEAM_MODE_ENABLED = true;

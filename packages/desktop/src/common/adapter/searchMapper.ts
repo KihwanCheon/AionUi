@@ -6,8 +6,7 @@
 
 import type { TMessage } from '../chat/chatLib';
 import type { TChatConversation } from '../config/storage';
-import type { IMessageSearchItem } from '../types/team/database';
-import type { PaginatedResult } from './ipcBridge';
+import type { IMessageSearchItem, IMessageSearchResponse } from '../types/team/database';
 import { fromApiConversation } from './apiModelMapper';
 
 export interface ApiMessageSearchItem {
@@ -31,9 +30,9 @@ export interface ApiMessageSearchItem {
   };
 }
 
-export function fromApiSearchResult(
-  result: PaginatedResult<ApiMessageSearchItem>
-): PaginatedResult<IMessageSearchItem> {
+export type ApiMessageSearchResponse = Omit<IMessageSearchResponse, 'items'> & { items: ApiMessageSearchItem[] };
+
+export function fromApiSearchResult(result: ApiMessageSearchResponse): IMessageSearchResponse {
   return {
     ...result,
     items: result.items.map(fromApiSearchItem),

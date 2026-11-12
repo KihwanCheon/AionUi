@@ -7,17 +7,24 @@
 import type { IMessageText } from '@/common/chat/chatLib';
 import { parseFileMarker, resolveMessageFilePath } from './fileMarker';
 import SessionMentionAction from './SessionMentionAction';
-import { parseSessionMessageBlock, parseSessionsBlock } from './sessionMarkers';
+import {
+  QuestionNoticeHeader,
+  QuestionNoticeProvider,
+} from '@/renderer/hooks/context/UserChoiceNotifications/components/QuestionNotice';
+import questionNoticeStyles from '@/renderer/hooks/context/UserChoiceNotifications/proseQuestions.module.css';
+import { parseConversationSourceBlock, parseSessionsBlock } from './sessionMarkers';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useLocalFilePreview } from '@/renderer/pages/conversation/Preview/hooks/useLocalFilePreview';
 import { iconColors } from '@/renderer/styles/colors';
-import { Alert, Message, Tooltip } from '@arco-design/web-react';
-import { Copy } from '@icon-park/react';
+import { Alert, Button, Dropdown, Menu, Message, Tooltip } from '@arco-design/web-react';
+import { Copy, MoreOne } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { copyText } from '@/renderer/utils/ui/clipboard';
+import { openExternalUrl } from '@/renderer/utils/platform';
 import CollapsibleContent from '@renderer/components/chat/CollapsibleContent';
 import FilePreview from '@renderer/components/media/FilePreview';
 import HorizontalFileList from '@renderer/components/media/HorizontalFileList';
@@ -28,6 +35,12 @@ import { stripSkillSuggest, hasSkillSuggest } from '@renderer/utils/chat/skillSu
 import { isForkEnabled } from '@/common/chat/forkConversation';
 import { useForkConversation } from '@/renderer/hooks/chat/useForkConversation';
 import ForkBranchIcon from '@renderer/components/base/ForkBranchIcon';
+import {
+  notificationHighlightStyles,
+  useMessageNotificationHighlight,
+  useCompletedChoiceMessage,
+  useSourceConversationPreview,
+} from '@renderer/hooks/context/UserChoiceNotifications';
 
 /**
  * Format a timestamp for message display.
@@ -57,6 +70,12 @@ import TeammateMessageAvatar from './TeammateMessageAvatar';
 import { useTeammateColor } from '@/renderer/pages/team/identity/TeamIdentityContext';
 
 const CODE_STYLE = { marginTop: 4, marginBlock: 4 };
+const TABLET_MIN_VIEWPORT_PX = 768;
+
+const hasTouchFirstPointer = (): boolean =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(hover: none), (pointer: coarse)').matches;
 
 type TeamContextResetNotice = {
   kind: 'context_reset';
@@ -99,11 +118,19 @@ const MessageText: React.FC<{
   message: IMessageText;
   showCopyRow?: boolean;
   isLastMessage?: boolean;
+  isStreaming?: boolean;
   hasForkAnchor?: boolean;
   /** All text segments of this message's turn, in order — the copy button
    * copies the whole reply, not just the segment it happens to sit on. */
   turnTexts?: string[];
-}> = ({ message, showCopyRow = true, isLastMessage = false, hasForkAnchor = false, turnTexts }) => {
+}> = ({
+  message,
+  showCopyRow = true,
+  isLastMessage = false,
+  isStreaming = false,
+  hasForkAnchor = false,
+  turnTexts,
+}) => {
   const logos = useAgentLogos();
   // Filter think tags from content before rendering
   // 在渲染前过滤 think 标签
@@ -123,8 +150,18 @@ const MessageText: React.FC<{
   }, [message.content.content]);
 
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [showCopyAlert, setShowCopyAlert] = useState(false);
   const isUserMessage = message.position === 'right';
+  const userQuestion = message.position === 'left' ? message.content.user_choice : undefined;
+  const highlightedQuestionIndex = useMessageNotificationHighlight(message.conversation_id, message.id, message.msg_id);
+  const userQuestionLabel = userQuestion
+    ? t(
+        userQuestion.options?.some((option) => option.trim())
+          ? 'messages.userQuestion.choice'
+          : 'messages.userQuestion.freeText'
+      )
+    : undefined;
   // Delivered-but-not-yet-consumed marker for messages sent mid-turn to a
   // supporting backend (claude/codex). The message already reached the
   // server (it's rendered); this only answers "has the agent picked it up
@@ -142,13 +179,16 @@ const MessageText: React.FC<{
   // `[[AION_SESSIONS]]` block is appended to the user's own message, and a
   // delivery is persisted as a user message too. Not parsing them would show
   // raw marker text in a bubble.
-  const { text: textWithoutMentions, sessions: mentionedSessions } = useMemo(
-    () => (isUserMessage ? parseSessionsBlock(text) : { text, sessions: [] }),
+  const { text: textWithoutSource, source: deliverySource } = useMemo(
+    () => (isUserMessage ? parseConversationSourceBlock(text) : { text, source: null }),
     [isUserMessage, text]
   );
-  const { text: visibleText, source: deliverySource } = useMemo(
-    () => (isUserMessage ? parseSessionMessageBlock(textWithoutMentions) : { text: textWithoutMentions, source: null }),
-    [isUserMessage, textWithoutMentions]
+  const sourcePreview = useSourceConversationPreview(
+    deliverySource?.externalUrl === undefined ? deliverySource?.fromId : undefined
+  );
+  const { text: visibleText, sessions: mentionedSessions } = useMemo(
+    () => (isUserMessage ? parseSessionsBlock(textWithoutSource) : { text: textWithoutSource, sessions: [] }),
+    [isUserMessage, textWithoutSource]
   );
   const contextResetNotice = useMemo(
     () => (isTeammateMessage && senderName === 'team_system' ? parseTeamContextResetNotice(text) : null),
@@ -163,11 +203,14 @@ const MessageText: React.FC<{
       )
     : visibleText;
   const { data, json } = useFormatContent(renderedText);
+  useCompletedChoiceMessage(message, renderedText, !isStreaming);
   const shouldRenderPlainText = isUserMessage || Boolean(contextResetNotice);
   const conversationContext = useConversationContextSafe();
   const forkConversation = useForkConversation(conversationContext?.conversation_id);
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
+  const useTouchActions = isMobile || hasTouchFirstPointer();
+  const isTablet = useTouchActions && typeof window !== 'undefined' && window.innerWidth >= TABLET_MIN_VIEWPORT_PX;
   const handleLocalFileLink = useLocalFilePreview(conversationContext?.workspace);
   const resolvedFiles = useMemo(
     () => files.map((file_path) => resolveMessageFilePath(file_path, conversationContext?.workspace)),
@@ -214,11 +257,14 @@ const MessageText: React.FC<{
     isLastMessage,
     hasTurnAnchor: hasForkAnchor,
   });
+  const handleFork = (): void => {
+    void forkConversation(message.msg_id ?? message.id);
+  };
   const forkButton = showForkButton ? (
     <Tooltip content={t('messages.fork.action')}>
       <div
         className='p-4px rd-4px cursor-pointer hover:bg-3 transition-colors opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
-        onClick={() => void forkConversation(message.msg_id ?? message.id)}
+        onClick={handleFork}
         style={{ lineHeight: 0 }}
         data-testid='message-fork-button'
       >
@@ -226,6 +272,62 @@ const MessageText: React.FC<{
       </div>
     </Tooltip>
   ) : null;
+  const tabletCopyButton = (
+    <Tooltip content={t('common.copy', { defaultValue: 'Copy' })}>
+      <Button
+        type='text'
+        size='mini'
+        shape='circle'
+        className='!h-28px !w-28px !min-w-28px !p-0 text-t-secondary'
+        aria-label={t('common.copy', { defaultValue: 'Copy' })}
+        onClick={handleCopy}
+        data-testid='message-tablet-copy-button'
+      >
+        <Copy theme='outline' size='16' fill='currentColor' />
+      </Button>
+    </Tooltip>
+  );
+  const tabletForkButton = showForkButton ? (
+    <Tooltip content={t('messages.fork.action')}>
+      <Button
+        type='text'
+        size='mini'
+        shape='circle'
+        className='!h-28px !w-28px !min-w-28px !p-0 text-t-secondary'
+        aria-label={t('messages.fork.action')}
+        onClick={handleFork}
+        data-testid='message-fork-button'
+      >
+        <ForkBranchIcon size={16} fill='currentColor' />
+      </Button>
+    </Tooltip>
+  ) : null;
+  const phoneActionMenu = (
+    <Menu>
+      <Menu.Item key='copy' onClick={handleCopy} data-testid='message-copy-menu-item'>
+        <span className='flex items-center gap-8px'>
+          <Copy theme='outline' size='16' fill='currentColor' />
+          {t('common.copy', { defaultValue: 'Copy' })}
+        </span>
+      </Menu.Item>
+      {showForkButton ? (
+        <Menu.Item key='fork' onClick={handleFork} data-testid='message-fork-menu-item'>
+          <span className='flex items-center gap-8px'>
+            <ForkBranchIcon size={16} fill='currentColor' />
+            {t('messages.fork.action')}
+          </span>
+        </Menu.Item>
+      ) : null}
+      {message.created_at ? (
+        <div
+          className='mx-12px border-0 border-t border-solid border-[var(--color-border-2)] px-4px pt-8px pb-4px text-center text-12px text-t-secondary select-none'
+          data-testid='message-time-menu-display'
+        >
+          <time>{formatMessageTime(message.created_at)}</time>
+        </div>
+      ) : null}
+    </Menu>
+  );
 
   const cronMeta = message.content.cronMeta;
   const displaySenderName = senderName === 'team_system' ? t('team.systemNotice.sender') : senderName;
@@ -234,7 +336,12 @@ const MessageText: React.FC<{
   const teammateColor = useTeammateColor(isTeammateMessage ? senderConversationId : undefined);
 
   return (
-    <>
+    <QuestionNoticeProvider
+      conversationId={message.conversation_id}
+      messageId={message.id}
+      streamMessageId={message.msg_id}
+      createdAt={message.created_at}
+    >
       <div className={classNames('min-w-0 flex flex-col group', isUserMessage ? 'items-end' : 'items-start')}>
         {cronMeta && <MessageCronBadge meta={cronMeta} />}
         {isTeammateMessage && displaySenderName && (
@@ -258,14 +365,25 @@ const MessageText: React.FC<{
               'self-end': isUserMessage,
             })}
           >
-            <SessionMentionAction
-              id={deliverySource.fromId}
-              name={deliverySource.fromName || deliverySource.fromId}
-              label={t('conversation.crossSession.fromBadge', {
+            <Button
+              type='text'
+              size='mini'
+              className='!h-auto !p-0 !text-12px !text-t-secondary'
+              {...sourcePreview}
+              disabled={deliverySource.externalUrl === null}
+              onClick={() => {
+                if (deliverySource.externalUrl) {
+                  void openExternalUrl(deliverySource.externalUrl).catch(console.error);
+                } else {
+                  void navigate(`/conversation/${encodeURIComponent(deliverySource.fromId)}`);
+                }
+              }}
+            >
+              {t('conversation.crossSession.fromBadge', {
                 name: deliverySource.fromName || deliverySource.fromId,
                 defaultValue: 'From conversation {{name}}',
               })}
-            />
+            </Button>
             {deliverySource.workspace && deliverySource.workspace !== 'same' && (
               <span
                 className='px-4px rounded-4px'
@@ -307,10 +425,24 @@ const MessageText: React.FC<{
           </div>
         )}
         <div
+          role={userQuestion ? 'group' : undefined}
+          aria-label={userQuestionLabel}
+          data-choice-conversation-id={
+            message.position === 'left' && !isTeammateMessage && !message.hidden ? message.conversation_id : undefined
+          }
+          data-choice-message-id={message.id}
+          data-choice-stream-message-id={message.msg_id}
+          data-choice-marker-index={userQuestion ? 0 : undefined}
+          data-notification-highlight={(Boolean(userQuestion) && highlightedQuestionIndex === 0) || undefined}
           className={classNames('min-w-0 [&>p:first-child]:mt-0px [&>p:last-child]:mb-0px', {
-            'bg-aou-2 p-6px md:p-8px': isUserMessage || cronMeta,
+            'p-6px md:p-8px': isUserMessage || cronMeta,
+            'bg-aou-2': (isUserMessage || cronMeta) && !deliverySource,
+            'bg-[color:color-mix(in_srgb,var(--aou-2)_88%,var(--brand)_12%)]': Boolean(deliverySource),
             'bg-3 p-6px md:p-8px': isTeammateMessage,
             'w-full': !(isUserMessage || cronMeta || isTeammateMessage),
+            'box-border bg-primary-light-1 border border-primary-3 rounded-8px p-12px': Boolean(userQuestion),
+            [questionNoticeStyles.structuredQuestion]: Boolean(userQuestion),
+            [notificationHighlightStyles.question]: Boolean(userQuestion) && highlightedQuestionIndex === 0,
           })}
           style={{
             ...(isUserMessage || cronMeta
@@ -323,6 +455,7 @@ const MessageText: React.FC<{
                 : undefined),
           }}
         >
+          {userQuestionLabel && <QuestionNoticeHeader markerIndex={0} label={userQuestionLabel} />}
           {/* JSON 内容使用折叠组件 Use CollapsibleContent for JSON content */}
           {shouldRenderPlainText ? (
             <div className='whitespace-pre-wrap [overflow-wrap:anywhere]' data-testid='message-text-content'>
@@ -339,7 +472,15 @@ const MessageText: React.FC<{
             </CollapsibleContent>
           ) : (
             <div data-testid='message-text-content'>
-              <MarkdownView codeStyle={CODE_STYLE} onLocalFileLink={handleLocalFileLink}>
+              <MarkdownView
+                codeStyle={CODE_STYLE}
+                onLocalFileLink={handleLocalFileLink}
+                highlightUserQuestions={
+                  message.position === 'left' && !userQuestion && !isTeammateMessage && !message.hidden
+                }
+                highlightedQuestionIndex={highlightedQuestionIndex}
+                questionsComplete={!isStreaming}
+              >
                 {data}
               </MarkdownView>
             </div>
@@ -350,11 +491,9 @@ const MessageText: React.FC<{
             {t('messages.delivery.pending', { defaultValue: 'Unread' })}
           </div>
         )}
-        {/* Hover-revealed copy + timestamp row. Mobile has no hover affordance,
-            so we drop the row entirely — system-level long-press still copies.
-            For AI replies split across several text messages, only the last text
+        {/* For AI replies split across several text messages, only the last text
             of the turn shows this row (showCopyRow); user messages always do. */}
-        {!isMobile && showCopyRow && (
+        {!useTouchActions && showCopyRow && (
           <div
             className={classNames('h-32px flex items-center mt-4px gap-8px', {
               'flex-row-reverse': isUserMessage,
@@ -369,6 +508,38 @@ const MessageText: React.FC<{
             )}
           </div>
         )}
+        {useTouchActions && isTablet && showCopyRow && (
+          <div
+            className={classNames('h-32px flex items-center mt-4px gap-4px', {
+              'flex-row-reverse': isUserMessage,
+            })}
+            data-testid='message-tablet-actions'
+          >
+            {tabletCopyButton}
+            {tabletForkButton}
+            {message.created_at ? (
+              <time className='text-12px text-t-secondary select-none' data-testid='message-tablet-time'>
+                {formatMessageTime(message.created_at)}
+              </time>
+            ) : null}
+          </div>
+        )}
+        {useTouchActions && !isTablet && showCopyRow && (
+          <div className='h-32px flex items-center mt-4px' data-testid='message-phone-actions'>
+            <Dropdown trigger='click' droplist={phoneActionMenu} position={isUserMessage ? 'bl' : 'br'}>
+              <Button
+                type='text'
+                size='mini'
+                shape='circle'
+                className='!h-28px !w-28px !min-w-28px !p-0 text-t-secondary'
+                aria-label={t('common.more', { defaultValue: 'More' })}
+                data-testid='message-actions-menu'
+              >
+                <MoreOne theme='outline' size='16' fill='currentColor' />
+              </Button>
+            </Dropdown>
+          </div>
+        )}
       </div>
       {showCopyAlert && (
         <Alert
@@ -380,7 +551,7 @@ const MessageText: React.FC<{
           closable={false}
         />
       )}
-    </>
+    </QuestionNoticeProvider>
   );
 };
 

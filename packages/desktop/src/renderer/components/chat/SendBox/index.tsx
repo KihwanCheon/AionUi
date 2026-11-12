@@ -45,6 +45,7 @@ import { peLabeledPath } from '@/renderer/pages/conversation/explorer/search/sea
 import { copyText } from '@/renderer/utils/ui/clipboard';
 import { blurActiveElement, shouldBlockMobileInputFocus } from '@/renderer/utils/ui/focus';
 import { isPlatformPrimaryModifier } from '@/renderer/utils/ui/keyboardShortcuts';
+import { handleBackslashLineContinuation } from '@/renderer/utils/ui/input/lineContinuation';
 import { isMacOS } from '@/renderer/utils/platform';
 import { Button, Input, Message, Tag, Tooltip } from '@arco-design/web-react';
 import { CloseSmall, Plus, Quote } from '@icon-park/react';
@@ -55,6 +56,7 @@ import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMe
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { useCompositionInput } from '@renderer/hooks/chat/useCompositionInput';
+import { getChatEnterMode, isChatNewlineKey } from '@/renderer/utils/ui/input/chatEnterPolicy';
 import { useConversationExport } from '@renderer/hooks/file/useConversationExport';
 import { useDragUpload } from '@renderer/hooks/file/useDragUpload';
 import { useLatestRef } from '@renderer/hooks/ui/useLatestRef';
@@ -69,6 +71,7 @@ import SpeechInputButton from '@/renderer/components/chat/SpeechInputButton';
 import { appendSpeechTranscript } from '@/renderer/hooks/system/useSpeechInput';
 import { createChainedDispatch, useLiveTranscriptInsertion } from '@/renderer/hooks/system/useLiveTranscriptInsertion';
 import { getConversationInputHistory, isCaretOnFirstLine } from '@/renderer/utils/chat/messageHistory';
+import { shouldRequireExplicitInputFocus } from './touchFocusPolicy';
 import './sendbox.css';
 
 const constVoid = (): void => undefined;
@@ -245,6 +248,8 @@ const SendBox: React.FC<{
    */
   sendDisabled?: boolean;
   loading?: boolean;
+  /** Explicit cancellation capability, independent from message admission. */
+  canStop?: boolean;
   className?: string;
   tools?: React.ReactNode;
   rightTools?: React.ReactNode;
@@ -303,6 +308,7 @@ const SendBox: React.FC<{
   prefix,
   className,
   loading,
+  canStop,
   tools,
   rightTools,
   disabled,
@@ -342,6 +348,8 @@ const SendBox: React.FC<{
 }) => {
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
+  const enterMode = getChatEnterMode();
+  const requiresExplicitInputFocus = shouldRequireExplicitInputFocus(isMobile);
   // Mobile compact mode: parent supplies the `+` action sheet, which collapses
   // tools/rightTools into a single launcher and lets the textarea start as a single line.
   const isMobileCompact = isMobile && Boolean(onMobilePlusClick);
@@ -425,14 +433,14 @@ const SendBox: React.FC<{
     return () => clearTimeout(timer);
   }, []);
 
-  // 移动端挂载后主动清除焦点，拦截路由切换导致的非用户触发聚焦
+  // Touch-first clients clear route-driven focus without changing their layout mode.
   useEffect(() => {
-    if (!isMobile) return;
+    if (!requiresExplicitInputFocus) return;
     const timer = setTimeout(() => {
       blurActiveElement();
     }, 0);
     return () => clearTimeout(timer);
-  }, [isMobile]);
+  }, [requiresExplicitInputFocus]);
 
   // 检测是否单行
   // Detect whether to use single-line or multi-line mode
@@ -748,7 +756,7 @@ const SendBox: React.FC<{
       return;
     }
     prefillDraftChainRef.current = null;
-    if (isMobile || focusedPrefillRequestIdRef.current === prefillFocusRequest.requestId) return;
+    if (requiresExplicitInputFocus || focusedPrefillRequestIdRef.current === prefillFocusRequest.requestId) return;
     const textarea = getTextareaElement();
     if (!textarea) return;
     focusedPrefillRequestIdRef.current = prefillFocusRequest.requestId;
@@ -756,7 +764,7 @@ const SendBox: React.FC<{
     const end = textarea.value.length;
     textarea.setSelectionRange(end, end);
     setCaretPosition(end);
-  }, [getTextareaElement, input, isMobile, prefillFocusRequest]);
+  }, [getTextareaElement, input, prefillFocusRequest, requiresExplicitInputFocus]);
 
   // Selection→focus latch: whether we've already granted focus for the current
   // active session. Reset when this box goes inactive so the next activation
@@ -770,7 +778,7 @@ const SendBox: React.FC<{
   }, [active]);
 
   useEffect(() => {
-    if (!active || isMobile || disabled) return;
+    if (!active || requiresExplicitInputFocus || disabled) return;
     if (activeFocusGrantedRef.current) return;
     const textarea = getTextareaElement();
     if (!textarea) return;
@@ -782,7 +790,7 @@ const SendBox: React.FC<{
     const end = textarea.value.length;
     textarea.setSelectionRange(end, end);
     setCaretPosition(end);
-  }, [active, disabled, isMobile, getTextareaElement]);
+  }, [active, disabled, getTextareaElement, requiresExplicitInputFocus]);
 
   const syncCaretPosition = useCallback(
     (target?: EventTarget | null) => {
@@ -1338,17 +1346,17 @@ const SendBox: React.FC<{
       }
     },
   });
-  const markMobileFocusIntent = useCallback(() => {
-    if (!isMobile) return;
+  const markExplicitFocusIntent = useCallback(() => {
+    if (!requiresExplicitInputFocus) return;
     mobileUserFocusIntentUntilRef.current = Date.now() + 1500;
-  }, [isMobile]);
+  }, [requiresExplicitInputFocus]);
 
   const handleInputFocus = useCallback(() => {
-    if (isMobile && Date.now() > mobileUserFocusIntentUntilRef.current) {
+    if (requiresExplicitInputFocus && Date.now() > mobileUserFocusIntentUntilRef.current) {
       blurActiveElement();
       return;
     }
-    if (isMobile && shouldBlockMobileInputFocus()) {
+    if (requiresExplicitInputFocus && shouldBlockMobileInputFocus()) {
       blurActiveElement();
       return;
     }
@@ -1356,7 +1364,7 @@ const SendBox: React.FC<{
     handlePasteFocus();
     setIsInputFocused(true);
     onFocused?.();
-  }, [handlePasteFocus, isMobile, onFocused]);
+  }, [handlePasteFocus, onFocused, requiresExplicitInputFocus]);
   const handleInputBlur = useCallback(() => {
     setIsInputFocused(false);
   }, []);
@@ -1673,7 +1681,11 @@ const SendBox: React.FC<{
     defaultValue: isMacOS() ? '⌘ + Enter' : 'Ctrl + Enter',
   });
   const sendActionTooltip =
-    sendDisabled && sendDisabledTooltip ? sendDisabledTooltip : `${sendNowLabel} · ${enterShortcutLabel}`;
+    sendDisabled && sendDisabledTooltip
+      ? sendDisabledTooltip
+      : enterMode === 'newline'
+        ? sendNowLabel
+        : `${sendNowLabel} · ${enterShortcutLabel}`;
   const draftActionBaseTooltip = addToDraftTooltip ?? addToDraftLabel;
 
   const handlePrimaryAction = () => {
@@ -1768,11 +1780,13 @@ const SendBox: React.FC<{
       className='bg-animate sendbox-stop-button'
       icon={<div className='mx-auto size-12px bg-6'></div>}
       onClick={stopHandler}
+      data-testid='sendbox-stop-btn'
     ></Button>
   );
 
   const renderActionButtons = () => {
-    if (allowSendWhileLoading && (isLoading || loading)) {
+    const showStop = canStop ?? (isLoading || loading);
+    if (allowSendWhileLoading && showStop) {
       // Keep a single action slot while processing: show stop when the draft is empty,
       // and only switch back to send once the user has prepared a queued message.
       if (compactActions || !hasDraftToSend || disabled || isUploading) {
@@ -1781,7 +1795,7 @@ const SendBox: React.FC<{
       return primaryActionButton;
     }
 
-    if (isLoading || loading) {
+    if (showStop) {
       return stopButton;
     }
 
@@ -2149,9 +2163,10 @@ const SendBox: React.FC<{
               {renderHighlightedInputValue()}
             </div>
             <Input.TextArea
-              autoFocus={active && !isMobile}
+              autoFocus={active && !requiresExplicitInputFocus}
               disabled={disabled}
               spellCheck={false}
+              enterKeyHint={enterMode === 'newline' ? 'enter' : 'send'}
               value={input}
               placeholder={
                 isMobileCompact
@@ -2181,8 +2196,8 @@ const SendBox: React.FC<{
               }}
               onChange={handleTextAreaChange}
               onPaste={onPaste}
-              onTouchStart={markMobileFocusIntent}
-              onMouseDown={markMobileFocusIntent}
+              onTouchStart={markExplicitFocusIntent}
+              onMouseDown={markExplicitFocusIntent}
               onClick={(event) => {
                 syncCaretPosition(event.target);
               }}
@@ -2203,7 +2218,9 @@ const SendBox: React.FC<{
                   handleAtSessionMenuKeyDown(event) ||
                   handleAtFileMenuKeyDown(event) ||
                   handleOverlayKeyDown(event) ||
-                  handleHistoryKeyDown(event)
+                  handleHistoryKeyDown(event) ||
+                  isChatNewlineKey(event, enterMode) ||
+                  handleBackslashLineContinuation(event, setInputRef.current)
                 );
               })}
             ></Input.TextArea>

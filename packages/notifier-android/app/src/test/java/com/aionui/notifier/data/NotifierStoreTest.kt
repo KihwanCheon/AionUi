@@ -1,0 +1,112 @@
+package com.aionui.notifier.data
+
+import android.app.Application
+import android.content.Context
+import org.junit.Assert.*
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], application = Application::class)
+class NotifierStoreTest {
+    private val context
+        get() = RuntimeEnvironment.getApplication() as Context
+
+    private fun notice(id: String = "request") = PushNotice("pc-1", id, "제목", "본문", 100)
+
+    @Before
+    fun reset() {
+        context.getSharedPreferences("notifier", Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
+    @Test
+    fun startsDisabledAndIgnoresIncomingPush() {
+        val store = NotifierStore(context)
+        assertFalse(store.enabled.value)
+        assertFalse(store.accept(notice()))
+        assertTrue(store.notices.value.isEmpty())
+    }
+
+    @Test
+    fun keepsMnpSourceAndMetadataAcrossRestartAndSeparatesTheSameLegacyId() {
+        val store = NotifierStore(context).apply { setEnabled(true) }
+        store.accept(notice())
+        val mnp = notice().copy(origin = "mnp", kind = "info", mapId = "map-1", cardId = "card-1", revision = 1)
+        store.accept(mnp)
+        store.open(mnp.key)
+        store.accept(mnp.copy(body = "갱신 내용", revision = 2, silent = true))
+        val saved = NotifierStore(context).notices.value
+        assertEquals(2, saved.size)
+        assertEquals("map-1", saved.first { it.origin == "mnp" }.mapId)
+        assertTrue(saved.first { it.origin == "mnp" }.opened)
+    }
+
+    @Test
+    fun suppressesDuplicatesAcrossProcessRestarts() {
+        NotifierStore(context).apply {
+            setEnabled(true)
+            assertTrue(accept(notice()))
+        }
+        val restarted = NotifierStore(context)
+        assertFalse(restarted.accept(notice()))
+        assertEquals(1, restarted.notices.value.size)
+    }
+
+    @Test
+    fun updatesAnExistingRequestWithoutAddingAnotherRowAndPreservesReadState() {
+        val store = NotifierStore(context).apply { setEnabled(true) }
+        store.accept(notice().copy(revision = 1))
+        store.open(notice().key)
+        assertTrue(
+            store.accept(
+                notice().copy(body = "완성된 질문과 선택지", revision = 2, updatedAt = 200, silent = true)
+            )
+        )
+        val restarted = NotifierStore(context)
+        assertEquals(1, restarted.notices.value.size)
+        assertEquals("완성된 질문과 선택지", restarted.notices.value.single().body)
+        assertTrue(restarted.notices.value.single().opened)
+    }
+
+    @Test
+    fun rejectsAnOlderRevisionArrivingAfterTheUpdatedContent() {
+        val store = NotifierStore(context).apply { setEnabled(true) }
+        store.accept(notice().copy(body = "완성된 본문", revision = 2))
+        assertFalse(store.accept(notice().copy(body = "작성 중", revision = 1)))
+        assertEquals("완성된 본문", store.notices.value.single().body)
+    }
+
+    @Test
+    fun doesNotMergeDifferentPcsWithTheSameNoticeId() {
+        val store = NotifierStore(context).apply { setEnabled(true) }
+        store.accept(notice())
+        assertTrue(store.accept(notice().copy(sourceId = "pc-2")))
+        assertEquals(2, store.notices.value.size)
+    }
+
+    @Test
+    fun openingARequestKeepsItInHistoryAndPersistsReadState() {
+        val store =
+            NotifierStore(context).apply {
+                setEnabled(true)
+                accept(notice())
+            }
+        store.open(notice().key)
+        val saved = NotifierStore(context).notices.value.single()
+        assertEquals(notice().key, saved.key)
+        assertTrue(saved.opened)
+    }
+
+    @Test
+    fun boundsHistoryAndStopsReceivingWhenDisabled() {
+        val store = NotifierStore(context).apply { setEnabled(true) }
+        repeat(110) { store.accept(notice("request-$it")) }
+        assertEquals(100, store.notices.value.size)
+        store.setEnabled(false)
+        assertFalse(store.accept(notice("disabled")))
+    }
+}

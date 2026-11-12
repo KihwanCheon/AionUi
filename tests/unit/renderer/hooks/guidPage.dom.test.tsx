@@ -4,10 +4,45 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LayoutContext } from '@/renderer/hooks/context/LayoutContext';
+import type { MobileActionSheetEntry } from '@/renderer/components/chat/MobileActionSheet/types';
+import type { ManagedAgent } from '@/renderer/utils/model/agentTypes';
+
+let mockManagedAgents: ManagedAgent[] = [];
+
+vi.mock('@/renderer/hooks/agent/useManagedAgents', () => ({
+  useManagedAgentRuntimeCatalog: () => mockManagedAgents,
+}));
+
+const originalMatchMedia = window.matchMedia;
+const desktopElectronApi = window.electronAPI;
+
+const useTouchWebEnvironment = (): void => {
+  Object.defineProperty(window, 'electronAPI', { configurable: true, value: undefined, writable: true });
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn((query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+    writable: true,
+  });
+};
+
+afterEach(() => {
+  Object.defineProperty(window, 'electronAPI', { configurable: true, value: desktopElectronApi, writable: true });
+  Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia, writable: true });
+});
 
 const {
   modelSelectionMock,
@@ -19,6 +54,7 @@ const {
   capturedGuidInputCardProps,
   capturedGuidSendDeps,
   resolveGuidAssistantDefaultsMock,
+  listAvailableSkillsInvokeMock,
   sendMock,
   navigateMock,
 } = vi.hoisted(() => ({
@@ -117,6 +153,7 @@ const {
     skillIds: [],
     mcpIds: [],
   })),
+  listAvailableSkillsInvokeMock: vi.fn().mockResolvedValue([]),
   sendMock: {
     handleSend: vi.fn(),
     sendMessageHandler: vi.fn(),
@@ -140,7 +177,7 @@ vi.mock('react-router-dom', () => ({
 vi.mock('@/common', () => ({
   ipcBridge: {
     fs: {
-      listAvailableSkills: { invoke: vi.fn().mockResolvedValue([]) },
+      listAvailableSkills: { invoke: listAvailableSkillsInvokeMock },
     },
   },
 }));
@@ -230,6 +267,7 @@ vi.mock('@/renderer/hooks/system/useSpeechInput', () => ({
 }));
 
 vi.mock('@/renderer/utils/platform', () => ({
+  isElectronDesktop: () => Boolean(window.electronAPI),
   openExternalUrl: vi.fn(),
   resolveExtensionAssetUrl: vi.fn(),
   resolveBackendAssetUrl: vi.fn((path: string) => path),
@@ -302,6 +340,7 @@ const guidInputCardProps = {
 
 describe('GuidPage', () => {
   beforeEach(() => {
+    mockManagedAgents = [];
     locationMock.state = null;
     locationMock.key = 'guid-location';
     navigateMock.mockReset();
@@ -310,6 +349,8 @@ describe('GuidPage', () => {
     capturedAssistantSelectionAreaProps.length = 0;
     capturedGuidInputCardProps.length = 0;
     capturedGuidSendDeps.length = 0;
+    listAvailableSkillsInvokeMock.mockReset();
+    listAvailableSkillsInvokeMock.mockResolvedValue([]);
     useGuidAssistantSelectionMock.mockClear();
     resolveGuidAssistantDefaultsMock.mockReturnValue({
       disabledBuiltinSkillIds: [],
@@ -346,6 +387,24 @@ describe('GuidPage', () => {
         deletable: false,
       },
     ];
+  });
+
+  it('passes the mobile account choice to conversation creation only while multiple accounts exist', () => {
+    const accounts = [
+      { id: 'default', number: 1, label: 'Team' },
+      { id: 'max', number: 2, label: 'Max' },
+    ];
+    mockManagedAgents = [{ backend: 'claude', claude_accounts: accounts } as ManagedAgent];
+    agentSelectionMock.selectedAssistantBackend = 'claude';
+    const { rerender } = render(<GuidPage />);
+    const entry = capturedGuidActionRowProps.at(-1)?.mobileAccountEntry as MobileActionSheetEntry;
+    act(() => entry.submenu?.onSelect('max'));
+    expect(capturedGuidSendDeps.at(-1)?.claudeAccountId).toBe('max');
+
+    mockManagedAgents = [{ backend: 'claude', claude_accounts: accounts.slice(0, 1) } as ManagedAgent];
+    rerender(<GuidPage />);
+    expect(capturedGuidSendDeps.at(-1)?.claudeAccountId).toBeNull();
+    expect(capturedGuidActionRowProps.at(-1)?.mobileAccountEntry).toBeNull();
   });
 
   it('keeps the existing replace contract for ordinary Guid prefills', () => {
@@ -522,6 +581,126 @@ describe('GuidPage', () => {
     expect(screen.getByRole('button', { name: 'guid.defaultPrompts.create' })).toBeInTheDocument();
   });
 
+  it('selects session-message by default in both the skill picker and conversation creation options', async () => {
+    listAvailableSkillsInvokeMock.mockResolvedValue([
+      {
+        name: 'session-message',
+        description: 'Cross-session messages',
+        location: '/builtin/session-message/SKILL.md',
+        is_auto_inject: true,
+        is_custom: false,
+        source: 'builtin',
+      },
+      {
+        name: 'officecli',
+        description: 'Office documents',
+        location: '/builtin/officecli/SKILL.md',
+        is_auto_inject: true,
+        is_custom: false,
+        source: 'builtin',
+      },
+      {
+        name: 'skill-creator',
+        description: 'Create skills',
+        location: '/builtin/skill-creator/SKILL.md',
+        is_auto_inject: true,
+        is_custom: false,
+        source: 'builtin',
+      },
+      {
+        name: 'cron',
+        description: 'Schedule tasks',
+        location: '/builtin/cron/SKILL.md',
+        is_auto_inject: true,
+        is_custom: false,
+        source: 'builtin',
+      },
+      {
+        name: 'aionui-config',
+        description: 'Configure AionUi',
+        location: '/builtin/aionui-config/SKILL.md',
+        is_auto_inject: true,
+        is_custom: false,
+        source: 'builtin',
+      },
+      {
+        name: 'manual-skill',
+        description: 'Opt-in skill',
+        location: '/builtin/manual-skill/SKILL.md',
+        is_auto_inject: false,
+        is_custom: false,
+        source: 'builtin',
+      },
+    ]);
+
+    render(<GuidPage />);
+
+    const expectedDisabledSkills = ['officecli', 'skill-creator', 'cron', 'aionui-config'];
+    await waitFor(() => {
+      expect(capturedGuidActionRowProps.at(-1)?.disabledBuiltinSkills).toEqual(expectedDisabledSkills);
+      expect(capturedGuidSendDeps.at(-1)?.assistantDefaultDisabledBuiltinSkillIds).toEqual(expectedDisabledSkills);
+    });
+
+    act(() => {
+      const onToggleSkill = capturedGuidActionRowProps.at(-1)?.onToggleSkill as
+        | ((skillName: string, isAuto: boolean) => void)
+        | undefined;
+      onToggleSkill?.('officecli', true);
+    });
+
+    await waitFor(() => {
+      expect(capturedGuidActionRowProps.at(-1)?.disabledBuiltinSkills).toEqual([
+        'skill-creator',
+        'cron',
+        'aionui-config',
+      ]);
+    });
+  });
+
+  it('honors a manual session-message opt-out before assistant details load', async () => {
+    listAvailableSkillsInvokeMock.mockResolvedValue([
+      { name: 'session-message', description: 'Messages', source: 'builtin', is_auto_inject: true },
+      { name: 'cron', description: 'Schedule tasks', source: 'builtin', is_auto_inject: true },
+    ]);
+    render(<GuidPage />);
+    await waitFor(() => expect(capturedGuidActionRowProps.at(-1)?.disabledBuiltinSkills).toEqual(['cron']));
+
+    act(() => {
+      const toggle = capturedGuidActionRowProps.at(-1)?.onToggleSkill as (name: string, isAuto: boolean) => void;
+      toggle('session-message', true);
+    });
+
+    expect(capturedGuidActionRowProps.at(-1)?.disabledBuiltinSkills).toEqual(['cron', 'session-message']);
+    expect(capturedGuidSendDeps.at(-1)?.guidDisabledBuiltinSkills).toEqual(['cron', 'session-message']);
+  });
+
+  it('starts each new chat with session-message selected even when assistant preferences previously disabled it', async () => {
+    listAvailableSkillsInvokeMock.mockResolvedValue([
+      { name: 'session-message', description: 'Messages', source: 'builtin', is_auto_inject: true },
+      { name: 'cron', description: 'Schedule tasks', source: 'builtin', is_auto_inject: true },
+    ]);
+    swrMock.useSWRMock.mockReturnValue({ data: assistantDetailFixture });
+    resolveGuidAssistantDefaultsMock.mockReturnValue({
+      disabledBuiltinSkillIds: ['session-message'],
+      skillIds: [],
+      mcpIds: [],
+    });
+    const { rerender } = render(<GuidPage />);
+    await waitFor(() => expect(capturedGuidActionRowProps.at(-1)?.disabledBuiltinSkills).toEqual(['cron']));
+    act(() => {
+      const toggle = capturedGuidActionRowProps.at(-1)?.onToggleSkill as (name: string, isAuto: boolean) => void;
+      toggle('session-message', true);
+      toggle('cron', true);
+    });
+    rerender(<GuidPage />);
+    expect(capturedGuidSendDeps.at(-1)?.guidDisabledBuiltinSkills).toEqual(['session-message']);
+
+    locationMock.state = { resetAssistant: true };
+    locationMock.key = 'next-new-chat';
+    rerender(<GuidPage />);
+    expect(capturedGuidActionRowProps.at(-1)?.disabledBuiltinSkills).toEqual([]);
+  });
+
   it('does not seed skill defaults from the assistant list while detail is loading', async () => {
     agentSelectionMock.assistants = [
       {
@@ -677,9 +856,81 @@ describe('GuidPage', () => {
     // Restore shared mock state for later tests.
     sendMock.isButtonDisabled = false;
   });
+
+  it.each(['', 'first line'])('leaves Enter as a touch newline without starting a conversation (%s)', (input) => {
+    useTouchWebEnvironment();
+    guidInputMock.input = input;
+    sendMock.isButtonDisabled = false;
+    sendMock.sendMessageHandler.mockClear();
+    render(<GuidPage />);
+    const props = capturedGuidInputCardProps.at(-1);
+    const onKeyDown = props?.onKeyDown as (event: unknown) => void;
+    const preventDefault = vi.fn();
+
+    onKeyDown({ key: 'Enter', shiftKey: false, preventDefault });
+
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(sendMock.sendMessageHandler).not.toHaveBeenCalled();
+    expect(props?.enterKeyHint).toBe('enter');
+  });
+
+  it('still starts a touch conversation from the send button', () => {
+    useTouchWebEnvironment();
+    sendMock.isButtonDisabled = false;
+    sendMock.sendMessageHandler.mockClear();
+    render(<GuidPage />);
+
+    const onSend = capturedGuidActionRowProps.at(-1)?.onSend as () => void;
+    onSend();
+
+    expect(sendMock.sendMessageHandler).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('GuidInputCard prefill focus', () => {
+  it('accepts a multiline touch draft and preserves the newline keyboard hint', async () => {
+    const { default: GuidInputCard } = await vi.importActual<
+      typeof import('@/renderer/pages/guid/components/GuidInputCard')
+    >('@/renderer/pages/guid/components/GuidInputCard');
+    const user = userEvent.setup();
+    const onKeyDown = vi.fn();
+    const Harness = () => {
+      const [value, setValue] = React.useState('first line');
+      return (
+        <GuidInputCard
+          {...guidInputCardProps}
+          input={value}
+          onInputChange={setValue}
+          onKeyDown={onKeyDown}
+          enterKeyHint='enter'
+        />
+      );
+    };
+    render(<Harness />);
+    const textarea = screen.getByTestId('guid-input');
+
+    await user.click(textarea);
+    await user.keyboard('{End}{Enter}second line');
+
+    expect(textarea).toHaveValue('first line\nsecond line');
+    expect(textarea).toHaveAttribute('enterkeyhint', 'enter');
+  });
+
+  it('does not forward Enter to the send handler during Korean composition', async () => {
+    const { default: GuidInputCard } = await vi.importActual<
+      typeof import('@/renderer/pages/guid/components/GuidInputCard')
+    >('@/renderer/pages/guid/components/GuidInputCard');
+    const onKeyDown = vi.fn();
+    render(<GuidInputCard {...guidInputCardProps} onKeyDown={onKeyDown} enterKeyHint='enter' />);
+    const textarea = screen.getByTestId('guid-input');
+
+    fireEvent.compositionStart(textarea);
+    fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter', isComposing: true });
+    fireEvent.compositionEnd(textarea, { data: '글' });
+
+    expect(onKeyDown).not.toHaveBeenCalled();
+  });
+
   it('focuses a draft-preserving prefill on desktop', async () => {
     const { default: GuidInputCard } = await vi.importActual<
       typeof import('@/renderer/pages/guid/components/GuidInputCard')

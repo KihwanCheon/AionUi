@@ -1,8 +1,7 @@
-import loginLogo from '@renderer/assets/logos/brand/app.png';
+import loginLogo from '@renderer/assets/logos/brand/login-brand.png';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { changeLanguage } from '@/renderer/services/i18n';
-import { useNavigate } from 'react-router-dom';
 import AppLoader from '@renderer/components/layout/AppLoader';
 import { useAuth } from '../../hooks/context/AuthContext';
 import './LoginPage.css';
@@ -33,7 +32,6 @@ const deobfuscate = (text: string): string => {
 
 const LoginPage: React.FC = () => {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
   const { status, login } = useAuth();
 
   const [username, setUsername] = useState('');
@@ -81,12 +79,6 @@ const LoginPage: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (status === 'authenticated') {
-      void navigate('/guid', { replace: true });
-    }
-  }, [navigate, status]);
-
   const clearMessageLater = useCallback(() => {
     if (messageTimer.current) {
       window.clearTimeout(messageTimer.current);
@@ -108,17 +100,9 @@ const LoginPage: React.FC = () => {
 
   const supportedLanguages = useMemo<{ code: string; label: string }[]>(
     () => [
-      { code: 'zh-CN', label: '简体中文' },
-      { code: 'zh-TW', label: '繁體中文' },
-      { code: 'ja-JP', label: '日本語' },
       { code: 'ko-KR', label: '한국어' },
-      { code: 'tr-TR', label: 'Türkçe' },
-      { code: 'uk-UA', label: 'Українська' },
-      { code: 'pt-BR', label: 'Português (BR)' },
-      { code: 'de-DE', label: 'Deutsch' },
-      { code: 'es-ES', label: 'Español' },
-      { code: 'fa-IR', label: 'فارسی' },
       { code: 'en-US', label: 'English' },
+      { code: 'ja-JP', label: '日本語' },
     ],
     []
   );
@@ -158,10 +142,6 @@ const LoginPage: React.FC = () => {
 
         const successText = t('login.success');
         showMessage({ type: 'success', text: successText });
-
-        window.setTimeout(() => {
-          void navigate('/guid', { replace: true });
-        }, 600);
       } else {
         const errorText = (() => {
           switch (result.code) {
@@ -184,7 +164,7 @@ const LoginPage: React.FC = () => {
 
       setLoading(false);
     },
-    [login, navigate, password, rememberMe, showMessage, t, username]
+    [login, password, rememberMe, showMessage, t, username]
   );
 
   if (status === 'checking') {

@@ -1,4 +1,13 @@
 {
+  "externalLaunch": {
+    "loading": "Preparando a conversa solicitada...",
+    "errorTitle": "Não foi possível iniciar a conversa",
+    "notFoundOrExpired": "Esta solicitação é inválida, expirou ou já foi concluída.",
+    "alreadyUsed": "Esta solicitação de início já foi usada.",
+    "unavailableOptions": "O agente, modelo, as habilidades ou ferramentas MCP solicitados não estão disponíveis.",
+    "loadFailed": "Não foi possível carregar a solicitação. Tente novamente.",
+    "callbackPending": "A conversa foi criada, mas o aplicativo vinculado não pôde ser notificado. Talvez seja necessário tentar novamente."
+  },
   "promptExamplesHint": "Experimente estas instruções",
   "defaultPrompts": {
     "understand": "Conheça este projeto e explique em palavras simples o que ele faz e por onde começar",
@@ -13,5 +22,8 @@
     "specifyWorkspace": "Selecionar pasta do projeto",
     "searchPlaceholder": "Procurar projetos…",
     "noProject": "Nenhum Projeto"
+  },
+  "claudeAccount": {
+    "label": "Conta do Claude"
   }
 }

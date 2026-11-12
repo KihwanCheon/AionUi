@@ -11,11 +11,18 @@
 import '@sentry/electron/preload';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { ADAPTER_BRIDGE_EVENT_KEY } from '../common/adapter/constant';
+import { MOBILE_PUSH_CHANNEL, MOBILE_PUSH_CHANGED, type MobilePushRequest } from '../common/types/platform/mobilePush';
 
 /**
  * @description 注入到renderer进程中, 用于与main进程通信
  * */
 contextBridge.exposeInMainWorld('electronAPI', {
+  mobilePushRequest: (request: MobilePushRequest) => ipcRenderer.invoke(MOBILE_PUSH_CHANNEL, request),
+  onMobilePushChanged: (listener: () => void) => {
+    const handler = () => listener();
+    ipcRenderer.on(MOBILE_PUSH_CHANGED, handler);
+    return () => ipcRenderer.off(MOBILE_PUSH_CHANGED, handler);
+  },
   emit: (name: string, data: unknown) => {
     return ipcRenderer
       .invoke(

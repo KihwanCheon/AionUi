@@ -6,6 +6,7 @@
 
 import type { TMessage } from '@/common/chat/chatLib';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const loadAllConversationMessagesPaged = vi.fn();
@@ -66,6 +67,37 @@ describe('useConversationAnchors', () => {
 
     await waitFor(() => expect(loadAllConversationMessagesPaged).toHaveBeenCalled());
     expect(loadAllConversationMessagesPaged).toHaveBeenCalledWith('c1', { contentMode: 'compact' });
+  });
+
+  it('shares the pending history read when StrictMode replays the effect', async () => {
+    let resolveHistory: ((messages: TMessage[]) => void) | undefined;
+    loadAllConversationMessagesPaged.mockImplementation(
+      () => new Promise<TMessage[]>((resolve) => (resolveHistory = resolve))
+    );
+
+    const { result } = renderHook(() => useConversationAnchors('c1', []), { wrapper: StrictMode });
+
+    await waitFor(() => expect(loadAllConversationMessagesPaged).toHaveBeenCalledTimes(1));
+    await act(async () => resolveHistory?.(history(4)));
+    await waitFor(() => expect(result.current).toHaveLength(4));
+  });
+
+  it('allows a later mount to retry after the shared history read fails', async () => {
+    let rejectHistory: ((error: Error) => void) | undefined;
+    loadAllConversationMessagesPaged.mockImplementationOnce(
+      () => new Promise<TMessage[]>((_, reject) => (rejectHistory = reject))
+    );
+
+    const first = renderHook(() => useConversationAnchors('c1', []), { wrapper: StrictMode });
+    await waitFor(() => expect(loadAllConversationMessagesPaged).toHaveBeenCalledTimes(1));
+    await act(async () => rejectHistory?.(new Error('offline')));
+    first.unmount();
+
+    loadAllConversationMessagesPaged.mockResolvedValueOnce(history(2));
+    const { result } = renderHook(() => useConversationAnchors('c1', []));
+
+    await waitFor(() => expect(loadAllConversationMessagesPaged).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current).toHaveLength(2));
   });
 
   it('lets newly sent messages extend the rail without re-reading history', async () => {

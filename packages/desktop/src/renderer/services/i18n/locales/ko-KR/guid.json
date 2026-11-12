@@ -1,4 +1,13 @@
 {
+  "externalLaunch": {
+    "loading": "요청한 대화를 준비하고 있습니다...",
+    "errorTitle": "대화를 시작할 수 없습니다",
+    "notFoundOrExpired": "시작 요청이 잘못되었거나 만료 또는 이미 완료되었습니다.",
+    "alreadyUsed": "이미 사용된 대화 시작 요청입니다.",
+    "unavailableOptions": "요청한 에이전트, 모델, 스킬 또는 MCP 도구를 사용할 수 없습니다.",
+    "loadFailed": "대화 시작 요청을 불러오지 못했습니다. 다시 시도해 주세요.",
+    "callbackPending": "대화는 생성되었지만 연동 프로그램에 알리지 못했습니다. 재시도가 필요할 수 있습니다."
+  },
   "promptExamplesHint": "이 지시를 사용해 보세요",
   "defaultPrompts": {
     "understand": "이 프로젝트를 파악해서, 무엇을 하는 프로젝트인지 어디서부터 시작하면 되는지 쉽게 설명해 줘",
@@ -13,5 +22,8 @@
     "specifyWorkspace": "프로젝트 폴더 선택",
     "searchPlaceholder": "프로젝트 검색…",
     "noProject": "프로젝트 없음"
+  },
+  "claudeAccount": {
+    "label": "Claude 계정"
   }
 }

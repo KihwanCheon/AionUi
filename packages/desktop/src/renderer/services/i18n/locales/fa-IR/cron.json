@@ -163,5 +163,15 @@
     "conversationNotFound": "مکالمه یافت نشد",
     "scheduledTimePassed": "زمان‌بندی گذشته است",
     "conversationBusy": "مکالمه پس از {{count}} تلاش مشغول است"
+  },
+  "backup": {
+    "backup": "پشتیبان‌گیری",
+    "restore": "بازیابی",
+    "backupEmpty": "کار زمان‌بندی‌شده‌ای برای پشتیبان‌گیری وجود ندارد",
+    "backupSuccess": "از {{count}} کار زمان‌بندی‌شده پشتیبان‌گیری شد",
+    "backupFailed": "پشتیبان‌گیری از کارهای زمان‌بندی‌شده ناموفق بود",
+    "restoreSuccess": "بازیابی شد: {{imported}} جدید، {{updated}} بازنویسی، {{skipped}} ناموفق",
+    "restoreInvalid": "فایل پشتیبان کار زمان‌بندی‌شده معتبر نیست",
+    "restoreFailed": "بازیابی کارهای زمان‌بندی‌شده ناموفق بود"
   }
 }

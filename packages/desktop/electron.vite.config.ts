@@ -139,7 +139,9 @@ export default defineConfig(({ mode }) => {
         reportCompressedSize: false,
         rollupOptions: {
           input: {
-            index: resolve('packages/desktop/src/index.ts'),
+            index: resolve('packages/desktop/src/bootstrap.ts'),
+            mainApplication: resolve('packages/desktop/src/index.ts'),
+            'mindnprogress-runner': resolve('packages/desktop/src/process/resources/mindnprogressRunner/entry.ts'),
             // Built-in MCP server entry points (compiled by scripts/build-mcp-servers.js via esbuild,
             // not vite — esbuild bundles all deps for self-contained execution by external node processes)
           },
@@ -199,12 +201,17 @@ export default defineConfig(({ mode }) => {
         // Default to 5173; when occupied (e.g. another AionUi clone is running),
         // Vite auto-increments to the next available port.
         // electron-vite reads the actual port and sets ELECTRON_RENDERER_URL accordingly.
-        port: 5173,
+        port: process.env.AIONUI_DEV_PORT ? Number(process.env.AIONUI_DEV_PORT) : 5173,
+        // When AIONUI_DEV_PORT is set, pin it (no auto-increment) so Vite never lands in a
+        // Windows excluded/reserved TCP port range (e.g. 5174-5273 reserved by Hyper-V/WSL).
+        strictPort: !!process.env.AIONUI_DEV_PORT,
+        // Optional explicit bind host (e.g. 127.0.0.1 to force IPv4 and avoid ::1 EACCES).
+        host: process.env.AIONUI_DEV_HOST || undefined,
         // Explicit HMR host so Vite client connects directly to the Vite dev server,
         // not to the WebUI proxy server (which would reject the WebSocket and cause infinite reload).
         // Port is omitted so it automatically matches the server port.
         hmr: {
-          host: 'localhost',
+          host: process.env.AIONUI_DEV_HOST || 'localhost',
         },
       },
       resolve: {

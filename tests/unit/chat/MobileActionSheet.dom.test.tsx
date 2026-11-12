@@ -86,6 +86,28 @@ describe('MobileActionSheet', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('renders footer content inside a submenu', () => {
+    const onClose = vi.fn();
+    const entries: MobileActionSheetEntry[] = [
+      {
+        key: 'mcp',
+        label: 'Selected MCP',
+        submenu: {
+          title: 'Selected MCP',
+          options: [{ key: 'server', label: 'Server' }],
+          onSelect: vi.fn(),
+          footer: <div data-testid='mcp-footer'>Apply selected MCP</div>,
+        },
+      },
+    ];
+    render(<MobileActionSheet open onClose={onClose} entries={entries} />);
+
+    fireEvent.click(screen.getByTestId('mobile-action-sheet-mcp'));
+
+    expect(screen.getByTestId('mcp-footer')).toHaveTextContent('Apply selected MCP');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('runs an action entry and closes the sheet', () => {
     const onClick = vi.fn();
     const onClose = vi.fn();

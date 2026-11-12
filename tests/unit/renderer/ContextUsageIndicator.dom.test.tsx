@@ -43,6 +43,83 @@ describe('ContextUsageIndicator', () => {
     mockLanguage = 'en-US';
   });
 
+  it('shows completed compactions in the center while retaining the usage ring', () => {
+    const { container, getByTestId } = render(
+      <ContextUsageIndicator
+        context_limit={100_000}
+        tokenUsage={{
+          total_tokens: 25_000,
+          compaction: { count: 12, history_complete: true, last_compacted_at: 1792754159861, updated_at: 2 },
+        }}
+      />
+    );
+    expect(container.querySelector('.context-compaction-count')?.textContent).toBe('12');
+    expect(getByTestId('popover-content').textContent).toContain('25.0% · 25.0K / 100K');
+    expect(getByTestId('popover-content').textContent).toContain('Last compaction:');
+  });
+
+  it.each(['pending', 'unavailable'] as const)('keeps the count and moves %s into an auxiliary badge', (status) => {
+    const { container } = render(
+      <ContextUsageIndicator
+        context_limit={100_000}
+        tokenUsage={{
+          total_tokens: 25_000,
+          compaction: { count: 3, history_complete: true, last_compacted_at: null, updated_at: 2 },
+          freshness: { status, turn_id: 'turn', status_changed_at: 3, updated_at: 1 },
+        }}
+      />
+    );
+    expect(container.querySelector('.context-compaction-count')?.textContent).toBe('3');
+    const badge = container.querySelector('.context-usage-status') as HTMLElement;
+    expect(badge.textContent).toBe(status === 'pending' ? '…' : '!');
+    expect(badge.style.right).toBe('0px');
+  });
+
+  it('does not present an incomplete zero count as a known zero', () => {
+    const { container, getByTestId } = render(
+      <ContextUsageIndicator
+        context_limit={0}
+        tokenUsage={{
+          total_tokens: 0,
+          compaction: { count: 0, history_complete: false, last_compacted_at: null, updated_at: 1 },
+        }}
+      />
+    );
+    expect(container.querySelector('.context-compaction-count')).toBeNull();
+    expect(getByTestId('popover-content').textContent).toContain('Compaction count unknown');
+    expect(getByTestId('popover-content').textContent).not.toContain('0 tokens used');
+  });
+
+  it('shows a confirmed zero without inventing a usage percentage', () => {
+    const { container, getByTestId } = render(
+      <ContextUsageIndicator
+        context_limit={100_000}
+        tokenUsage={{
+          total_tokens: 0,
+          compaction: { count: 0, history_complete: true, last_compacted_at: null, updated_at: 1 },
+        }}
+      />
+    );
+    expect(container.querySelector('.context-compaction-count')?.textContent).toBe('0');
+    expect(container.querySelectorAll('circle')).toHaveLength(1);
+    expect(getByTestId('popover-content').textContent).toContain('No confirmed usage yet');
+  });
+
+  it('caps the small label but retains the full count and partial-history notice in the tooltip', () => {
+    const { container, getByTestId } = render(
+      <ContextUsageIndicator
+        context_limit={100_000}
+        tokenUsage={{
+          total_tokens: 100,
+          compaction: { count: 123, history_complete: false, last_compacted_at: null, updated_at: 1 },
+        }}
+      />
+    );
+    expect(container.querySelector('.context-compaction-count')?.textContent).toBe('99+');
+    expect(getByTestId('popover-content').textContent).toContain('Conversation compacted 123 time(s)');
+    expect(getByTestId('popover-content').textContent).toContain('Earlier compactions may be missing');
+  });
+
   it('renders a progress ring and a percentage popover when the window size is known', () => {
     const { container, getByTestId } = render(
       <ContextUsageIndicator tokenUsage={{ total_tokens: 12_600 }} context_limit={262_144} />
@@ -75,6 +152,39 @@ describe('ContextUsageIndicator', () => {
   it('renders nothing without any usage report', () => {
     const { container } = render(<ContextUsageIndicator tokenUsage={null} context_limit={262_144} />);
     expect(container.querySelector('.context-usage-indicator')).toBeNull();
+  });
+
+  it.each(['pending', 'unavailable'] as const)('shows %s with a muted previous reading', (status) => {
+    const { container, getByTestId } = render(
+      <ContextUsageIndicator
+        context_limit={100_000}
+        tokenUsage={{
+          total_tokens: 90_000,
+          freshness: { status, turn_id: 'turn-new', updated_at: 1000, status_changed_at: 2000 },
+        }}
+      />
+    );
+    expect(container.querySelector('.context-usage-indicator')?.getAttribute('data-usage-status')).toBe(status);
+    const arc = container.querySelectorAll('circle')[1];
+    expect(arc.getAttribute('stroke')).toBe('var(--color-text-3)');
+    expect(arc.style.opacity).toBe('0.35');
+    expect(getByTestId('popover-content').textContent).toContain('Showing the last confirmed reading');
+    expect(getByTestId('popover-content').textContent).toContain('Last confirmed:');
+  });
+
+  it('shows pending without inventing a zero-percent reading when no usage is available', () => {
+    const { container, getByTestId } = render(
+      <ContextUsageIndicator
+        context_limit={0}
+        tokenUsage={{
+          total_tokens: 0,
+          freshness: { status: 'pending', turn_id: 'first', updated_at: null, status_changed_at: 1 },
+        }}
+      />
+    );
+    expect(container.querySelectorAll('circle')).toHaveLength(1);
+    expect(getByTestId('popover-content').textContent).toContain('No confirmed usage yet');
+    expect(getByTestId('popover-content').textContent).not.toContain('%');
   });
 
   it('shows session cost and per-turn breakdown when the agent reported them', () => {

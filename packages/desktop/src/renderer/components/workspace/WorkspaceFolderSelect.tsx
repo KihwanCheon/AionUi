@@ -7,6 +7,7 @@
 import { ipcBridge } from '@/common';
 import { Check, Close, Down, FolderClose, FolderOpen } from '@icon-park/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { getParentAndCurrentDir } from '@/renderer/utils/workspace/projectPathLabel';
 import { DEFAULT_RECENT_WS_KEY, addRecentWorkspace, getRecentWorkspaces } from './recentWorkspaces';
 
 const MENU_GAP = 4;
@@ -202,7 +203,7 @@ const WorkspaceFolderSelect: React.FC<WorkspaceFolderSelectProps> = ({
                 {recentLabel}
               </div>
               {recentWorkspaces.map((path) => {
-                const recentName = path.split(/[\\/]/).pop() || path;
+                const recentName = getParentAndCurrentDir(path);
                 const isSelected = value === path;
 
                 return (

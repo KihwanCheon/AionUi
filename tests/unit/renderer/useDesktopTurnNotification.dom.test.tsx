@@ -50,6 +50,23 @@ beforeEach(() => {
 });
 
 describe('useDesktopTurnNotification', () => {
+  it('names a failed conversation in the native notification', () => {
+    snapshotName = 'Failed Chat';
+    renderHook(() => useDesktopTurnNotification());
+    emitStream({ type: 'error', conversation_id: 's1', turn_id: 't1', data: { message: 'capacity exceeded' } });
+    expect(showInvoke).toHaveBeenCalledWith({
+      title: 'AionUi',
+      body: 'settings.browserNotification.bodyTurnFailedNamed::Failed Chat',
+      conversation_id: 's1',
+    });
+  });
+
+  it('honors the disabled setting for failures', () => {
+    settingEnabled = false;
+    renderHook(() => useDesktopTurnNotification());
+    emitStream({ type: 'error', conversation_id: 's1', turn_id: 't1' });
+    expect(showInvoke).not.toHaveBeenCalled();
+  });
   it('invokes the native notification on a finish stream message when unfocused', () => {
     renderHook(() => useDesktopTurnNotification());
     emitStream({ type: 'finish', conversation_id: 's1', turn_id: 't1' });

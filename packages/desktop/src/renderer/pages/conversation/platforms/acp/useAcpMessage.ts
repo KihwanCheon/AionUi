@@ -56,15 +56,58 @@ const BREAKDOWN_KEYS = [
  * ride under `_meta`; cost is the agent's cumulative session cost.
  */
 export function tokenUsageFromAcpUsage(data: {
-  used: number;
+  used?: number;
   cost?: { amount: number; currency: string };
   _meta?: Record<string, unknown>;
 }): TokenUsageData {
-  const usage: TokenUsageData = { total_tokens: data.used };
+  const usage: TokenUsageData = { total_tokens: data.used ?? 0 };
   if (data.cost && typeof data.cost.amount === 'number' && data.cost.amount > 0) {
     usage.cost = { amount: data.cost.amount, currency: data.cost.currency || 'USD' };
   }
   if (data._meta) {
+    const rawCompaction = data._meta['aionui/contextCompaction'];
+    if (rawCompaction && typeof rawCompaction === 'object') {
+      const compaction = rawCompaction as Record<string, unknown>;
+      if (
+        typeof compaction.count === 'number' &&
+        Number.isSafeInteger(compaction.count) &&
+        compaction.count >= 0 &&
+        typeof compaction.history_complete === 'boolean' &&
+        typeof compaction.updated_at === 'number' &&
+        Number.isFinite(compaction.updated_at)
+      ) {
+        usage.compaction = {
+          count: compaction.count,
+          history_complete: compaction.history_complete,
+          updated_at: compaction.updated_at,
+          last_compacted_at:
+            typeof compaction.last_compacted_at === 'number' && Number.isFinite(compaction.last_compacted_at)
+              ? compaction.last_compacted_at
+              : null,
+        };
+      }
+    }
+    const raw = data._meta['aionui/contextUsage'];
+    if (raw && typeof raw === 'object') {
+      const freshness = raw as Record<string, unknown>;
+      if (
+        (freshness.status === 'pending' || freshness.status === 'current' || freshness.status === 'unavailable') &&
+        typeof freshness.turn_id === 'string' &&
+        typeof freshness.status_changed_at === 'number' &&
+        Number.isFinite(freshness.status_changed_at)
+      ) {
+        usage.freshness = {
+          status: freshness.status,
+          turn_id: freshness.turn_id,
+          status_changed_at: freshness.status_changed_at,
+          updated_at:
+            typeof freshness.updated_at === 'number' && Number.isFinite(freshness.updated_at)
+              ? freshness.updated_at
+              : null,
+          reason: typeof freshness.reason === 'string' ? freshness.reason : null,
+        };
+      }
+    }
     const breakdown: TokenUsageBreakdown = {};
     for (const key of BREAKDOWN_KEYS) {
       const value = data._meta[key];
@@ -77,6 +120,32 @@ export function tokenUsageFromAcpUsage(data: {
     }
   }
   return usage;
+}
+
+/** Metadata-only transitions retain the last reading. Once versioned snapshots
+ * are available, raw relay duplicates must not overwrite the persisted value. */
+function mergeUsageFrame(
+  prev: TokenUsageData | null,
+  data: Parameters<typeof tokenUsageFromAcpUsage>[0]
+): TokenUsageData | null {
+  const next = tokenUsageFromAcpUsage(data);
+  // Compaction snapshots have their own revision. A late usage frame must not
+  // roll back the count, and a metadata-only frame must not erase occupancy.
+  const compaction =
+    next.compaction && next.compaction.updated_at >= (prev?.compaction?.updated_at ?? 0)
+      ? next.compaction
+      : prev?.compaction;
+  const withCompaction = (value: TokenUsageData | null): TokenUsageData | null =>
+    compaction ? { ...(value ?? { total_tokens: 0 }), compaction } : value;
+  if (!next.freshness && prev?.freshness) return withCompaction(prev);
+  if (next.freshness && prev?.freshness && next.freshness.status_changed_at < prev.freshness.status_changed_at)
+    return withCompaction(prev);
+  if (!(typeof data.used === 'number' && data.used > 0)) {
+    return withCompaction(next.freshness ? { ...(prev ?? { total_tokens: 0 }), freshness: next.freshness } : prev);
+  }
+  if (!next.breakdown && prev?.breakdown) next.breakdown = prev.breakdown;
+  if (!next.cost && prev?.cost) next.cost = prev.cost;
+  return withCompaction(next);
 }
 
 const slashCommandsInFlight = new Map<string, Promise<SlashCommandItem[]>>();
@@ -119,8 +188,22 @@ export const useAcpMessage = (
   // conversation turn clock so it survives unmount on conversation switches.
   const [turnStartedAtMs, setTurnStartedAtMs] = useState<number | null>(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsageData | null>(null);
+  const usageStreamRevision = useRef(0);
+  const usageChangedAt = useRef(0);
   const [context_limit, setContextLimit] = useState<number>(0);
   const [slashCommands, setSlashCommands] = useState<SlashCommandItem[]>([]);
+
+  const applyUsage = useCallback((data: Parameters<typeof tokenUsageFromAcpUsage>[0] & { size?: number }) => {
+    const freshness = tokenUsageFromAcpUsage(data).freshness;
+    setTokenUsage((prev) => mergeUsageFrame(prev, data));
+    if (freshness) {
+      if (freshness.status_changed_at < usageChangedAt.current) return;
+      usageChangedAt.current = freshness.status_changed_at;
+    } else if (usageChangedAt.current > 0) {
+      return;
+    }
+    if (data.size && data.size > 0) setContextLimit(data.size);
+  }, []);
 
   // Use refs to sync state for immediate access in event handlers
   const runningRef = useRef(running);
@@ -486,23 +569,19 @@ export const useAcpMessage = (
           break;
         case 'acp_context_usage': {
           const usageData = message.data as {
-            used: number;
+            used?: number;
             size: number;
             cost?: { amount: number; currency: string };
             _meta?: Record<string, unknown>;
           };
-          if (usageData && typeof usageData.used === 'number') {
-            setTokenUsage((prev) => {
-              const next = tokenUsageFromAcpUsage(usageData);
-              // Mid-turn UsageUpdate notifications carry no per-turn
-              // breakdown; keep the last end-of-turn one until replaced.
-              if (!next.breakdown && prev?.breakdown) next.breakdown = prev.breakdown;
-              if (!next.cost && prev?.cost) next.cost = prev.cost;
-              return next;
-            });
-            if (usageData.size > 0) {
-              setContextLimit(usageData.size);
-            }
+          if (
+            usageData &&
+            (typeof usageData.used === 'number' ||
+              tokenUsageFromAcpUsage(usageData).freshness ||
+              tokenUsageFromAcpUsage(usageData).compaction)
+          ) {
+            usageStreamRevision.current += 1;
+            applyUsage(usageData);
           }
           break;
         }
@@ -577,6 +656,7 @@ export const useAcpMessage = (
       setRunning,
       setAiProcessing,
       setAcpStatus,
+      applyUsage,
     ]
   );
 
@@ -592,6 +672,8 @@ export const useAcpMessage = (
     setAcpStatus(null);
     setTokenUsage(null);
     setContextLimit(0);
+    usageChangedAt.current = 0;
+    usageStreamRevision.current = 0;
     setSlashCommands([]);
     hasContentInTurnRef.current = false;
     turnFinishedRef.current = false;
@@ -649,10 +731,10 @@ export const useAcpMessage = (
         if ((res.type === 'acp' || res.type === 'antigravity') && res.extra?.last_token_usage) {
           const { last_token_usage, last_context_limit } = res.extra;
           if (last_token_usage.total_tokens > 0) {
-            setTokenUsage(last_token_usage);
+            setTokenUsage((prev) => prev ?? last_token_usage);
           }
           if (last_context_limit && last_context_limit > 0) {
-            setContextLimit(last_context_limit);
+            setContextLimit((prev) => (prev > 0 ? prev : last_context_limit));
           }
         }
       })
@@ -697,22 +779,30 @@ export const useAcpMessage = (
       })
       .catch(() => {});
     // Hydrate the context-usage indicator from the backend snapshot. Live
-    // acp_context_usage stream events may land first, so never overwrite a
-    // value that is already set.
+    // Ignore snapshots overtaken by live events. Legacy snapshots may still
+    // fill a missing window, but cannot replace a live reading.
     void runtimeReady
-      .then(() => ipcBridge.conversation.getUsage.invoke({ conversation_id }))
-      .then((usage) => {
-        if (cancelled || !usage || typeof usage.used !== 'number' || usage.used <= 0) return;
-        setTokenUsage((prev) => prev ?? tokenUsageFromAcpUsage(usage));
-        if (usage.size > 0) {
-          setContextLimit((prev) => (prev > 0 ? prev : usage.size));
+      .then(async () => {
+        const revision = usageStreamRevision.current;
+        const usage = await ipcBridge.conversation.getUsage.invoke({ conversation_id });
+        if (cancelled || !usage) return;
+        if (usageStreamRevision.current !== revision) {
+          const compaction = tokenUsageFromAcpUsage(usage).compaction;
+          if (compaction) {
+            setTokenUsage((prev) => mergeUsageFrame(prev, { _meta: { 'aionui/contextCompaction': compaction } }));
+          }
+          if (!tokenUsageFromAcpUsage(usage).freshness && usage.size > 0) {
+            setContextLimit((prev) => (prev > 0 ? prev : usage.size));
+          }
+          return;
         }
+        applyUsage(usage);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [conversation_id, options?.prepareRuntime, options?.skipWarmup]);
+  }, [conversation_id, options?.prepareRuntime, options?.skipWarmup, applyUsage]);
 
   const resetState = useCallback(() => {
     turnFinishedRef.current = true;

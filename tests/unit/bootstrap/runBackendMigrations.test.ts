@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IMAGE_GEN_ENV_KEYS } from '@/common/config/imageGenerationMcpEnv';
 import { BUILTIN_IMAGE_GEN_NAME, type IMcpServer, type IProvider } from '@/common/config/storage';
@@ -8,17 +11,21 @@ const {
   batchImportServersMock,
   configFileGetMock,
   configFileSetMock,
+  deleteServerMock,
   httpRequestMock,
   listServersMock,
   testMcpConnectionMock,
+  toggleServerMock,
   updateServerMock,
 } = vi.hoisted(() => ({
   batchImportServersMock: vi.fn(),
   configFileGetMock: vi.fn(),
   configFileSetMock: vi.fn(),
+  deleteServerMock: vi.fn(),
   httpRequestMock: vi.fn(),
   listServersMock: vi.fn(),
   testMcpConnectionMock: vi.fn(),
+  toggleServerMock: vi.fn(),
   updateServerMock: vi.fn(),
 }));
 
@@ -30,6 +37,8 @@ vi.mock('@/common/adapter/ipcBridge', () => ({
   mcpService: {
     listServers: { invoke: listServersMock },
     batchImportServers: { invoke: batchImportServersMock },
+    deleteServer: { invoke: deleteServerMock },
+    toggleServer: { invoke: toggleServerMock },
     updateServer: { invoke: updateServerMock },
     testMcpConnection: { invoke: testMcpConnectionMock },
   },
@@ -101,11 +110,34 @@ const configFile = {
   set: configFileSetMock,
 };
 
+const temporaryDirectories: string[] = [];
+
+function makeTemporarySuiteFiles(): { directory: string; entryPath: string; configPath: string; launcherPath: string } {
+  const directory = mkdtempSync(path.join(tmpdir(), 'aionui-mnp-migration-'));
+  const entryPath = path.join(directory, 'server.mjs');
+  const launcherPath = path.join(directory, 'start-pptx-mcp.sh');
+  const configPath = path.join(directory, 'mcp-bootstrap.json');
+  temporaryDirectories.push(directory);
+  writeFileSync(entryPath, '');
+  writeFileSync(launcherPath, '');
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      managedBy: 'MnPSuite',
+      servers: [{ name: 'pptx-mcp', command: launcherPath, args: [] }],
+    })
+  );
+  return { directory, entryPath, configPath, launcherPath };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   configFileGetMock.mockResolvedValue(undefined);
   configFileSetMock.mockResolvedValue(undefined);
   batchImportServersMock.mockResolvedValue([]);
+  deleteServerMock.mockResolvedValue(undefined);
+  toggleServerMock.mockResolvedValue(undefined);
   updateServerMock.mockImplementation(async ({ id, data }) => ({
     ...imageServer(),
     id,
@@ -130,6 +162,13 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+  for (const directory of temporaryDirectories.splice(0)) {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 describe('resolveImageGenerationMigrationConfig', () => {
   it('uses backend client preference when local config file no longer has the image model', () => {
     const backendConfig = {
@@ -148,6 +187,115 @@ describe('resolveImageGenerationMigrationConfig', () => {
 });
 
 describe('runBackendMigrations', () => {
+  it('imports required and selected MnP Suite MCP servers on first startup', async () => {
+    const { entryPath, configPath } = makeTemporarySuiteFiles();
+    vi.stubEnv('MINDNPROGRESS_MCP_ENTRY', entryPath);
+    vi.stubEnv('MNP_SUITE_MCP_CONFIG', configPath);
+    listServersMock.mockResolvedValue([]);
+
+    await runBackendMigrations(configFile as never);
+
+    const imported = batchImportServersMock.mock.calls.flatMap(([request]) => request.servers);
+    expect(imported.map((server) => server.name)).toEqual(expect.arrayContaining(['MindNProgress', 'pptx-mcp']));
+  });
+
+  it('preserves a user-owned server that conflicts with a managed name', async () => {
+    const { entryPath } = makeTemporarySuiteFiles();
+    vi.stubEnv('MINDNPROGRESS_MCP_ENTRY', entryPath);
+    listServersMock.mockResolvedValue([
+      {
+        ...imageServer(),
+        id: 'user-mnp',
+        name: 'MindNProgress',
+        builtin: false,
+        original_json: '{"mcpServers":{"MindNProgress":{"command":"custom"}}}',
+        transport: { type: 'stdio', command: 'custom', args: [] },
+      },
+    ]);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await runBackendMigrations(configFile as never);
+
+    expect(updateServerMock).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'user-mnp' }));
+    expect(warnSpy).toHaveBeenCalledWith('[Migration] skipped MnP Suite MCP name conflict: %s', 'MindNProgress');
+  });
+
+  it('adopts the unmarked required server created by older MnP Suite installers', async () => {
+    const { directory, entryPath } = makeTemporarySuiteFiles();
+    const legacyEntryPath = path.join(directory, 'legacy-server.mjs');
+    vi.stubEnv('MINDNPROGRESS_MCP_ENTRY', entryPath);
+    listServersMock.mockResolvedValue([
+      {
+        ...imageServer(),
+        id: 'legacy-managed-mnp',
+        name: 'MindNProgress',
+        description: 'Required local MCP server for MindNProgress conversations',
+        enabled: false,
+        builtin: false,
+        original_json: JSON.stringify({
+          mcpServers: { MindNProgress: { command: 'node', args: [legacyEntryPath] } },
+        }),
+        transport: { type: 'stdio', command: 'node', args: [legacyEntryPath] },
+      },
+    ]);
+
+    await runBackendMigrations(configFile as never);
+
+    expect(updateServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'legacy-managed-mnp',
+        data: expect.objectContaining({
+          transport: { type: 'stdio', command: 'node', args: [entryPath] },
+          original_json: expect.stringContaining('MnPSuite'),
+        }),
+      })
+    );
+    expect(toggleServerMock).toHaveBeenCalledWith({ id: 'legacy-managed-mnp' });
+  });
+
+  it('updates and enables a managed server when its installation path changes', async () => {
+    const { entryPath } = makeTemporarySuiteFiles();
+    vi.stubEnv('MINDNPROGRESS_MCP_ENTRY', entryPath);
+    listServersMock.mockResolvedValue([
+      {
+        ...imageServer(),
+        id: 'managed-mnp',
+        name: 'MindNProgress',
+        enabled: false,
+        builtin: false,
+        original_json: JSON.stringify({ mnpSuite: { managedBy: 'MnPSuite' } }),
+        transport: { type: 'stdio', command: 'node', args: ['/old/server.mjs'] },
+      },
+    ]);
+
+    await runBackendMigrations(configFile as never);
+
+    expect(updateServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'managed-mnp', data: expect.objectContaining({ transport: expect.any(Object) }) })
+    );
+    expect(toggleServerMock).toHaveBeenCalledWith({ id: 'managed-mnp' });
+  });
+
+  it('removes a deselected optional server only when MnP Suite owns it', async () => {
+    const { configPath } = makeTemporarySuiteFiles();
+    writeFileSync(configPath, JSON.stringify({ schemaVersion: 1, managedBy: 'MnPSuite', servers: [] }));
+    vi.stubEnv('MNP_SUITE_MCP_CONFIG', configPath);
+    listServersMock.mockResolvedValue([
+      {
+        ...imageServer(),
+        id: 'managed-pptx',
+        name: 'pptx-mcp',
+        builtin: false,
+        original_json: JSON.stringify({ mnpSuite: { managedBy: 'MnPSuite' } }),
+        transport: { type: 'stdio', command: '/old/pptx', args: [] },
+      },
+    ]);
+
+    await runBackendMigrations(configFile as never);
+
+    expect(deleteServerMock).toHaveBeenCalledWith({ id: 'managed-pptx' });
+  });
+
   it('does not write image generation business config back to local config storage', async () => {
     listServersMock.mockResolvedValue([imageServer()]);
     configFileGetMock.mockImplementation(async (key: string) => {

@@ -12,6 +12,8 @@ export type ApiProviderWithModel = {
   use_model?: string;
 };
 
+const DEFAULT_AUTO_INJECT_SKILL_EXCLUSIONS = ['officecli', 'skill-creator', 'aionui-config', 'cron'];
+
 function hasCompleteModelIdentity(
   model?: TProviderWithModel
 ): model is TProviderWithModel & { id: string; use_model: string } {
@@ -47,6 +49,25 @@ export type CreateConversationBodyInput = {
   extra?: unknown;
 };
 
+function withDefaultAutoInjectSkillExclusions(extra: unknown): Record<string, unknown> {
+  const normalizedExtra =
+    extra && typeof extra === 'object' && !Array.isArray(extra) ? (extra as Record<string, unknown>) : {};
+  const { exclude_builtin_skills: legacyExclusions, ...extraWithoutLegacyExclusions } = normalizedExtra;
+  const requestedExclusions = [
+    ...(Array.isArray(normalizedExtra.exclude_auto_inject_skills)
+      ? normalizedExtra.exclude_auto_inject_skills.filter((skill): skill is string => typeof skill === 'string')
+      : []),
+    ...(Array.isArray(legacyExclusions)
+      ? legacyExclusions.filter((skill): skill is string => typeof skill === 'string')
+      : []),
+  ];
+
+  return {
+    ...extraWithoutLegacyExclusions,
+    exclude_auto_inject_skills: [...new Set([...DEFAULT_AUTO_INJECT_SKILL_EXCLUSIONS, ...requestedExclusions])],
+  };
+}
+
 /**
  * Build the HTTP body for `POST /api/conversations`.
  *
@@ -60,7 +81,7 @@ export function buildCreateConversationBody(p: CreateConversationBodyInput): Rec
     id: p.id,
     name: p.name,
     assistant: p.assistant,
-    extra: p.extra,
+    extra: withDefaultAutoInjectSkillExclusions(p.extra),
   };
   const model = p.type === 'acp' ? undefined : toApiModelOptional(p.model);
   if (model) body.model = model;

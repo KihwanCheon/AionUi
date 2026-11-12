@@ -84,7 +84,7 @@ describe('useGuidSend', () => {
 
   it('passes selected mode into assistant conversation overrides when creating a preset ACP conversation', async () => {
     const deps = createDeps();
-    (deps as any).selectedThoughtLevelValue = 'high';
+    deps.selectedThoughtLevelValue = 'high';
 
     const { result } = renderHook(() => useGuidSend(deps));
 
@@ -110,6 +110,23 @@ describe('useGuidSend', () => {
     expect(payload.extra.preset_assistant_id).toBeUndefined();
     expect(swrMutateMock).toHaveBeenCalledWith('guid.assistant.detail.assistant-1.zh-CN');
     expect(swrMutateMock).toHaveBeenCalledWith('assistants.list');
+  });
+
+  it('binds a non-default Claude account through extra and leaves the default payload unchanged', async () => {
+    const send = async (claudeAccountId: string | null | undefined) => {
+      createConversationInvokeMock.mockClear();
+      const deps = { ...createDeps(), claudeAccountId };
+      const { result } = renderHook(() => useGuidSend(deps));
+      await act(async () => {
+        await result.current.handleSend();
+      });
+      return createConversationInvokeMock.mock.calls[0][0];
+    };
+
+    expect((await send('max')).extra.claude_account_id).toBe('max');
+    expect('claude_account_id' in (await send('default')).extra).toBe(false);
+    expect('claude_account_id' in (await send(null)).extra).toBe(false);
+    expect('claude_account_id' in (await send(undefined)).extra).toBe(false);
   });
 
   it('falls back to assistant default skill and MCP ids for preset conversations before local Guid overrides exist', async () => {

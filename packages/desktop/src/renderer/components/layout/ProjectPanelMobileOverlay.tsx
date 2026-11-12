@@ -26,6 +26,8 @@ export type ProjectPanelMobileOverlayProps = {
   /** Collapse (close) the overlay — backdrop tap / floating handle. */
   onCollapse: () => void;
   widthPx: number;
+  /** Optional touch-capable resize handle for tablet layouts. */
+  dragHandle?: React.ReactNode;
 };
 
 export const ProjectPanelMobileOverlay: React.FC<ProjectPanelMobileOverlayProps> = ({
@@ -33,6 +35,7 @@ export const ProjectPanelMobileOverlay: React.FC<ProjectPanelMobileOverlayProps>
   collapsed,
   onCollapse,
   widthPx,
+  dragHandle,
 }) => {
   const mountIdRef = useRef<string>('');
   if (mountIdRef.current === '') mountIdRef.current = `pem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -61,6 +64,7 @@ export const ProjectPanelMobileOverlay: React.FC<ProjectPanelMobileOverlayProps>
           borderLeft: '1px solid var(--bg-3)',
         }}
       >
+        {!collapsed && dragHandle}
         <ExplorerContainer projectId={projectId} />
       </div>
 

@@ -32,8 +32,8 @@ export interface IConversationRepository {
   getUserConversations(cursor?: string, offset?: number, limit?: number): Promise<PaginatedResult<TChatConversation>>;
   /** Returns all conversations without pagination. */
   listAllConversations(): Promise<TChatConversation[]>;
-  /** Full-text search across conversation messages. */
-  searchMessages(keyword: string, page: number, page_size: number): Promise<IMessageSearchResponse>;
+  /** Scan conversation messages newest first, continuing from the last inspected row. */
+  searchMessages(keyword: string, cursor: string | undefined, page_size: number): Promise<IMessageSearchResponse>;
   /** List conversations spawned by a specific cron job. */
   getConversationsByCronJob(cron_job_id: string): Promise<TChatConversation[]>;
 }

@@ -25,6 +25,8 @@ export type ConfigKeyMap = {
   'guid.lastAssistantId': string | undefined;
   /** User-defined order for the enabled assistant picker surfaces. */
   'assistants.enabledOrder': string[] | undefined;
+  /** Workspace groups in the order the user pinned them. */
+  'sidebar.pinnedWorkspaces': string[] | undefined;
   'upload.saveToWorkspace': boolean | undefined;
   'system.closeToTray': boolean | undefined;
   'system.notificationEnabled': boolean | undefined;

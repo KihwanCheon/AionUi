@@ -20,6 +20,8 @@ export default defineConfig({
     // CI runners (especially windows-2022) can be slow enough that dom tests
     // rendering heavy components occasionally exceed the local 10s budget.
     testTimeout: process.env.CI ? 30000 : 10000,
+    // Avoid high-core hosts overwhelming module transforms and causing false timeouts.
+    maxWorkers: 8,
     // Use projects to run different environments (Vitest 4+)
     projects: [
       // Node environment tests (existing tests)

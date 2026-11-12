@@ -214,6 +214,32 @@ describe('AgentModeSelector', () => {
     expect(screen.getByTestId('mode-selector')).toHaveAttribute('data-current-mode', 'default');
   });
 
+  it('shows the send-box choice and lets it change while CLI synchronization is pending', () => {
+    const setConfigOption = vi.fn();
+    useAcpConfigOptionsMock.mockReturnValue({
+      mode: runtimeMode(),
+      setStatus: { state: 'setting', optionId: 'mode' },
+      setConfigOption,
+      isConfigOptionBlocked: () => true,
+    });
+    const Controlled = () => {
+      const [value, onSelect] = React.useState('bypassPermissions');
+      return (
+        <AgentModeSelector
+          backend='claude'
+          conversation_id='controlled-claude'
+          compact
+          selection={{ value, onSelect }}
+        />
+      );
+    };
+    render(<Controlled />);
+    expect(screen.getByTestId('mode-selector')).toHaveAttribute('data-current-mode', 'bypassPermissions');
+    fireEvent.click(screen.getByTestId('aionrs-mode-option-default'));
+    expect(screen.getByTestId('mode-selector')).toHaveAttribute('data-current-mode', 'default');
+    expect(setConfigOption).not.toHaveBeenCalled();
+  });
+
   it('keeps compact mode selector hidden while runtime mode is initializing', () => {
     useAcpConfigOptionsMock.mockImplementation(() => ({
       setStatus: { state: 'idle' },

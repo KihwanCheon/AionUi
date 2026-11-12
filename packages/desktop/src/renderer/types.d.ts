@@ -8,6 +8,11 @@ declare module '*.module.css' {
   export default classes;
 }
 
+declare module '*.module.css?inline' {
+  const css: string;
+  export default css;
+}
+
 declare module '*.png' {
   const content: string;
   export default content;

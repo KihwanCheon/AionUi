@@ -196,6 +196,18 @@
   "processing": "Traitement...",
   "optional": "(optionnel)",
   "clear": "Effacer",
+  "claudeUsage": {
+    "refreshDelayed": "Actualisation retardée",
+    "title": "Utilisation de Claude",
+    "codexTitle": "Utilisation de Codex",
+    "session": "Limite de 5 heures",
+    "weekly": "Hebdomadaire (tous les modèles)",
+    "resets": "Réinitialisation {{time}}",
+    "reached": "Limite d’utilisation atteinte",
+    "ok": "Dans la limite",
+    "approaching": "Limite bientôt atteinte",
+    "noData": "Aucune donnée d'utilisation pour le moment"
+  },
   "unit": {
     "minute_short": "m",
     "second_short": "s"

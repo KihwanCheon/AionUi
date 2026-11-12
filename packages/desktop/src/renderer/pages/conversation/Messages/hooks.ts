@@ -9,6 +9,7 @@ import type { AgentStreamErrorInfo, IMessageText, IMessageTips, TMessage } from 
 import {
   composeMessage,
   mergeAcpToolCallContent,
+  mergeAskMessage,
   mergeTextMessageContent,
   normalizeAgentStreamError,
   normalizeTextMessageContent,
@@ -21,8 +22,9 @@ import {
   DEFAULT_MESSAGE_PAGE_LIMIT,
   loadConversationAnchorWindow,
   loadConversationMessagePage,
-  loadLatestConversationMessages,
 } from '@/renderer/utils/chat/messagePagination';
+import { loadResumedConversationMessages, subscribeConversationResume } from '../runtime/conversationResume';
+import { markRecoveredMessageList } from '../runtime/messageRecovery';
 
 const [useMessageList, MessageListProvider, useUpdateMessageList] = createContext([] as TMessage[]);
 const [useMessageListLoading, MessageListLoadingProvider, useUpdateMessageListLoading] = createContext(false);
@@ -67,6 +69,7 @@ function getMessageIndexKey(message: TMessage): string | undefined {
   // update resolves to whatever frame was appended last and rewrites it.
   if (message.type === 'thinking') return `thinking:${message.msg_id}`;
   if (message.type === 'plan') return `plan:${message.msg_id}`;
+  if (message.type === 'tips' && message.content.type === 'error') return `error:${message.msg_id}`;
   return message.msg_id;
 }
 
@@ -161,10 +164,10 @@ export function composeMessageWithIndex(
   const last = list[list.length - 1];
 
   // 对于 tool_group 类型，使用原始的 composeMessage（因为涉及内部数组匹配）
-  // For tool_group type, use original composeMessage (involves inner array matching)
+  // Tool groups and native questions need matching beyond their stream msg_id.
   // After composeMessage, the returned list may have different length/ordering,
   // so we must invalidate the index to prevent stale lookups in subsequent calls.
-  if (message.type === 'tool_group') {
+  if (message.type === 'tool_group' || message.type === 'ask') {
     const result = composeMessage(message, list);
     if (result !== list) {
       // Rebuild index maps from the new list to keep them in sync
@@ -386,8 +389,9 @@ export function composeMessageWithIndex(
 
   // agent_status / tips and other msg_id-based messages:
   // replace the existing item in place instead of appending duplicates.
-  if (message.msg_id) {
-    const existingIdx = index.msgIdIndex.get(message.msg_id);
+  const messageIndexKey = getMessageIndexKey(message);
+  if (messageIndexKey) {
+    const existingIdx = index.msgIdIndex.get(messageIndexKey);
     if (existingIdx !== undefined && existingIdx < list.length) {
       const existingMsg = list[existingIdx];
       const newList = list.slice();
@@ -783,11 +787,16 @@ export function normalizeDbMessage(msg: TMessage): TMessage {
 }
 
 const getMessageMergeKey = (message: TMessage): string => {
+  // Recovery uses confirmation:* while history uses the persisted ask-* anchor.
+  if (message.type === 'ask' && message.content.request_id) {
+    return `ask:${JSON.stringify([message.conversation_id, message.content.request_id])}`;
+  }
   if (message.msg_id) return `${message.type}:${message.msg_id}`;
   return `id:${message.id}`;
 };
 
 const preferPersistedOrLiveMessage = (persisted: TMessage, live: TMessage): TMessage => {
+  if (persisted.type === 'ask' && live.type === 'ask') return mergeAskMessage(live, persisted);
   if (persisted.type === 'text' && live.type === 'text') {
     return preferTextMessageVersion(persisted, live);
   }
@@ -817,12 +826,24 @@ function mergeLoadedPageWithCurrent(conversationId: string, messages: TMessage[]
   // the same retry run reach this point as separate entries (a persisted tip has
   // no msg_id, so neither merge key matches), and only a key-based fold sees
   // that they are one card.
-  return foldSupersededTips(liveOnly.length ? [...mergedMessages, ...liveOnly] : mergedMessages);
+  const combined = liveOnly.length ? [...mergedMessages, ...liveOnly] : mergedMessages;
+  // A resume refresh can overlap the live tail while retaining older loaded pages.
+  // Keep those older rows before the recovered messages, not after the new tail.
+  combined.sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0));
+  return foldSupersededTips(combined);
 }
 
 export function prependHistoryMessages(currentList: TMessage[], messages: TMessage[]): TMessage[] {
   if (!messages.length) return currentList;
 
+  // Upgrade a recovered card in place so its draft and durable navigation target survive.
+  const historyQuestions = new Map(
+    messages.filter((message) => message.type === 'ask').map((message) => [getMessageMergeKey(message), message])
+  );
+  const mergedCurrent = currentList.map((message) => {
+    const history = message.type === 'ask' ? historyQuestions.get(getMessageMergeKey(message)) : undefined;
+    return history ? preferPersistedOrLiveMessage(history, message) : message;
+  });
   const currentIds = new Set(currentList.map((message) => message.id));
   const currentKeys = new Set(currentList.map(getMessageMergeKey));
   const uniqueHistory = messages.filter(
@@ -830,7 +851,8 @@ export function prependHistoryMessages(currentList: TMessage[], messages: TMessa
   );
   // Folding the combined list (not the page alone) also covers a retry run whose
   // attempts straddle a page boundary.
-  return uniqueHistory.length ? foldSupersededTips([...uniqueHistory, ...currentList]) : currentList;
+  const didUpdate = mergedCurrent.some((message, index) => message !== currentList[index]);
+  return uniqueHistory.length || didUpdate ? foldSupersededTips([...uniqueHistory, ...mergedCurrent]) : currentList;
 }
 
 export const usePrependHistoryPage = () => {
@@ -935,6 +957,10 @@ export const useMessageLstCache = (key: string) => {
   const list = useMessageList();
   const setLoading = useUpdateMessageListLoading();
   const setPagination = useUpdateMessagePaginationState();
+  const requestRevision = useRef(0);
+  const activeKey = useRef(key);
+  activeKey.current = key;
+  const savedTail = useRef<{ key: string; message: TMessage | null } | undefined>(undefined);
   // Mirrors the current list into a ref so the turnCompleted handler below
   // can inspect it synchronously without re-subscribing to the WS event on
   // every list change (useState's functional updater runs asynchronously,
@@ -944,21 +970,25 @@ export const useMessageLstCache = (key: string) => {
     listRef.current = list;
   }, [list]);
   const loadMessages = useCallback(async (): Promise<TMessage[]> => {
-    const result = await loadLatestConversationMessages(key, {
-      limit: DEFAULT_MESSAGE_PAGE_LIMIT,
-      contentMode: 'compact',
-    });
+    const revision = ++requestRevision.current;
+    const isCurrent = () => revision === requestRevision.current && activeKey.current === key;
+    const previousTail = savedTail.current?.key === key ? savedTail.current.message : undefined;
+    const result = await loadResumedConversationMessages(key, previousTail, isCurrent);
+    if (!isCurrent()) return [];
     const messages = result?.items?.map(normalizeDbMessage);
     if (messages && Array.isArray(messages)) {
-      update((currentList) => mergeLoadedPageWithCurrent(key, messages, currentList));
-      setPagination({
-        oldestCursor: result.oldest_cursor ?? undefined,
+      const tail = messages.at(-1);
+      // null means the previous snapshot was empty, so recovery must bridge all
+      // the way back to the start (a new chat can receive > one page while away).
+      savedTail.current = { key, message: tail ?? null };
+      update((currentList) => markRecoveredMessageList(mergeLoadedPageWithCurrent(key, messages, currentList)));
+      setPagination((current) => ({
+        ...current,
+        oldestCursor: (previousTail && current.oldestCursor) || result.oldest_cursor || undefined,
         newestCursor: result.newest_cursor ?? undefined,
-        hasMoreBefore: result.has_more_before,
+        hasMoreBefore: previousTail ? current.hasMoreBefore && result.has_more_before : result.has_more_before,
         hasMoreAfter: result.has_more_after,
-        isLoadingBefore: false,
-        isLoadingAnchor: false,
-      });
+      }));
       return messages;
     }
     return [];
@@ -980,8 +1010,16 @@ export const useMessageLstCache = (key: string) => {
       });
     return () => {
       cancelled = true;
+      requestRevision.current++;
     };
   }, [key, loadMessages, setLoading, setPagination]);
+
+  useEffect(() => {
+    if (!key) return;
+    // Mobile backgrounding can drop stream frames even without a socket close.
+    // Read persisted messages on return without remounting the chat/send box.
+    return subscribeConversationResume(loadMessages);
+  }, [key, loadMessages]);
 
   useEffect(() => {
     if (!key) {

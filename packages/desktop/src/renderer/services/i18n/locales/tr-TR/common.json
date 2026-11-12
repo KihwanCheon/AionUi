@@ -202,5 +202,17 @@
   },
   "selectedCount": "{{count}} seçili",
   "selectedSkills": "Seçili beceriler",
-  "aiAssistant": "Yapay Zekâ Asistanı"
+  "aiAssistant": "Yapay Zekâ Asistanı",
+  "claudeUsage": {
+    "refreshDelayed": "Güncelleme gecikti",
+    "title": "Claude Kullanımı",
+    "codexTitle": "Codex Kullanımı",
+    "session": "5 saatlik sınır",
+    "weekly": "Haftalık (tüm modeller)",
+    "resets": "{{time}} sıfırlanır",
+    "reached": "Kullanım sınırına ulaşıldı",
+    "ok": "Sınır içinde",
+    "approaching": "Sınıra yaklaşıyor",
+    "noData": "Henüz kullanım verisi yok"
+  }
 }

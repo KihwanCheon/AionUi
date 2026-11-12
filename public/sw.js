@@ -160,3 +160,23 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(staleWhileRevalidate(event.request));
   }
 });
+
+// Display is initiated by a connected page, not by a background Push API subscription.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const id = event.notification.data?.conversationId;
+  const destination = new URL(
+    typeof id === 'string' && id.length <= 256 ? `/conversation/${encodeURIComponent(id)}` : '/',
+    self.location.origin
+  ).href;
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const existing = windows.find((client) => new URL(client.url).origin === self.location.origin);
+      if (existing) {
+        await existing.navigate(destination);
+        await existing.focus();
+      } else await self.clients.openWindow(destination);
+    })()
+  );
+});

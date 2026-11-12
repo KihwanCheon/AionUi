@@ -6,26 +6,36 @@
 
 import type { TChatConversation } from '@/common/config/storage';
 import AionModal from '@/renderer/components/base/AionModal';
+import SectionActivityIndicator from '@/renderer/components/layout/Sider/SiderNav/SectionActivityIndicator';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useCronJobsMap } from '@/renderer/pages/cron';
-import { restrictToVerticalAxis } from '@/renderer/utils/ui/dndModifiers';
-import { DndContext, closestCenter } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Button, Dropdown, Empty, Input, Menu, Modal, Tooltip } from '@arco-design/web-react';
-import { FolderClose, MoreOne, Plus, Right } from '@icon-park/react';
+import { getParentAndCurrentDir } from '@/renderer/utils/workspace/projectPathLabel';
+import { Button, Dropdown, Empty, Input, Menu, Message, Modal, Tooltip } from '@arco-design/web-react';
+import { FolderClose, MoreOne, Plus, Pushpin, Right } from '@icon-park/react';
 import classNames from 'classnames';
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import WorkspaceCollapse from '../components/WorkspaceCollapse';
 import ConversationRow from './ConversationRow';
-import SortableConversationRow from './SortableConversationRow';
+import ConversationList from './ConversationList';
+import BookmarkedConversationList from './components/BookmarkedConversationList';
+import ConversationActivityFilter from './components/ConversationActivityFilter';
+import HistoryViewTabs from './components/HistoryViewTabs';
+import ProjectGroupHeader from './components/ProjectGroupHeader';
+import MnpUnlinkedConversationsModal from './components/MnpUnlinkedConversationsModal';
 import { useBatchSelection } from './hooks/useBatchSelection';
+import { useConversationActivityFilter } from './hooks/useConversationActivityFilter';
 import { useConversationActions } from './hooks/useConversationActions';
 import { useConversations } from './hooks/useConversations';
-import { useDragAndDrop } from './hooks/useDragAndDrop';
+import { useProjectGitBranches } from './hooks/useProjectGitBranches';
 import type { ConversationRowProps, WorkspaceGroupedHistoryProps } from './types';
+import { resolveProjectGroupIndicatorStatus } from './utils/completionUnread';
+import { buildGroupedHistory } from './utils/groupingHelpers';
+import { buildVisibleConversationIds } from './utils/visibleConversationOrder';
+import { useProjectPins } from './ProjectPins';
+import { collectProjectGroups } from './ProjectPins/order';
 
 const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   onSessionClick,
@@ -41,25 +51,72 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
   const { getJobStatus, markAsRead, setActiveConversation } = useCronJobsMap();
+  const [mnpUnlinkedGroup, setMnpUnlinkedGroup] = useState<{ workspace: string; displayName: string } | null>(null);
+  const { pinnedWorkspaces, setProjectPinned } = useProjectPins();
 
   const {
     conversations,
     isConversationGenerating,
     isConversationWaitingConfirmation,
     hasCompletionUnread,
+    hasFailureUnread,
+    getConversationFailure,
     isManualUnread,
     markManualUnread,
     clearManualUnread,
     expandedWorkspaces,
-    pinnedConversations,
-    timelineSections,
+    pinnedConversations: allPinnedConversations,
+    timelineSections: allTimelineSections,
+    historyView,
+    setHistoryView,
     handleToggleWorkspace,
     collapsedSections,
     toggleSection,
   } = useConversations();
 
+  const activityFilter = useConversationActivityFilter(conversations, historyView);
+  const { pinnedConversations, timelineSections } = useMemo(
+    () =>
+      activityFilter.enabled
+        ? buildGroupedHistory(activityFilter.filteredConversations, t)
+        : { pinnedConversations: allPinnedConversations, timelineSections: allTimelineSections },
+    [activityFilter.enabled, activityFilter.filteredConversations, allPinnedConversations, allTimelineSections, t]
+  );
+  // Fork: the bookmark tab count follows the bookmark view's own filter, whichever tab is open.
+  const { bookmarkViewConversations } = activityFilter;
+  const bookmarkCount = useMemo(() => {
+    if (historyView === 'bookmarks') return pinnedConversations.length;
+    return bookmarkViewConversations
+      ? buildGroupedHistory(bookmarkViewConversations, t).pinnedConversations.length
+      : allPinnedConversations.length;
+  }, [allPinnedConversations, bookmarkViewConversations, historyView, pinnedConversations, t]);
+  const visibleConversationOrderKey = useMemo(
+    () =>
+      JSON.stringify(
+        buildVisibleConversationIds({
+          pinnedConversations,
+          timelineSections,
+          expandedWorkspaces,
+          historyView,
+          siderCollapsed: collapsed,
+          pinnedWorkspaces,
+        })
+      ),
+    [collapsed, expandedWorkspaces, historyView, pinnedConversations, timelineSections, pinnedWorkspaces]
+  );
+
   const SectionLabel = useCallback(
-    ({ sectionKey, label, trailing }: { sectionKey: string; label: string; trailing?: React.ReactNode }) => {
+    ({
+      sectionKey,
+      label,
+      generating = false,
+      trailing,
+    }: {
+      sectionKey: string;
+      label: string;
+      generating?: boolean;
+      trailing?: React.ReactNode;
+    }) => {
       const isCollapsed = collapsedSections.has(sectionKey);
       return (
         <div
@@ -69,6 +126,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
           <span className='text-14px text-t-tertiary sider-section-title group-hover/label:text-t-primary transition-colors font-[500] leading-none'>
             {label}
           </span>
+          {generating && <SectionActivityIndicator />}
           <span className='ms-2px flex items-center justify-center opacity-0 group-hover/label:opacity-100 transition-opacity text-t-tertiary shrink-0'>
             <Right
               theme='outline'
@@ -102,7 +160,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     allSelected,
     toggleSelectedConversation,
     handleToggleSelectAll,
-  } = useBatchSelection(batchMode, conversations);
+  } = useBatchSelection(batchMode, activityFilter.filteredConversations);
 
   const {
     renameModalVisible,
@@ -112,11 +170,14 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     dropdownVisibleId,
     handleConversationClick,
     handleArchive,
+    handlePermanentDelete,
     handleBatchArchive,
     handleEditStart,
     handleRenameConfirm,
     handleRenameCancel,
     handleTogglePin,
+    handleCopyLastOutput,
+    handleCopyAll,
     handleMenuVisibleChange,
     handleOpenMenu,
     handleToggleManualUnread,
@@ -137,12 +198,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     markManualUnread,
     clearManualUnread,
     isManualUnread,
-  });
-
-  const { sensors, handleDragEnd, isDragEnabled } = useDragAndDrop({
-    pinnedConversations,
-    batchMode,
-    collapsed,
+    visibleConversationOrderKey,
   });
 
   // Fork-lineage badge support: resolve a parent conversation's display name
@@ -166,6 +222,8 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       isGenerating: isConversationGenerating(conversation.id),
       isWaitingConfirmation: isConversationWaitingConfirmation(conversation.id),
       hasUnread: hasCompletionUnread(conversation.id) || isManualUnread(conversation.id),
+      hasFailureUnread: hasFailureUnread(conversation.id),
+      failureMessage: getConversationFailure(conversation.id)?.message,
       isManualUnread: isManualUnread(conversation.id),
       collapsed,
       tooltipEnabled,
@@ -179,7 +237,10 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       onMenuVisibleChange: handleMenuVisibleChange,
       onEditStart: handleEditStart,
       onCreateCronTask: handleCreateCronTask,
+      onCopy: handleCopyLastOutput,
+      onCopyAll: handleCopyAll,
       onArchive: handleArchive,
+      onPermanentDelete: handlePermanentDelete,
       onTogglePin: handleTogglePin,
       onToggleManualUnread: handleToggleManualUnread,
       getJobStatus,
@@ -192,6 +253,8 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       isConversationGenerating,
       isConversationWaitingConfirmation,
       hasCompletionUnread,
+      hasFailureUnread,
+      getConversationFailure,
       isManualUnread,
       selectedConversationIds,
       id,
@@ -202,7 +265,10 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       handleMenuVisibleChange,
       handleEditStart,
       handleCreateCronTask,
+      handleCopyLastOutput,
+      handleCopyAll,
       handleArchive,
+      handlePermanentDelete,
       handleTogglePin,
       handleToggleManualUnread,
       getJobStatus,
@@ -215,28 +281,30 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     return <ConversationRow key={conversation.id} {...rowProps} dimIcon={dimIcon} />;
   };
 
-  // Collect all sortable IDs for the pinned section
-  const pinnedIds = useMemo(() => pinnedConversations.map((c) => c.id), [pinnedConversations]);
-
   // Codex-style split: project folders (workspaces) on top, free conversations below.
-  // Projects section: collect all workspace groups across timeline sections, ordered by recency.
-  const projectGroups = useMemo(() => {
-    const seen = new Set<string>();
-    const groups: Array<{ workspace: string; displayName: string; conversations: TChatConversation[] }> = [];
-    for (const section of timelineSections) {
-      for (const item of section.items) {
-        if (item.type === 'workspace' && item.workspaceGroup && !seen.has(item.workspaceGroup.workspace)) {
-          seen.add(item.workspaceGroup.workspace);
-          groups.push({
-            workspace: item.workspaceGroup.workspace,
-            displayName: item.workspaceGroup.display_name,
-            conversations: item.workspaceGroup.conversations,
-          });
-        }
-      }
+  const projectGroups = useMemo(
+    () => collectProjectGroups(timelineSections, pinnedWorkspaces),
+    [timelineSections, pinnedWorkspaces]
+  );
+
+  // Filtering changes which rows are visible, but a project-level archive must
+  // continue to act on the whole project rather than only the visible period.
+  const allProjectConversations = useMemo(() => {
+    const groups = new Map<string, TChatConversation[]>();
+    for (const conversation of conversations) {
+      const workspace = conversation.extra?.custom_workspace ? conversation.extra.workspace : undefined;
+      if (!workspace) continue;
+      const group = groups.get(workspace);
+      if (group) group.push(conversation);
+      else groups.set(workspace, [conversation]);
     }
     return groups;
-  }, [timelineSections]);
+  }, [conversations]);
+
+  // Git branch per project folder, read from each workspace's .git/HEAD file.
+  const projectGitBranches = useProjectGitBranches(
+    useMemo(() => projectGroups.map((g) => g.workspace), [projectGroups])
+  );
 
   // Conversations section: keep timeline grouping (today/yesterday/...) but only show non-workspace conversations.
   const conversationOnlySections = useMemo(
@@ -250,19 +318,19 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     [timelineSections]
   );
 
-  if (timelineSections.length === 0 && pinnedConversations.length === 0) {
-    return (
-      <>
-        {afterPinnedContent}
-        <div className='py-48px flex-center'>
-          <Empty description={t('conversation.history.noHistory')} />
-        </div>
-      </>
-    );
-  }
+  const hasRegularHistory = timelineSections.length > 0;
 
   return (
     <>
+      {mnpUnlinkedGroup && (
+        <MnpUnlinkedConversationsModal
+          key={mnpUnlinkedGroup.workspace}
+          groupName={getParentAndCurrentDir(mnpUnlinkedGroup.workspace) || mnpUnlinkedGroup.displayName}
+          conversations={allProjectConversations.get(mnpUnlinkedGroup.workspace) ?? []}
+          isConversationGenerating={isConversationGenerating}
+          onClose={() => setMnpUnlinkedGroup(null)}
+        />
+      )}
       <Modal
         title={t('conversation.history.renameTitle')}
         visible={renameModalVisible}
@@ -382,51 +450,83 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       </AionModal>
 
       <div>
-        {/* L1: Pinned section */}
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          modifiers={[restrictToVerticalAxis]}
-          onDragEnd={handleDragEnd}
-        >
-          {pinnedConversations.length > 0 && (
-            <div className='min-w-0'>
-              {!collapsed && <SectionLabel sectionKey='pinned' label={t('conversation.history.pinnedSection')} />}
-              {!collapsedSections.has('pinned') && (
-                <SortableContext items={pinnedIds} strategy={verticalListSortingStrategy}>
-                  <div className='min-w-0'>
-                    {pinnedConversations.map((conversation) => {
-                      const props = getConversationRowProps(conversation);
-                      return isDragEnabled ? (
-                        <SortableConversationRow key={conversation.id} {...props} />
-                      ) : (
-                        <ConversationRow key={conversation.id} {...props} />
-                      );
-                    })}
-                  </div>
-                </SortableContext>
-              )}
-            </div>
-          )}
-        </DndContext>
-
         {/* Slot 由父级（Sider）填入：例如 Team / CronJob sections，位于「置顶」之后、「项目」之前 */}
         {afterPinnedContent}
 
+        {!collapsed && (
+          <>
+            <HistoryViewTabs activeView={historyView} bookmarkCount={bookmarkCount} onChange={setHistoryView} />
+            <ConversationActivityFilter
+              enabled={activityFilter.enabled}
+              period={activityFilter.period}
+              onEnabledChange={activityFilter.setEnabled}
+              onPeriodChange={activityFilter.setPeriod}
+              onRefresh={activityFilter.refresh}
+            />
+          </>
+        )}
+
+        {historyView === 'bookmarks' && (
+          <BookmarkedConversationList
+            conversations={pinnedConversations}
+            pinnedWorkspaces={pinnedWorkspaces}
+            collapsed={collapsed}
+            batchMode={batchMode}
+            expandedWorkspaces={expandedWorkspaces}
+            onToggleWorkspace={handleToggleWorkspace}
+            collapsedSections={collapsedSections}
+            onToggleSection={toggleSection}
+            projectGitBranches={projectGitBranches}
+            hasCompletionUnread={hasCompletionUnread}
+            isConversationGenerating={isConversationGenerating}
+            hasFailureUnread={hasFailureUnread}
+            getConversationRowProps={getConversationRowProps}
+            dropdownVisibleId={dropdownVisibleId}
+          />
+        )}
+
         {/* L1: Projects section — workspace folders, peer to conversations */}
-        {projectGroups.length > 0 && (
+        {historyView === 'all' && projectGroups.length > 0 && (
           <div className='min-w-0'>
-            {!collapsed && <SectionLabel sectionKey='projects' label={t('conversation.history.projectsSection')} />}
+            {!collapsed && (
+              <SectionLabel
+                sectionKey='projects'
+                label={t('conversation.history.projectsSection')}
+                generating={projectGroups.some((group) =>
+                  group.conversations.some((conversation) => isConversationGenerating(conversation.id))
+                )}
+              />
+            )}
             {!collapsedSections.has('projects') &&
               projectGroups.map((group) => {
+                const isProjectExpanded = expandedWorkspaces.includes(group.workspace);
+                const isProjectPinned = pinnedWorkspaces.includes(group.workspace);
                 const projectMenu = (
                   <Menu
                     onClickMenuItem={(key) => {
+                      if (key === 'pin') {
+                        void setProjectPinned(group.workspace, !isProjectPinned).catch(() => {
+                          Message.error(t('common.saveFailed'));
+                        });
+                      }
+                      if (key === 'mnp-unlinked') {
+                        setMnpUnlinkedGroup({ workspace: group.workspace, displayName: group.displayName });
+                      }
                       if (key === 'archive') {
-                        handleArchiveProject(group.displayName, group.conversations);
+                        handleArchiveProject(
+                          group.displayName,
+                          allProjectConversations.get(group.workspace) ?? group.conversations
+                        );
                       }
                     }}
                   >
+                    <Menu.Item key='pin'>
+                      <span className='flex items-center gap-8px'>
+                        <Pushpin theme={isProjectPinned ? 'filled' : 'outline'} size='14' />
+                        {t(isProjectPinned ? 'conversation.history.unpinProject' : 'conversation.history.pinProject')}
+                      </span>
+                    </Menu.Item>
+                    <Menu.Item key='mnp-unlinked'>{t('conversation.mnpUnlinked.title')}</Menu.Item>
                     <Menu.Item key='archive'>
                       <span className='flex items-center gap-8px'>
                         <FolderClose theme='outline' size='14' />
@@ -438,15 +538,26 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                 return (
                   <div key={group.workspace} className='min-w-0'>
                     <WorkspaceCollapse
-                      expanded={expandedWorkspaces.includes(group.workspace)}
+                      expanded={isProjectExpanded}
                       onToggle={() => handleToggleWorkspace(group.workspace)}
                       siderCollapsed={collapsed}
                       stickyHeader
                       stickyTop={28}
                       header={
-                        <span className='text-14px font-[500] truncate flex-1 text-t-primary min-w-0'>
-                          {group.displayName}
-                        </span>
+                        <ProjectGroupHeader
+                          workspace={group.workspace}
+                          displayName={group.displayName}
+                          pinned={isProjectPinned}
+                          branch={projectGitBranches[group.workspace]}
+                          choiceConversationIds={isProjectExpanded ? [] : group.conversations.map((item) => item.id)}
+                          indicatorStatus={resolveProjectGroupIndicatorStatus(
+                            isProjectExpanded,
+                            group.conversations,
+                            isConversationGenerating,
+                            hasCompletionUnread,
+                            hasFailureUnread
+                          )}
+                        />
                       }
                       trailing={
                         <span className='flex items-center gap-6px'>
@@ -496,7 +607,12 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                       }
                     >
                       <div className={classNames('flex flex-col min-w-0', { 'mt-1px': !collapsed })}>
-                        {group.conversations.map((conversation) => renderConversation(conversation, true))}
+                        <ConversationList
+                          items={group.conversations}
+                          renderRow={(conversation) => renderConversation(conversation, true)}
+                          retainedIds={[dropdownVisibleId]}
+                          scrollMargin={collapsed ? 0 : 64}
+                        />
                       </div>
                     </WorkspaceCollapse>
                   </div>
@@ -506,10 +622,16 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
         )}
 
         {/* L1: Conversations section — peer to projects, internally split by timeline */}
-        {conversationOnlySections.length > 0 && (
+        {historyView === 'all' && conversationOnlySections.length > 0 && (
           <div className='min-w-0'>
             {!collapsed && (
-              <SectionLabel sectionKey='conversations' label={t('conversation.history.conversationsSection')} />
+              <SectionLabel
+                sectionKey='conversations'
+                label={t('conversation.history.conversationsSection')}
+                generating={conversationOnlySections.some((section) =>
+                  section.items.some((item) => item.conversation && isConversationGenerating(item.conversation.id))
+                )}
+              />
             )}
             {!collapsedSections.has('conversations') &&
               conversationOnlySections.map((section) => (
@@ -519,11 +641,19 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                       <span className='text-12px text-t-secondary font-[500] leading-none'>{section.timeline}</span>
                     </div>
                   )}
-                  {section.items.map((item) =>
-                    item.type === 'conversation' && item.conversation ? renderConversation(item.conversation) : null
-                  )}
+                  <ConversationList
+                    items={section.items.flatMap((item) => (item.conversation ? [item.conversation] : []))}
+                    renderRow={renderConversation}
+                    retainedIds={[dropdownVisibleId]}
+                    scrollMargin={collapsed ? 0 : 28}
+                  />
                 </div>
               ))}
+          </div>
+        )}
+        {historyView === 'all' && !hasRegularHistory && (
+          <div className='py-48px flex-center'>
+            <Empty description={t('conversation.history.noHistory')} />
           </div>
         )}
       </div>

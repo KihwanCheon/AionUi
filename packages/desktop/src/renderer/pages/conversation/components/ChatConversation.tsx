@@ -35,6 +35,11 @@ import { useAionrsModelSelection } from '../platforms/aionrs/useAionrsModelSelec
 import { useConversationRuntimeView } from '../runtime/useConversationRuntimeView';
 import { isLegacyReadOnlyConversationType } from '../utils/conversationRuntime';
 import { resolveConversationBackend } from '../utils/conversationAssistantIdentity';
+import {
+  ClaudeAccountBadge,
+  resolveConversationClaudeAccount,
+  useClaudeAccounts,
+} from '../platforms/acp/claudeAccounts';
 import LegacyReadOnlyConversation from '../platforms/legacy/LegacyReadOnlyConversation';
 import SingleChatEmptyState from './SingleChatEmptyState';
 import { useActiveLease } from '../hooks/useActiveLease';
@@ -293,6 +298,8 @@ const ChatConversation: React.FC<{
   const { info: presetAssistantInfo, isLoading: isLoadingPreset } = usePresetAssistantInfo(acpConversation);
   const acpAssistantId = presetAssistantInfo?.assistantId;
   const resolvedConversationBackend = resolveConversationBackend(conversation, presetAssistantInfo?.backend);
+  const claudeAccounts = useClaudeAccounts();
+  const claudeAccount = conversation ? resolveConversationClaudeAccount(claudeAccounts, conversation) : null;
 
   const conversationAgentName = (conversation?.extra as { agent_name?: string } | undefined)?.agent_name;
   const assistantDisplayName = presetAssistantInfo?.name || conversationAgentName;
@@ -412,6 +419,9 @@ const ChatConversation: React.FC<{
           <CronJobManager conversation_id={conversation.id} cron_job_id={cronJobId} />
         </div>
       )}
+      {conversation && conversation.type === 'acp' && !isMobile && claudeAccount && (
+        <ClaudeAccountBadge account={claudeAccount} variant='tag' />
+      )}
       {modelSelector && <div className='shrink-0'>{modelSelector}</div>}
       {conversation && conversation.type === 'acp' && !isMobile && !isLegacyReadOnlyConversation && (
         <div className='shrink-0'>
@@ -428,6 +438,7 @@ const ChatConversation: React.FC<{
     <ChatLayout
       title={conversation?.name}
       {...chatLayoutProps}
+      headerIconBadge={claudeAccount ? <ClaudeAccountBadge account={claudeAccount} /> : undefined}
       headerExtra={headerExtraNode}
       siderTitle={sliderTitle}
       sider={<ChatSlider conversation={conversation} />}

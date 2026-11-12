@@ -18,7 +18,7 @@ import {
   subscribeConversationRuntimeView,
 } from '@/renderer/pages/conversation/runtime/conversationRuntimeViewStore';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import useSWR, { mutate as swrMutate } from 'swr';
+import useSWR, { mutate as swrMutate, useSWRConfig } from 'swr';
 
 export type AcpDerivedSelectOption = {
   value: string;
@@ -285,16 +285,14 @@ export function useAcpConfigOptions({
     runtimeIdentityRef.current = runtimeIdentity;
     runtimeGenerationRef.current += 1;
   }
+  const runtimeGeneration = runtimeGenerationRef.current;
   const [loadedRuntimeGeneration, setLoadedRuntimeGeneration] = useState<number | null>(null);
   const optionsRef = useRef<AcpConfigOptionDto[] | null>(null);
   const getRuntimeSnapshot = useCallback(() => getConversationRuntimeViewSnapshot(conversation_id), [conversation_id]);
   const runtimeView = useSyncExternalStore(subscribeConversationRuntimeView, getRuntimeSnapshot, getRuntimeSnapshot);
   const key = useMemo(() => getRuntimeConfigOptionsKey(conversation_id), [conversation_id]);
-  const {
-    data: snapshotData,
-    mutate,
-    isLoading,
-  } = useSWR<AcpConfigOptionDto[] | null, unknown, AcpConfigOptionsKey | null>(
+  const { mutate: mutateConfigOptions } = useSWRConfig();
+  const { data: snapshotData, isLoading } = useSWR<AcpConfigOptionDto[] | null, unknown, AcpConfigOptionsKey | null>(
     enabled ? key : null,
     (runtimeKey) => fetchConfigOptionsOnce(runtimeKey, configOptionsPort),
     {
@@ -319,10 +317,12 @@ export function useAcpConfigOptions({
 
   const replaceSnapshot = useCallback(
     (next: AcpConfigOptionDto[]) => {
-      optionsRef.current = next;
-      void mutate(next, false);
+      if (runtimeGenerationRef.current === runtimeGeneration) {
+        optionsRef.current = next;
+      }
+      void mutateConfigOptions(key, next, false);
     },
-    [mutate]
+    [key, mutateConfigOptions, runtimeGeneration]
   );
 
   const isConfigOptionBlocked = useCallback(
@@ -337,8 +337,9 @@ export function useAcpConfigOptions({
   );
 
   const reload = useCallback(async () => {
-    const runtimeGeneration = runtimeGenerationRef.current;
-    setIsReloading(true);
+    if (runtimeGenerationRef.current === runtimeGeneration) {
+      setIsReloading(true);
+    }
     try {
       await prepareRuntime?.();
       const next = await fetchConfigOptionsOnce(key, configOptionsPort);
@@ -348,11 +349,11 @@ export function useAcpConfigOptions({
           setLoadedRuntimeGeneration(runtimeGeneration);
         }
       }
-      setIsReloading(false);
       return next;
-    } catch (error) {
-      setIsReloading(false);
-      throw error;
+    } finally {
+      if (runtimeGenerationRef.current === runtimeGeneration) {
+        setIsReloading(false);
+      }
     }
   }, [key, configOptionsPort, prepareRuntime, replaceSnapshot]);
 

@@ -3,6 +3,8 @@
 :root {
   --app-min-width: 360px;
   --titlebar-height: 36px;
+  --conversation-completion-unread: #2c7fff;
+  --conversation-completion-unread-ring: rgba(44, 127, 255, 0.18);
 }
 
 .app-shell {

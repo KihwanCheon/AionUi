@@ -25,6 +25,7 @@ import {
   wsMappedEmitter,
   stubEmitter,
   httpRequest,
+  HttpRequestTimeoutError,
 } from '@/common/adapter/httpBridge';
 
 type FakeSocketEventMap = {
@@ -73,6 +74,21 @@ class FakeWebSocket {
 }
 
 describe('httpBridge', () => {
+  it('redacts CSRF tokens in diagnostics while preserving the transport body', async () => {
+    const fetchSpy = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ data: {} }), { headers: { 'Content-Type': 'application/json' } })
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+    const log = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    try {
+      await httpRequest('POST', '/api/mobile-push', { csrfToken: 'private-csrf-nonce' });
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private-csrf-nonce');
+      expect(fetchSpy.mock.calls[0][1]?.body).toContain('private-csrf-nonce');
+    } finally {
+      log.mockRestore();
+    }
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
@@ -535,5 +551,96 @@ describe('httpBridge', () => {
       expect(fetchSpy.mock.calls[0][1]?.method).toBe('DELETE');
       expect(fetchSpy.mock.calls[0][1]?.body).toBeUndefined();
     });
+  });
+});
+
+describe('bounded deletion requests', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('aborts a request that never responds and releases its timer', async () => {
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = httpRequest('DELETE', '/api/conversations/c', undefined, { timeoutMs: 100 });
+    const rejected = expect(result).rejects.toBeInstanceOf(HttpRequestTimeoutError);
+    await vi.advanceTimersByTimeAsync(100);
+    await rejected;
+    expect((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].signal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('also bounds a stalled response body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: () => new Promise(() => {}),
+      })
+    );
+    const rejected = expect(httpRequest('DELETE', '/c', undefined, { timeoutMs: 100 })).rejects.toBeInstanceOf(
+      HttpRequestTimeoutError
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    await rejected;
+  });
+
+  it('clears the deadline when a request succeeds', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ success: true, data: true })));
+    await expect(httpRequest('DELETE', '/c', undefined, { timeoutMs: 100 })).resolves.toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('recognizes a committed deletion after its response is lost without deleting twice', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('connection lost'))
+      .mockResolvedValueOnce(Response.json({ code: 'NOT_FOUND' }, { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const remove = httpDelete<boolean>('/api/conversations/c', { timeoutMs: 100, missingResourceResult: true });
+    await expect(remove.invoke()).resolves.toBe(true);
+    expect(fetchMock.mock.calls.map((call) => (call[1] as RequestInit).method)).toEqual(['DELETE', 'GET']);
+  });
+
+  it('preserves the failure if the conversation still exists', async () => {
+    const error = new TypeError('connection lost');
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockRejectedValueOnce(error)
+        .mockResolvedValueOnce(Response.json({ data: { id: 'c' } }))
+    );
+    await expect(httpDelete<boolean>('/c', { timeoutMs: 100, missingResourceResult: true }).invoke()).rejects.toBe(
+      error
+    );
+  });
+
+  it('finishes even when both deletion and status verification stop responding', async () => {
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+    const rejected = expect(
+      httpDelete<boolean>('/c', { timeoutMs: 100, missingResourceResult: true }).invoke()
+    ).rejects.toBeInstanceOf(HttpRequestTimeoutError);
+    await vi.advanceTimersByTimeAsync(5100);
+    await rejected;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not turn a failed status query into a successful deletion', async () => {
+    const error = new TypeError('connection lost');
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockRejectedValueOnce(error)
+        .mockResolvedValueOnce(Response.json({ code: 'INTERNAL_ERROR' }, { status: 500 }))
+    );
+    await expect(httpDelete<boolean>('/c', { missingResourceResult: true }).invoke()).rejects.toBe(error);
   });
 });

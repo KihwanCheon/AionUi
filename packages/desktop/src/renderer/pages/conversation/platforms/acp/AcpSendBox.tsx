@@ -12,8 +12,8 @@ import MobileActionSheet, {
   useAttachEntry,
 } from '@/renderer/components/chat/MobileActionSheet';
 import SendBox from '@/renderer/components/chat/SendBox';
+import MindNProgressConversationLink from '@/renderer/components/chat/SendBox/MindNProgressConversationLink';
 import ThoughtDisplay from '@/renderer/components/chat/ThoughtDisplay';
-import FileAttachButton from '@/renderer/components/media/FileAttachButton';
 import { audioExts, getFileExtension, imageExts } from '@/renderer/services/FileService';
 import FilePreview from '@/renderer/components/media/FilePreview';
 import HorizontalFileList from '@/renderer/components/media/HorizontalFileList';
@@ -26,6 +26,8 @@ import { useConversationContextSafe } from '@/renderer/hooks/context/Conversatio
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
 import { useLatestRef } from '@/renderer/hooks/ui/useLatestRef';
+import ConversationFileAttachButton from '@/renderer/pages/conversation/components/ConversationFileAttachButton';
+import { useMobileConversationMcpEntries } from '@/renderer/pages/conversation/hooks/useMobileConversationMcpEntries';
 import { useAddOrUpdateMessage } from '@/renderer/pages/conversation/Messages/hooks';
 import {
   useConversationCommandQueue,
@@ -54,6 +56,7 @@ import { classifyConversationBusyError } from '../conversationBusyError';
 import { buildSendFailureError } from './buildSendFailureError';
 import { useAcpInitialMessage } from './useAcpInitialMessage';
 import type { UseAcpMessageReturn } from './useAcpMessage';
+import { useClaudeModeSelection } from './claudePermissions';
 
 const configErrorMessageKey = (error: unknown) => {
   const errorKind = classifyConfigSetError(error);
@@ -173,6 +176,21 @@ const AcpSendBox: React.FC<{
     enabled: true,
   });
   const runtimeMode = runtimeConfig.mode;
+  const claudeModeSelection = useClaudeModeSelection({
+    conversationId: conversation_id,
+    backend,
+    observedMode: runtimeMode?.currentValue ?? session_mode ?? 'default',
+    setting: runtimeConfig.setStatus.state === 'setting',
+    syncMode: async (mode) => {
+      const result = await runtimeConfig.setConfigOption(runtimeMode?.id ?? 'mode', mode);
+      if (isLeaderInTeam) teamPermission?.propagateMode?.(mode);
+      return result;
+    },
+    onSyncError: (error) => {
+      console.warn('[AcpSendBox] Claude permission mode sync failed', { conversation_id });
+      Message.error(t(configErrorMessageKey(error)));
+    },
+  });
   const runtimeThoughtLevel = runtimeConfig.thoughtLevel;
   const handleThoughtLevelSetOption = useCallback(
     async (optionId: string, value: string) => runtimeConfig.setConfigOption(optionId, value),
@@ -201,6 +219,10 @@ const AcpSendBox: React.FC<{
 
   const handleSheetModeChange = useCallback(
     async (mode: string) => {
+      if (claudeModeSelection) {
+        claudeModeSelection.onSelect(mode);
+        return;
+      }
       if (!runtimeMode || mode === runtimeMode.currentValue) return;
       try {
         await runtimeConfig.setConfigOption(runtimeMode.id, mode);
@@ -212,7 +234,7 @@ const AcpSendBox: React.FC<{
         Message.error(t(configErrorMessageKey(error)));
       }
     },
-    [isLeaderInTeam, runtimeConfig, runtimeMode, t, teamPermission]
+    [claudeModeSelection, isLeaderInTeam, runtimeConfig, runtimeMode, t, teamPermission]
   );
 
   const handleContentChange = useCallback(
@@ -534,6 +556,11 @@ Please check your local CLI tool authentication status`,
     openFileSelector,
     onLocalFilesAdded: handleFilesAdded,
   });
+  const mobileMcpEntries = useMobileConversationMcpEntries({
+    conversationId: conversation_id,
+    currentMcpStatuses: loadedMcpStatuses,
+    enabled: isMobile && !teamPermission,
+  });
 
   const sheetEntries = useMemo<MobileActionSheetEntry[]>(() => {
     if (!isMobile) return [];
@@ -548,7 +575,7 @@ Please check your local CLI tool authentication status`,
       key: mode.value,
       label: t(`agentMode.${mode.value}`, { defaultValue: mode.label }),
       description: mode.description,
-      active: (runtimeMode?.currentValue ?? currentMode) === mode.value,
+      active: (claudeModeSelection?.value ?? runtimeMode?.currentValue ?? currentMode) === mode.value,
     }));
 
     const modelOptions: MobileActionSheetOption[] = canSwitchModel
@@ -651,7 +678,9 @@ Please check your local CLI tool authentication status`,
       });
     }
 
-    if (loadedMcpStatuses.length > 0) {
+    if (mobileMcpEntries.length > 0) {
+      entries.push(...mobileMcpEntries);
+    } else if (loadedMcpStatuses.length > 0) {
       const mcpOptions: MobileActionSheetOption[] = loadedMcpStatuses.map((item) => ({
         key: item.id,
         label: item.name,
@@ -681,11 +710,13 @@ Please check your local CLI tool authentication status`,
     attachEntries,
     canSwitchModel,
     currentMode,
+    claudeModeSelection,
     handleSheetModeChange,
     handleThoughtLevelSetOption,
     isMobile,
     loadedMcpStatuses,
     loadedSkills,
+    mobileMcpEntries,
     model_info,
     runtimeMode,
     runtimeThoughtLevel,
@@ -721,7 +752,7 @@ Please check your local CLI tool authentication status`,
     // Cancelling is best-effort: swallow errors (e.g. backend WS not yet
     // connected → 409) so they don't bubble up as unhandled rejections.
     // UI state is still reset via finally.
-    const turnId = runtimeView.activeTurnId;
+    const turnId = runtimeView.cancelTurnId;
     if (!turnId) {
       resetState();
       resetActiveExecution('stop');
@@ -817,6 +848,7 @@ Please check your local CLI tool authentication status`,
         crossSessionEnabled={crossSessionEnabled}
         isTeamConversation={Boolean(teamRuntime)}
         loading={teamRuntime?.loading ?? isBusy}
+        canStop={teamRuntime ? undefined : runtimeView.canStop}
         active={teamRuntime?.isActive}
         onFocused={teamRuntime?.onFocus}
         disabled={false}
@@ -842,7 +874,9 @@ Please check your local CLI tool authentication status`,
         defaultMultiLine={!isMobile}
         lockMultiLine={!isMobile}
         tools={
-          <FileAttachButton
+          <ConversationFileAttachButton
+            conversationId={conversation_id}
+            enableMcpSelection={!teamPermission}
             openFileSelector={openFileSelector}
             onLocalFilesAdded={handleFilesAdded}
             loadedMcpStatuses={loadedMcpStatuses}
@@ -864,6 +898,7 @@ Please check your local CLI tool authentication status`,
                 beforeRuntimeSync={prepareRuntimeConfig}
                 beforeRuntimeSet={teamPermission?.warmupSession}
                 configOptionsPort={teamPermission?.configOptionsPort}
+                selection={claudeModeSelection}
               />
             )}
           </div>
@@ -919,6 +954,7 @@ Please check your local CLI tool authentication status`,
           // popover shows the raw count — never a percentage against a
           // guessed denominator. No usage report at all → nothing.
           <>
+            <MindNProgressConversationLink conversationId={conversation_id} />
             {teamRuntime?.onInterruptSend && content.trim() && (
               <Button
                 size='mini'

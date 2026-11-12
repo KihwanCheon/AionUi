@@ -312,6 +312,53 @@ describe('useAcpModelInfo', () => {
     await waitFor(() => expect(result.current.isRuntimeReady).toBe(true));
   });
 
+  it('keeps the active conversation model and thought level when an intermediate load resolves late', async () => {
+    const buildConversationOptions = (modelId: string, thoughtLevel: string) => {
+      const options = buildConfigOptions(modelId);
+      const thoughtOption = options.find((option) => option.category === 'thought_level');
+      if (thoughtOption) thoughtOption.current_value = thoughtLevel;
+      return options;
+    };
+    const intermediateLoad = deferred<AcpConfigOptionDto[]>();
+    const load = vi.fn((conversationId: string) =>
+      conversationId === 'conv-race-b'
+        ? intermediateLoad.promise
+        : Promise.resolve(buildConversationOptions('sonnet-4', 'low'))
+    );
+    const configOptionsPort = { load };
+    const wrapper = createSwrWrapper();
+    const { result, rerender } = renderHook(
+      ({ conversationId }) =>
+        useAcpModelInfo({
+          conversation_id: conversationId,
+          backend: 'claude',
+          configOptionsPort,
+        }),
+      { initialProps: { conversationId: 'conv-race-a' }, wrapper }
+    );
+
+    await waitFor(() => {
+      expect(result.current.model_info?.current_model_id).toBe('sonnet-4');
+      expect(result.current.thoughtLevel?.currentValue).toBe('low');
+    });
+
+    rerender({ conversationId: 'conv-race-b' });
+    await waitFor(() => expect(load).toHaveBeenCalledWith('conv-race-b'));
+    rerender({ conversationId: 'conv-race-a' });
+    await waitFor(() => expect(result.current.isRuntimeReady).toBe(true));
+
+    await act(async () => {
+      intermediateLoad.resolve(buildConversationOptions('opus-4', 'medium'));
+      await intermediateLoad.promise;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await waitFor(() => {
+      expect(result.current.model_info?.current_model_id).toBe('sonnet-4');
+      expect(result.current.thoughtLevel?.currentValue).toBe('low');
+    });
+  });
+
   it('preserves model option descriptions from config options', async () => {
     ensureRuntimeInvokeMock.mockResolvedValue({
       recovered: true,
@@ -555,6 +602,51 @@ describe('useAcpModelInfo', () => {
 
     await waitFor(() => {
       expect(result.current.model_info?.current_model_id).toBe('opus-4');
+    });
+    expect(result.current.canSwitch).toBe(false);
+  });
+
+  it('does not reuse another conversation legacy model while the current catalog is unavailable', async () => {
+    ensureRuntimeInvokeMock.mockResolvedValue({ recovered: true, config_options: [], runtime: null });
+    const { result, rerender } = renderHook(
+      ({ conversationId, backend, initialModelId }) =>
+        useAcpModelInfo({
+          conversation_id: conversationId,
+          backend,
+          initialModelId,
+        }),
+      {
+        initialProps: {
+          conversationId: 'codex-conv',
+          backend: 'codex',
+          initialModelId: 'gpt-5.6-sol',
+        },
+        wrapper: createSwrWrapper(),
+      }
+    );
+
+    await waitFor(() => {
+      expect(responseStreamHandlers.length).toBeGreaterThan(0);
+    });
+    act(() => {
+      emitStream({
+        type: 'codex_model_info',
+        conversation_id: 'codex-conv',
+        data: { model: 'gpt-5.6-sol' },
+      } as unknown as IResponseMessage);
+    });
+    await waitFor(() => {
+      expect(result.current.model_info?.current_model_id).toBe('gpt-5.6-sol');
+    });
+
+    rerender({
+      conversationId: 'claude-conv',
+      backend: 'claude',
+      initialModelId: 'opus[1m]',
+    });
+
+    await waitFor(() => {
+      expect(result.current.model_info?.current_model_id).toBe('opus[1m]');
     });
     expect(result.current.canSwitch).toBe(false);
   });

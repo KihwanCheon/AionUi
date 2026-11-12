@@ -164,5 +164,15 @@
     "conversationNotFound": "未找到對話",
     "scheduledTimePassed": "定時時間已過",
     "conversationBusy": "對話繁忙，在 {{count}} 次嘗試後跳過"
+  },
+  "backup": {
+    "backup": "備份",
+    "restore": "還原",
+    "backupEmpty": "沒有可備份的定時任務",
+    "backupSuccess": "已備份 {{count}} 個定時任務",
+    "backupFailed": "定時任務備份失敗",
+    "restoreSuccess": "還原完成：新增 {{imported}} 個，覆寫 {{updated}} 個，失敗 {{skipped}} 個",
+    "restoreInvalid": "不是有效的定時任務備份檔案",
+    "restoreFailed": "定時任務還原失敗"
   }
 }

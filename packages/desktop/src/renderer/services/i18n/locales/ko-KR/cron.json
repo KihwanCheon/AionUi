@@ -164,5 +164,15 @@
     "conversationNotFound": "대화를 찾을 수 없음",
     "scheduledTimePassed": "예약 시간이 지났습니다",
     "conversationBusy": "대화가 사용 중이며 {{count}}번 시도 후 건너뜁니다"
+  },
+  "backup": {
+    "backup": "백업",
+    "restore": "복원",
+    "backupEmpty": "백업할 예약 작업이 없습니다",
+    "backupSuccess": "예약 작업 {{count}}개를 백업했습니다",
+    "backupFailed": "예약 작업 백업에 실패했습니다",
+    "restoreSuccess": "복원 완료 — 신규 {{imported}}개, 덮어씀 {{updated}}개, 실패 {{skipped}}개",
+    "restoreInvalid": "올바른 예약 작업 백업 파일이 아닙니다",
+    "restoreFailed": "예약 작업 복원에 실패했습니다"
   }
 }

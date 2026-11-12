@@ -24,7 +24,7 @@ describe('OfficeWatchViewer module shape', () => {
     const mod = await import('@/renderer/pages/conversation/Preview/components/viewers/OfficeWatchViewer');
     expect(mod).toBeDefined();
     expect(mod.default).toBeDefined();
-  });
+  }, 30_000);
 
   it('default export is a function (React component)', async () => {
     const mod = await import('@/renderer/pages/conversation/Preview/components/viewers/OfficeWatchViewer');

@@ -10,8 +10,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 /**
- * A conversation reference on a message, clickable to mention that conversation
- * again in the send box.
+ * A sender-side recipient reference, clickable to mention that conversation
+ * again in the send box. Received-message sender badges navigate instead.
  *
  * The point is that a target which took effort to find once should not have to be
  * found again — and because the reference carries the conversation ID, clicking it
@@ -30,7 +30,7 @@ const SessionMentionAction: React.FC<{
   name: string;
   label: string;
   title?: string;
-  /** Chip styling (sender side); the delivery badge is inline text. */
+  /** Chip styling for sender-side recipient references. */
   chip?: boolean;
 }> = ({ id, name, label, title, chip = false }) => {
   const { t } = useTranslation();

@@ -1,0 +1,7 @@
+{
+  "v": 1,
+  "type": "aionui_pairing",
+  "projectId": "your-firebase-project",
+  "pairingId": "REPLACE_WITH_32_RANDOM_BYTES_ENCODED_AS_BASE64URL",
+  "expiresAt": 1792761000000
+}

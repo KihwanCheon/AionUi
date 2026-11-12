@@ -17,25 +17,31 @@ import { getFuzzyMatchIndices, useSlashCommandController } from '@/renderer/hook
 import { openExternalUrl } from '@/renderer/utils/platform';
 import SlashCommandMenu, { type SlashCommandMenuItem } from '@/renderer/components/chat/SlashCommandMenu';
 import AssistantSelectionArea from './components/AssistantSelectionArea';
+import ExternalConversationLaunchState from './components/ExternalConversationLaunchState';
 import GuidActionRow from './components/GuidActionRow';
 import GuidInputCard from './components/GuidInputCard';
 import GuidModelSelector from './components/GuidModelSelector';
 import QuickActionButtons from './components/QuickActionButtons';
 import FeedbackReportModal from '@/renderer/components/settings/SettingsModal/contents/FeedbackReportModal';
-import { useGuidAssistantSelection } from './hooks/useGuidAssistantSelection';
+import { resolveAssistantSelectionKey, useGuidAssistantSelection } from './hooks/useGuidAssistantSelection';
 import { useGuidInput } from './hooks/useGuidInput';
 import { useGuidModelSelection } from './hooks/useGuidModelSelection';
 import { useGuidSend } from './hooks/useGuidSend';
+import { useGuidClaudeAccountSelection } from '@/renderer/pages/conversation/platforms/acp/claudeAccounts';
+import { useExternalConversationLaunch } from './hooks/useExternalConversationLaunch';
+import { useExternalConversationLaunchSession } from './hooks/useExternalConversationLaunchSession';
 import { useTypewriterPlaceholder } from './hooks/useTypewriterPlaceholder';
 import { ensureBackendMcpCatalog } from '@/renderer/hooks/mcp/catalog';
 import { resolveGuidAssistantDefaults } from './utils/assistantDefaults';
+import { handleBackslashLineContinuation } from '@/renderer/utils/ui/input/lineContinuation';
+import { getChatEnterMode, isChatNewlineKey } from '@/renderer/utils/ui/input/chatEnterPolicy';
 import SpeechInputButton from '@/renderer/components/chat/SpeechInputButton';
 import { chatFileRefPath, uploadFileRef } from '@/common/types/chatFile';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
 import { appendSpeechTranscript } from '@/renderer/hooks/system/useSpeechInput';
 import { useLiveTranscriptInsertion } from '@/renderer/hooks/system/useLiveTranscriptInsertion';
 import { ArrowRightUp } from '@icon-park/react';
-import { Button, ConfigProvider } from '@arco-design/web-react';
+import { Button, ConfigProvider, Message } from '@arco-design/web-react';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -55,8 +61,14 @@ type GuidNavigationState = {
 
 const GuidPage: React.FC = () => {
   const { t, i18n } = useTranslation();
+  const enterMode = getChatEnterMode();
   const navigate = useNavigate();
   const location = useLocation();
+  const handleExternalLaunchCallbackPending = useCallback(() => {
+    Message.warning(t('guid.externalLaunch.callbackPending'));
+  }, [t]);
+  const externalLaunchState = useExternalConversationLaunchSession(handleExternalLaunchCallbackPending);
+  const externalConversation = externalLaunchState.session;
   const guidContainerRef = useRef<HTMLDivElement>(null);
   const { activeBorderColor, inactiveBorderColor, activeShadow } = useInputFocusRing();
 
@@ -74,8 +86,8 @@ const GuidPage: React.FC = () => {
 
   // --- Skills state ---
   // Skill metadata comes from the database-backed catalog. Built-in auto-inject
-  // skills default checked; the rest are opt-in per conversation or pre-checked
-  // by assistant defaults.
+  // skills default unchecked except session-message; the rest are opt-in per
+  // conversation or pre-checked by assistant defaults.
   const [allSkills, setAllSkills] = useState<Array<{ name: string; description: string; isAuto: boolean }>>([]);
   const [guidDisabledBuiltinSkills, setGuidDisabledBuiltinSkills] = useState<string[] | undefined>(undefined);
   const [guidEnabledSkills, setGuidEnabledSkills] = useState<string[] | undefined>(undefined);
@@ -106,20 +118,6 @@ const GuidPage: React.FC = () => {
         console.error('[GuidPage] Failed to load MCP catalog:', error);
         setAvailableMcpServers([]);
       });
-  }, []);
-
-  const handleToggleSkill = useCallback((skillName: string, isAuto: boolean) => {
-    if (isAuto) {
-      setGuidDisabledBuiltinSkills((prev) => {
-        const list = prev ?? [];
-        return list.includes(skillName) ? list.filter((s) => s !== skillName) : [...list, skillName];
-      });
-    } else {
-      setGuidEnabledSkills((prev) => {
-        const list = prev ?? [];
-        return list.includes(skillName) ? list.filter((s) => s !== skillName) : [...list, skillName];
-      });
-    }
   }, []);
 
   const handleToggleMcpServer = useCallback((serverId: string) => {
@@ -160,6 +158,9 @@ const GuidPage: React.FC = () => {
   const resetMentionActiveIndex = useCallback<React.Dispatch<React.SetStateAction<number>>>(() => {}, []);
 
   const selectedAssistantId = agentSelection.selectedAssistantId;
+  // Explicit external choices take precedence over asynchronously loaded defaults.
+  const externalLaunchOptions =
+    selectedAssistantId === `bare:${externalConversation?.launch.agentId}` ? externalConversation?.launch : undefined;
   const hasSelectedAssistant = selectedAssistantId !== null;
   const { data: selectedAssistantDetail } = useSWR(
     selectedAssistantId ? `guid.assistant.detail.${selectedAssistantId}.${localeKey}` : null,
@@ -172,10 +173,35 @@ const GuidPage: React.FC = () => {
     () => resolveGuidAssistantDefaults(selectedAssistantDetail),
     [selectedAssistantDetail]
   );
+  const defaultDisabledBuiltinSkillIds = useMemo(
+    () => [
+      ...new Set(
+        [
+          ...allSkills.filter((skill) => skill.isAuto).map((skill) => skill.name),
+          ...resolvedAssistantDefaults.disabledBuiltinSkillIds,
+        ].filter((name) => name !== 'session-message')
+      ),
+    ],
+    [allSkills, resolvedAssistantDefaults.disabledBuiltinSkillIds]
+  );
+  const handleToggleSkill = useCallback(
+    (skillName: string, isAuto: boolean) => {
+      if (isAuto) {
+        setGuidDisabledBuiltinSkills((prev) => {
+          const list = prev ?? defaultDisabledBuiltinSkillIds;
+          return list.includes(skillName) ? list.filter((s) => s !== skillName) : [...list, skillName];
+        });
+      } else {
+        setGuidEnabledSkills((prev) => {
+          const list = prev ?? [];
+          return list.includes(skillName) ? list.filter((s) => s !== skillName) : [...list, skillName];
+        });
+      }
+    },
+    [defaultDisabledBuiltinSkillIds]
+  );
   const selectedSkillNames = useMemo(() => {
-    const disabledBuiltinSkillSet = new Set(
-      guidDisabledBuiltinSkills ?? resolvedAssistantDefaults.disabledBuiltinSkillIds
-    );
+    const disabledBuiltinSkillSet = new Set(guidDisabledBuiltinSkills ?? defaultDisabledBuiltinSkillIds);
     const enabledSkillSet = new Set(guidEnabledSkills ?? resolvedAssistantDefaults.skillIds);
 
     return allSkills
@@ -183,9 +209,9 @@ const GuidPage: React.FC = () => {
       .map((skill) => skill.name);
   }, [
     allSkills,
+    defaultDisabledBuiltinSkillIds,
     guidDisabledBuiltinSkills,
     guidEnabledSkills,
-    resolvedAssistantDefaults.disabledBuiltinSkillIds,
     resolvedAssistantDefaults.skillIds,
   ]);
   const skillDescriptionByName = useMemo(
@@ -245,9 +271,17 @@ const GuidPage: React.FC = () => {
     [slashController.filteredCommands, slashController.query]
   );
 
+  // Fork: Claude account choice; inert (no selector, no extra) with a single account.
+  const claudeAccount = useGuidClaudeAccountSelection({
+    backend: agentSelection.selectedAssistantBackend,
+    requestedAccountId: externalConversation?.launch.claudeAccountId,
+  });
+
   const send = useGuidSend({
     // Input state
     input: guidInput.input,
+    conversationName: externalConversation?.launch.title,
+    onConversationCreated: externalConversation?.onConversationCreated,
     setInput: guidInput.setInput,
     files: guidInput.files,
     setFiles: guidInput.setFiles,
@@ -263,11 +297,12 @@ const GuidPage: React.FC = () => {
     selectedAcpModel: agentSelection.selectedAcpModel,
     selectedThoughtLevelValue: agentSelection.selectedThoughtLevelValue,
     current_model: modelSelection.current_model,
+    claudeAccountId: claudeAccount.accountId,
 
     guidDisabledBuiltinSkills,
     guidEnabledSkills,
     assistantDefaultSkillIds: resolvedAssistantDefaults.skillIds,
-    assistantDefaultDisabledBuiltinSkillIds: resolvedAssistantDefaults.disabledBuiltinSkillIds,
+    assistantDefaultDisabledBuiltinSkillIds: defaultDisabledBuiltinSkillIds,
     availableMcpServers,
     selectedMcpServerIds: guidSelectedMcpServerIds,
     assistantDefaultMcpIds: resolvedAssistantDefaults.mcpIds,
@@ -285,6 +320,20 @@ const GuidPage: React.FC = () => {
     localeKey,
   });
 
+  useExternalConversationLaunch({
+    agentSelection,
+    allSkills,
+    availableMcpServers,
+    input: guidInput.input,
+    modelSelection,
+    onUnavailable: externalConversation?.source === 'web' ? externalLaunchState.markUnavailable : undefined,
+    sendMessage: send.sendMessageHandler,
+    session: externalConversation,
+    setDisabledBuiltinSkills: setGuidDisabledBuiltinSkills,
+    setEnabledSkills: setGuidEnabledSkills,
+    setSelectedMcpServerIds: setGuidSelectedMcpServerIds,
+  });
+
   // --- Coordinated handlers (depend on multiple hooks) ---
   const handleInputChange = useCallback(
     (value: string) => {
@@ -298,8 +347,10 @@ const GuidPage: React.FC = () => {
       if (slashController.onKeyDown(event)) {
         return;
       }
+      if (isChatNewlineKey(event, enterMode)) return;
 
       if (event.key === 'Enter' && !event.shiftKey) {
+        if (handleBackslashLineContinuation(event, guidInput.setInput)) return;
         event.preventDefault();
         // Empty input is allowed — it creates an empty conversation ("start
         // chat"). Mirror the send button's gate so Enter and click behave
@@ -308,7 +359,7 @@ const GuidPage: React.FC = () => {
         send.sendMessageHandler();
       }
     },
-    [send.isButtonDisabled, send.sendMessageHandler, slashController]
+    [enterMode, guidInput.setInput, send.isButtonDisabled, send.sendMessageHandler, slashController]
   );
 
   const handleSelectAssistant = useCallback(
@@ -348,15 +399,22 @@ const GuidPage: React.FC = () => {
   // Sync disabledBuiltinSkills + enabledSkills from assistant detail defaults.
   useEffect(() => {
     if (!selectedAssistantId || !selectedAssistantDetail) {
-      setGuidDisabledBuiltinSkills(undefined);
-      setGuidEnabledSkills(undefined);
+      if (!externalLaunchOptions?.disabledBuiltinSkillIds) setGuidDisabledBuiltinSkills(undefined);
+      if (!externalLaunchOptions?.enabledSkillIds) setGuidEnabledSkills(undefined);
       return;
     }
 
     const resolvedDefaults = resolveGuidAssistantDefaults(selectedAssistantDetail);
-    setGuidDisabledBuiltinSkills(resolvedDefaults.disabledBuiltinSkillIds);
-    setGuidEnabledSkills(resolvedDefaults.skillIds);
-  }, [selectedAssistantDetail, selectedAssistantId]);
+    if (!externalLaunchOptions?.disabledBuiltinSkillIds) setGuidDisabledBuiltinSkills(defaultDisabledBuiltinSkillIds);
+    if (!externalLaunchOptions?.enabledSkillIds) setGuidEnabledSkills(resolvedDefaults.skillIds);
+  }, [defaultDisabledBuiltinSkillIds, externalLaunchOptions, selectedAssistantDetail, selectedAssistantId]);
+
+  // New Chat reapplies this default even when Guid is already open.
+  useEffect(() => {
+    if (resetAssistantRequested && !externalLaunchOptions?.disabledBuiltinSkillIds) {
+      setGuidDisabledBuiltinSkills((previous) => previous?.filter((name) => name !== 'session-message'));
+    }
+  }, [externalLaunchOptions, location.key, resetAssistantRequested]);
 
   const appliedAssistantDefaultsKeyRef = useRef<string | null>(null);
   const manualModelSelectionAssistantRef = useRef<string | null>(null);
@@ -371,6 +429,12 @@ const GuidPage: React.FC = () => {
 
     const signature = JSON.stringify({
       assistantId: selectedAssistantId,
+      externalOptions: externalLaunchOptions && [
+        externalLaunchOptions.modelId,
+        externalLaunchOptions.mode,
+        externalLaunchOptions.thoughtLevel,
+        externalLaunchOptions.mcpIds,
+      ],
       backend: agentSelection.selectedAssistantBackend,
       defaults: selectedAssistantDetail.defaults,
       preferences: {
@@ -397,8 +461,10 @@ const GuidPage: React.FC = () => {
     const applyAssistantDefaults = async () => {
       const resolvedDefaults = resolveGuidAssistantDefaults(selectedAssistantDetail);
       const effectiveBackend = agentSelection.selectedAssistantBackend;
-      const shouldApplyDefaultModel = manualModelSelectionAssistantRef.current !== selectedAssistantId;
-      const shouldApplyDefaultThoughtLevel = manualThoughtLevelSelectionAssistantRef.current !== selectedAssistantId;
+      const shouldApplyDefaultModel =
+        !externalLaunchOptions?.modelId && manualModelSelectionAssistantRef.current !== selectedAssistantId;
+      const shouldApplyDefaultThoughtLevel =
+        !externalLaunchOptions?.thoughtLevel && manualThoughtLevelSelectionAssistantRef.current !== selectedAssistantId;
 
       if (shouldApplyDefaultModel && effectiveBackend === 'aionrs') {
         if (resolvedDefaults.modelId) {
@@ -429,7 +495,7 @@ const GuidPage: React.FC = () => {
         agentSelection.setSelectedAcpModel(null, { persistPreference: false });
       }
 
-      if (resolvedDefaults.permissionMode) {
+      if (resolvedDefaults.permissionMode && !externalLaunchOptions?.mode) {
         const availableModeIds = new Set(agentSelection.currentAgentModeOptions.map((mode) => mode.value));
         if (availableModeIds.size === 0 || availableModeIds.has(resolvedDefaults.permissionMode)) {
           agentSelection.setSelectedMode(resolvedDefaults.permissionMode, { persistPreference: false });
@@ -454,7 +520,7 @@ const GuidPage: React.FC = () => {
           agentSelection.setSelectedThoughtLevelValue(fallbackThoughtLevel, { persistPreference: false });
         }
       }
-      setGuidSelectedMcpServerIds(resolvedDefaults.mcpIds);
+      if (!externalLaunchOptions?.mcpIds) setGuidSelectedMcpServerIds(resolvedDefaults.mcpIds);
     };
 
     void applyAssistantDefaults().catch((error) => {
@@ -468,6 +534,7 @@ const GuidPage: React.FC = () => {
     agentSelection.setSelectedAcpModel,
     agentSelection.setSelectedMode,
     agentSelection.setSelectedThoughtLevelValue,
+    externalLaunchOptions,
     modelSelection.modelList,
     modelSelection.resetCurrentModel,
     modelSelection.setCurrentModel,
@@ -579,8 +646,22 @@ const GuidPage: React.FC = () => {
   // the dev server (which has no SPA fallback) and 404.
   useEffect(() => {
     if (!resetAssistantRequested && !preselectAssistantId) return;
+    // External launch tickets can arrive before the assistant catalog. Keep the
+    // requested selection until the hook can resolve and apply it.
+    if (agentSelection.assistants.length === 0) return;
+    const requestedAssistantId = resolveAssistantSelectionKey(preselectAssistantId, agentSelection.assistants);
+    if (requestedAssistantId && selectedAssistantId !== requestedAssistantId) return;
     navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: null });
-  }, [resetAssistantRequested, preselectAssistantId, location.pathname, location.search, location.hash, navigate]);
+  }, [
+    resetAssistantRequested,
+    preselectAssistantId,
+    agentSelection.assistants,
+    selectedAssistantId,
+    location.pathname,
+    location.search,
+    location.hash,
+    navigate,
+  ]);
 
   // Agents that use configured model providers instead of ACP probe-based models.
   // Only aionrs now — Gemini runs as a regular ACP backend with ACP-cached models.
@@ -589,7 +670,7 @@ const GuidPage: React.FC = () => {
 
   // Build the mention dropdown node
   // Build the model selector node
-  const modelSelectorNode = (
+  const guidModelSelectorNode = (
     <GuidModelSelector
       isGeminiMode={isGeminiMode}
       modelList={modelSelection.modelList}
@@ -601,6 +682,14 @@ const GuidPage: React.FC = () => {
       thoughtLevelOption={isGeminiMode ? null : agentSelection.currentThoughtLevelOption}
       onThoughtLevelSelect={setGuidSelectedThoughtLevel}
     />
+  );
+  const modelSelectorNode = claudeAccount.selectorNode ? (
+    <>
+      {claudeAccount.selectorNode}
+      {guidModelSelectorNode}
+    </>
+  ) : (
+    guidModelSelectorNode
   );
 
   const handleSpeechTranscript = useCallback(
@@ -618,6 +707,7 @@ const GuidPage: React.FC = () => {
       onFilesUploaded={guidInput.handleFilesUploaded}
       onFilesPicked={guidInput.handleFilesPicked}
       modelSelectorNode={modelSelectorNode}
+      mobileAccountEntry={claudeAccount.mobileEntry}
       isGeminiMode={isGeminiMode}
       modelList={modelSelection.modelList}
       current_model={modelSelection.current_model}
@@ -632,7 +722,7 @@ const GuidPage: React.FC = () => {
       dynamicModes={agentSelection.currentAgentModeOptions}
       onModeSelect={setGuidSelectedMode}
       allSkills={allSkills}
-      disabledBuiltinSkills={guidDisabledBuiltinSkills ?? []}
+      disabledBuiltinSkills={guidDisabledBuiltinSkills ?? defaultDisabledBuiltinSkillIds}
       enabledSkills={guidEnabledSkills ?? []}
       onToggleSkill={handleToggleSkill}
       mcpServers={availableMcpServers}
@@ -664,6 +754,19 @@ const GuidPage: React.FC = () => {
     />
   ) : null;
 
+  if (externalLaunchState.loading || externalLaunchState.error) {
+    return (
+      <ConfigProvider getPopupContainer={() => guidContainerRef.current || document.body}>
+        <ExternalConversationLaunchState
+          error={externalLaunchState.error}
+          loading={externalLaunchState.loading}
+          onClose={() => navigate('/guid', { replace: true })}
+          onRetry={externalLaunchState.retry}
+        />
+      </ConfigProvider>
+    );
+  }
+
   return (
     <ConfigProvider getPopupContainer={() => guidContainerRef.current || document.body}>
       <div ref={guidContainerRef} className={styles.guidContainer}>
@@ -672,18 +775,21 @@ const GuidPage: React.FC = () => {
             <p className='text-2xl font-semibold mb-0 text-t-primary text-center'>{t('conversation.welcome.title')}</p>
           </div>
 
-          <AssistantSelectionArea
-            selectedAssistantId={agentSelection.selectedAssistantId}
-            assistants={agentSelection.assistants}
-            localeKey={localeKey}
-            onSelectAssistant={handleSelectAssistant}
-          />
+          {!externalConversation && (
+            <AssistantSelectionArea
+              selectedAssistantId={agentSelection.selectedAssistantId}
+              assistants={agentSelection.assistants}
+              localeKey={localeKey}
+              onSelectAssistant={handleSelectAssistant}
+            />
+          )}
 
           <GuidInputCard
             focusRequestKey={navState?.focusPrefill && navState.prefillPrompt ? location.key : undefined}
             input={guidInput.input}
             onInputChange={handleInputChange}
             onKeyDown={handleInputKeyDown}
+            enterKeyHint={enterMode === 'newline' ? 'enter' : 'send'}
             onPaste={guidInput.onPaste}
             onFocus={guidInput.handleTextareaFocus}
             onBlur={guidInput.handleTextareaBlur}

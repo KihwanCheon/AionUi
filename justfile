@@ -459,3 +459,7 @@ list-artifacts:
 # CI-like full build validation (mirrors GitHub Actions workflow)
 ci-local: check test build
     @echo "CI-local pipeline passed!"
+
+# Fork-only push: run static checks but skip the full test suite
+push-fork *ARGS: lint-strict fmt-check typecheck i18n-check
+    git push {{ ARGS }}

@@ -1,4 +1,13 @@
 {
+  "externalLaunch": {
+    "loading": "İstenen konuşma hazırlanıyor...",
+    "errorTitle": "Konuşma başlatılamıyor",
+    "notFoundOrExpired": "Bu başlatma isteği geçersiz, süresi dolmuş veya zaten tamamlanmış.",
+    "alreadyUsed": "Bu konuşma başlatma isteği zaten kullanılmış.",
+    "unavailableOptions": "İstenen aracı, model, beceriler veya MCP araçları kullanılamıyor.",
+    "loadFailed": "Başlatma isteği yüklenemedi. Lütfen tekrar deneyin.",
+    "callbackPending": "Konuşma oluşturuldu ancak bağlı uygulamaya bildirim gönderilemedi. Yeniden deneme gerekebilir."
+  },
   "promptExamplesHint": "Bu talimatları deneyin",
   "defaultPrompts": {
     "understand": "Bu projeyi incele ve ne yaptığını, nereden başlamam gerektiğini basit bir dille anlat",
@@ -13,5 +22,8 @@
     "specifyWorkspace": "Proje klasörü seç",
     "searchPlaceholder": "Proje ara…",
     "noProject": "Proje Yok"
+  },
+  "claudeAccount": {
+    "label": "Claude hesabı"
   }
 }

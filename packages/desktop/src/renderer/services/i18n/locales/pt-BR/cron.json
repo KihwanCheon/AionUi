@@ -163,5 +163,15 @@
     "conversationNotFound": "Conversa não encontrada",
     "scheduledTimePassed": "O tempo agendado já passou",
     "conversationBusy": "Conversa ocupada após {{count}} tentativas"
+  },
+  "backup": {
+    "backup": "Fazer backup",
+    "restore": "Restaurar",
+    "backupEmpty": "Não há tarefas agendadas para fazer backup",
+    "backupSuccess": "Backup de {{count}} tarefa(s) agendada(s) concluído",
+    "backupFailed": "Falha ao fazer backup das tarefas agendadas",
+    "restoreSuccess": "Restauradas: {{imported}} novas, {{updated}} substituídas, {{skipped}} com falha",
+    "restoreInvalid": "Este não é um arquivo de backup de tarefas agendadas válido",
+    "restoreFailed": "Falha ao restaurar as tarefas agendadas"
   }
 }

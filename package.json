@@ -143,6 +143,7 @@
     "mammoth": "^1.11.0",
     "mermaid": "^11.13.0",
     "multer": "^2.1.1",
+    "node-pty": "1.1.0",
     "officeparser": "^5.2.2",
     "openai": "^5.12.2",
     "postcss": "^8.5.8",
@@ -266,7 +267,8 @@
     "electronVersion": "^37.3.1"
   },
   "patchedDependencies": {
-    "7zip-bin@5.2.0": "patches/7zip-bin@5.2.0.patch"
+    "7zip-bin@5.2.0": "patches/7zip-bin@5.2.0.patch",
+    "node-pty@1.1.0": "patches/node-pty@1.1.0.patch"
   },
   "productName": "AionUi"
 }

@@ -11,6 +11,10 @@ import { BackendHttpError } from '@/common/adapter/httpBridge';
 import AcpSendBox from '@/renderer/pages/conversation/platforms/acp/AcpSendBox';
 import type { UseAcpMessageReturn } from '@/renderer/pages/conversation/platforms/acp/useAcpMessage';
 import type { TeamSendBoxRuntime } from '@/renderer/pages/team/components/teamSendRuntime';
+import {
+  forgetClaudeConversation,
+  getClaudeMode,
+} from '@/renderer/pages/conversation/platforms/acp/claudePermissions/state';
 
 const {
   sendMessageInvokeMock,
@@ -34,6 +38,7 @@ const {
   draftContentRef,
   messageWarningMock,
   stopInvokeMock,
+  useMobileConversationMcpEntriesMock,
 } = vi.hoisted(() => ({
   sendMessageInvokeMock: vi.fn(),
   addOrUpdateMessageMock: vi.fn(),
@@ -49,6 +54,7 @@ const {
       key: string;
       submenu?: {
         onSelect?: (value: string) => void;
+        footer?: React.ReactNode;
       };
     }>,
   },
@@ -58,6 +64,8 @@ const {
     isProcessing: false,
     canSendMessage: true,
     activeTurnId: null as string | null,
+    cancelTurnId: null as string | null,
+    canStop: false,
     supportsMidturnDelivery: false,
     markSendStarted: vi.fn(),
     markSendAccepted: vi.fn(),
@@ -76,6 +84,7 @@ const {
   draftContentRef: { current: '' },
   messageWarningMock: vi.fn(),
   stopInvokeMock: vi.fn().mockResolvedValue(undefined),
+  useMobileConversationMcpEntriesMock: vi.fn(),
 }));
 
 vi.mock('@/common', () => ({
@@ -96,6 +105,9 @@ vi.mock('@/common', () => ({
 vi.mock('@/renderer/components/chat/SendBox', () => ({
   default: ({
     onSend,
+    onStop,
+    canStop,
+    loading,
     onChange,
     rightTools,
     sendButtonPrefix,
@@ -112,6 +124,9 @@ vi.mock('@/renderer/components/chat/SendBox', () => ({
     isTeamConversation,
   }: {
     onSend: (message: string) => Promise<void>;
+    onStop?: () => Promise<void>;
+    canStop?: boolean;
+    loading?: boolean;
     onChange?: (value: string) => void;
     rightTools?: React.ReactNode;
     sendButtonPrefix?: React.ReactNode;
@@ -128,6 +143,9 @@ vi.mock('@/renderer/components/chat/SendBox', () => ({
     isTeamConversation?: boolean;
   }) => {
     sendBoxPropsSpy({
+      onStop,
+      canStop,
+      loading,
       active,
       onFocused,
       disabled,
@@ -247,6 +265,9 @@ vi.mock('@/renderer/hooks/file/useOpenFileSelector', () => ({
 vi.mock('@/renderer/hooks/ui/useLatestRef', () => ({
   useLatestRef: <T,>(value: T) => ({ current: value }),
 }));
+vi.mock('@/renderer/pages/conversation/hooks/useMobileConversationMcpEntries', () => ({
+  useMobileConversationMcpEntries: useMobileConversationMcpEntriesMock,
+}));
 vi.mock('@/renderer/pages/conversation/Messages/hooks', () => ({
   useAddOrUpdateMessage: () => addOrUpdateMessageMock,
 }));
@@ -350,9 +371,12 @@ describe('AcpSendBox', () => {
     runtimeViewMock.isProcessing = false;
     runtimeViewMock.canSendMessage = true;
     runtimeViewMock.activeTurnId = null;
+    runtimeViewMock.cancelTurnId = null;
+    runtimeViewMock.canStop = false;
     runtimeViewMock.supportsMidturnDelivery = false;
     draftContentRef.current = '';
     useTeamPermissionMock.mockReturnValue(null);
+    useMobileConversationMcpEntriesMock.mockReturnValue([]);
     useAcpConfigOptionsMock.mockReturnValue({
       setStatus: { state: 'idle' },
       mode: null,
@@ -394,6 +418,28 @@ describe('AcpSendBox', () => {
     await waitFor(() => {
       expect(resetStateMock).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('passes an independent stop capability and cancels the continuation without an active user turn', async () => {
+    runtimeViewMock.cancelTurnId = 'continuation-1';
+    runtimeViewMock.canStop = true;
+    const runtime = { state: 'idle', can_send_message: true, turn_id: null, can_stop: false, cancel_turn_id: null };
+    stopInvokeMock.mockResolvedValueOnce({ runtime });
+    render(
+      <AcpSendBox
+        conversation_id='conv-1'
+        backend='codex'
+        workspacePath='/tmp/workspace'
+        messageState={makeMessageState()}
+      />
+    );
+    const props = sendBoxPropsSpy.mock.lastCall?.[0];
+    expect(props).toMatchObject({ canStop: true, loading: false });
+    await act(async () => {
+      await props.onStop();
+    });
+    expect(stopInvokeMock).toHaveBeenCalledWith({ conversation_id: 'conv-1', turn_id: 'continuation-1' });
+    expect(runtimeViewMock.markStopAcknowledged).toHaveBeenCalledWith('continuation-1', runtime);
   });
 
   it('shows a progress ring with a window size, a hollow ring without one, and nothing without usage', () => {
@@ -626,6 +672,37 @@ describe('AcpSendBox', () => {
     expect(screen.queryByTestId('mock-thought-selector')).not.toBeInTheDocument();
   });
 
+  it('includes the MCP apply action inside the selected MCP submenu', () => {
+    isMobileMock.current = true;
+    useMobileConversationMcpEntriesMock.mockReturnValue([
+      {
+        key: 'mcp',
+        label: 'Selected MCP',
+        submenu: {
+          title: 'Selected MCP',
+          options: [],
+          onSelect: vi.fn(),
+          footer: <span>Apply selected MCP</span>,
+        },
+      },
+    ]);
+
+    render(
+      <AcpSendBox
+        conversation_id='conv-1'
+        backend='codex'
+        workspacePath='/tmp/workspace'
+        messageState={makeMessageState()}
+      />
+    );
+
+    expect(mobileActionSheetEntries.current.some((entry) => entry.key === 'mcp-reload')).toBe(false);
+    expect(mobileActionSheetEntries.current.find((entry) => entry.key === 'mcp')?.submenu?.footer).toBeDefined();
+    expect(useMobileConversationMcpEntriesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: 'conv-1', enabled: true })
+    );
+  });
+
   it('applies runtime thought level from the mobile action sheet without persisting a global preference', async () => {
     isMobileMock.current = true;
     const setConfigOption = vi.fn().mockResolvedValue([]);
@@ -666,6 +743,42 @@ describe('AcpSendBox', () => {
     await waitFor(() => {
       expect(setConfigOption).toHaveBeenCalledWith('reasoning_effort', 'high');
     });
+  });
+
+  it('uses the mobile Claude input choice even if the backend rejects the mode change', async () => {
+    isMobileMock.current = true;
+    const syncMode = vi.fn().mockRejectedValue(new Error('command_ack'));
+    useAcpConfigOptionsMock.mockReturnValue({
+      mode: {
+        id: 'mode',
+        currentValue: 'default',
+        options: [
+          { value: 'default', label: 'Default' },
+          { value: 'bypassPermissions', label: 'Full auto' },
+        ],
+      },
+      setStatus: { state: 'idle' },
+      setConfigOption: syncMode,
+      model: null,
+      thoughtLevel: null,
+      isLoading: false,
+    });
+    const { unmount } = render(
+      <AcpSendBox conversation_id='claude-mobile-auto' backend='claude' messageState={makeMessageState()} />
+    );
+    await act(async () =>
+      mobileActionSheetEntries.current
+        .find((entry) => entry.key === 'permission')
+        ?.submenu?.onSelect?.('bypassPermissions')
+    );
+    expect(getClaudeMode('claude-mobile-auto')).toBe('bypassPermissions');
+    await act(async () =>
+      mobileActionSheetEntries.current.find((entry) => entry.key === 'permission')?.submenu?.onSelect?.('default')
+    );
+    expect(getClaudeMode('claude-mobile-auto')).toBe('default');
+    expect(syncMode).toHaveBeenLastCalledWith('mode', 'default');
+    unmount();
+    forgetClaudeConversation('claude-mobile-auto');
   });
 
   it('does not apply runtime thought level when observed confirmation fails', async () => {
@@ -921,6 +1034,7 @@ describe('AcpSendBox', () => {
     it('keeps the stop-then-prioritize path for a non-supporting agent', async () => {
       runtimeViewMock.supportsMidturnDelivery = false;
       runtimeViewMock.activeTurnId = 'turn-9';
+      runtimeViewMock.cancelTurnId = 'turn-9';
 
       render(
         <AcpSendBox

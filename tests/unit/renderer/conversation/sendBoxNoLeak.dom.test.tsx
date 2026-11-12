@@ -49,7 +49,12 @@ vi.mock('@/renderer/hooks/agent/useAcpModelInfo', () => ({
 }));
 vi.mock('@/renderer/hooks/agent/useAcpConfigOptions', () => ({
   classifyConfigSetError: () => 'unknown',
-  useAcpConfigOptions: () => ({ mode: undefined, thoughtLevel: undefined, setConfigOption: vi.fn() }),
+  useAcpConfigOptions: () => ({
+    mode: undefined,
+    thoughtLevel: undefined,
+    setConfigOption: vi.fn(),
+    setStatus: { state: 'idle' },
+  }),
 }));
 // Draft hook: real setAtPath calls `mutate`; we spy `mutate` to observe accept/reject.
 vi.mock('@/renderer/hooks/chat/useSendBoxDraft', () => ({

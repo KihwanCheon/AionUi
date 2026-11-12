@@ -14,8 +14,8 @@ import MobileActionSheet, {
   useAttachEntry,
 } from '@/renderer/components/chat/MobileActionSheet';
 import SendBox from '@/renderer/components/chat/SendBox';
+import MindNProgressConversationLink from '@/renderer/components/chat/SendBox/MindNProgressConversationLink';
 import ThoughtDisplay from '@/renderer/components/chat/ThoughtDisplay';
-import FileAttachButton from '@/renderer/components/media/FileAttachButton';
 import FilePreview from '@/renderer/components/media/FilePreview';
 import HorizontalFileList from '@/renderer/components/media/HorizontalFileList';
 import { classifyConfigSetError, useAcpConfigOptions } from '@/renderer/hooks/agent/useAcpConfigOptions';
@@ -27,6 +27,8 @@ import { createSetUploadFile, useSendBoxFiles } from '@/renderer/hooks/chat/useS
 import { useSlashCommands } from '@/renderer/hooks/chat/useSlashCommands';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
 import { useLatestRef } from '@/renderer/hooks/ui/useLatestRef';
+import ConversationFileAttachButton from '@/renderer/pages/conversation/components/ConversationFileAttachButton';
+import { useMobileConversationMcpEntries } from '@/renderer/pages/conversation/hooks/useMobileConversationMcpEntries';
 import {
   useConversationCommandQueue,
   type ConversationCommandQueueItem,
@@ -483,6 +485,11 @@ const AionrsSendBox: React.FC<{
     onLocalFilesAdded: handleFilesAdded,
     dividerBefore: true,
   });
+  const mobileMcpEntries = useMobileConversationMcpEntries({
+    conversationId: conversation_id,
+    currentMcpStatuses: loadedMcpStatuses,
+    enabled: isMobile && !teamPermission,
+  });
 
   const handleSheetModeChange = useCallback(
     async (mode: string) => {
@@ -624,7 +631,9 @@ const AionrsSendBox: React.FC<{
       });
     }
 
-    if (loadedMcpStatuses.length > 0) {
+    if (mobileMcpEntries.length > 0) {
+      entries.push(...mobileMcpEntries);
+    } else if (loadedMcpStatuses.length > 0) {
       const mcpOptions: MobileActionSheetOption[] = loadedMcpStatuses.map((item) => ({
         key: item.id,
         label: item.name,
@@ -659,6 +668,7 @@ const AionrsSendBox: React.FC<{
     isMobile,
     loadedMcpStatuses,
     loadedSkills,
+    mobileMcpEntries,
     modelSelection,
     runtimeConfig,
     runtimeMode,
@@ -795,7 +805,9 @@ const AionrsSendBox: React.FC<{
         defaultMultiLine={!isMobile}
         lockMultiLine={!isMobile}
         tools={
-          <FileAttachButton
+          <ConversationFileAttachButton
+            conversationId={conversation_id}
+            enableMcpSelection={!teamPermission}
             openFileSelector={openFileSelector}
             onLocalFilesAdded={handleFilesAdded}
             loadedMcpStatuses={loadedMcpStatuses}
@@ -876,17 +888,20 @@ const AionrsSendBox: React.FC<{
         }
         allowSendWhileLoading
         sendButtonPrefix={
-          teamRuntime?.onInterruptSend && content.trim() ? (
-            <Button
-              size='mini'
-              type='secondary'
-              icon={<Lightning />}
-              loading={interrupting}
-              onClick={() => void handleInterruptSend()}
-            >
-              {t('team.interruptAndSend')}
-            </Button>
-          ) : undefined
+          <>
+            <MindNProgressConversationLink conversationId={conversation_id} />
+            {teamRuntime?.onInterruptSend && content.trim() ? (
+              <Button
+                size='mini'
+                type='secondary'
+                icon={<Lightning />}
+                loading={interrupting}
+                onClick={() => void handleInterruptSend()}
+              >
+                {t('team.interruptAndSend')}
+              </Button>
+            ) : undefined}
+          </>
         }
       />
       {isMobile && (

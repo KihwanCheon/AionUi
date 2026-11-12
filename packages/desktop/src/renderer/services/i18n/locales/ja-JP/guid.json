@@ -1,4 +1,13 @@
 {
+  "externalLaunch": {
+    "loading": "要求された会話を準備しています...",
+    "errorTitle": "会話を開始できません",
+    "notFoundOrExpired": "この開始リクエストは無効、期限切れ、または完了済みです。",
+    "alreadyUsed": "この会話開始リクエストは既に使用されています。",
+    "unavailableOptions": "要求されたエージェント、モデル、スキル、または MCP ツールは利用できません。",
+    "loadFailed": "会話開始リクエストを読み込めませんでした。もう一度お試しください。",
+    "callbackPending": "会話は作成されましたが、連携アプリに通知できませんでした。再試行が必要な場合があります。"
+  },
   "promptExamplesHint": "これらの指示を試す",
   "defaultPrompts": {
     "understand": "このプロジェクトを調べて、何をするものか、どこから手を付ければいいかを分かりやすく教えて",
@@ -13,5 +22,8 @@
     "specifyWorkspace": "プロジェクトフォルダを選択",
     "searchPlaceholder": "プロジェクトを検索…",
     "noProject": "プロジェクトなし"
+  },
+  "claudeAccount": {
+    "label": "Claude アカウント"
   }
 }

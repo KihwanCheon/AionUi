@@ -163,5 +163,15 @@
     "conversationNotFound": "Gespräch nicht gefunden",
     "scheduledTimePassed": "Geplante Zeit ist abgelaufen",
     "conversationBusy": "Gespräch nach {{count}} Versuchen noch beschäftigt"
+  },
+  "backup": {
+    "backup": "Sichern",
+    "restore": "Wiederherstellen",
+    "backupEmpty": "Keine geplanten Aufgaben zum Sichern vorhanden",
+    "backupSuccess": "{{count}} geplante Aufgabe(n) gesichert",
+    "backupFailed": "Geplante Aufgaben konnten nicht gesichert werden",
+    "restoreSuccess": "Wiederhergestellt: {{imported}} neu, {{updated}} überschrieben, {{skipped}} fehlgeschlagen",
+    "restoreInvalid": "Keine gültige Sicherungsdatei für geplante Aufgaben",
+    "restoreFailed": "Geplante Aufgaben konnten nicht wiederhergestellt werden"
   }
 }

@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
+import type { LayoutContextValue } from '@renderer/hooks/context/LayoutContext';
 
 // Mirror the project convention: t() echoes the key so labels/tooltips are assertable.
 vi.mock('react-i18next', () => ({
@@ -39,6 +40,16 @@ vi.mock('@/common', () => ({
     application: {
       openDevTools: { invoke: () => openDevTools() },
       logStream: { on: () => () => {} },
+      setTaskbarBadge: { invoke: vi.fn(() => Promise.resolve()) },
+    },
+    database: {
+      getUserConversations: { invoke: vi.fn(() => Promise.resolve({ items: [] })) },
+    },
+    conversation: {
+      confirmation: { remove: { on: () => () => {} } },
+      listChanged: { on: () => () => {} },
+      responseStream: { on: () => () => {} },
+      turnCompleted: { on: () => () => {} },
     },
     task: { stopAll: { invoke: () => Promise.resolve({ success: false }) } },
   },
@@ -52,10 +63,29 @@ vi.mock('@/common/config/constants', () => ({
 }));
 vi.mock('@/renderer/components/layout/PwaPullToRefresh', () => ({ default: () => null }));
 vi.mock('@/renderer/components/layout/Titlebar', () => ({ default: () => null }));
+vi.mock('@/renderer/components/layout/Taskbar', () => ({ default: () => null }));
+vi.mock('@renderer/components/layout/ProjectPanelHost', () => ({ ProjectPanelHost: () => null }));
+vi.mock('@renderer/components/layout/ProjectPanelMobileOverlay', () => ({ ProjectPanelMobileOverlay: () => null }));
 vi.mock('@/renderer/components/settings/UpdateModal', () => ({ default: () => null }));
+vi.mock('@/renderer/components/settings/UpdateMigrationDialog', () => ({ default: () => null }));
 vi.mock('@renderer/hooks/system/useDeepLink', () => ({ useDeepLink: () => {} }));
 vi.mock('@renderer/hooks/system/notification/useNotificationClick', () => ({ useNotificationClick: () => {} }));
 vi.mock('@renderer/hooks/system/notification/useBrowserNotification', () => ({ useBrowserNotification: () => {} }));
+vi.mock('@renderer/hooks/system/notification/useDesktopTurnNotification', () => ({
+  useDesktopTurnNotification: () => {},
+}));
+vi.mock('@renderer/hooks/context/UserChoiceNotifications', async () => {
+  const { LayoutContext } = await import('@renderer/hooks/context/LayoutContext');
+  return {
+    ChoiceNotificationLayoutProvider: ({
+      children,
+      value,
+    }: {
+      children: React.ReactNode;
+      value: LayoutContextValue;
+    }) => <LayoutContext.Provider value={value}>{children}</LayoutContext.Provider>,
+  };
+});
 vi.mock('@renderer/hooks/file/useDirectorySelection', () => ({
   useDirectorySelection: () => ({ contextHolder: null }),
 }));
@@ -66,18 +96,28 @@ vi.mock('@renderer/hooks/ui/useConversationShortcuts', () => ({
   },
 }));
 vi.mock('@renderer/utils/platform', () => ({ isElectronDesktop: platformMocks.isElectronDesktopMock }));
-vi.mock('@renderer/pages/conversation/Preview/context/PreviewContext', () => ({
+vi.mock('@renderer/pages/conversation/Preview', () => ({
   usePreviewContext: () => ({ closePreview: () => {} }),
+  PreviewPanel: () => null,
 }));
 
 import Layout from '@renderer/components/layout/Layout';
+import WorkspaceCollapse from '@renderer/pages/conversation/components/WorkspaceCollapse';
 
-const renderLayout = () => render(<Layout sider={<div>sider</div>} />);
+const EmptySider = () => <div>sider</div>;
+const renderLayout = (sider: React.ReactNode = <EmptySider />) => render(<Layout sider={sider} />);
+
+const ProjectHistory = ({ collapsed = false }: { collapsed?: boolean }) => (
+  <WorkspaceCollapse expanded onToggle={() => {}} header='Project history' siderCollapsed={collapsed}>
+    <div data-testid='conversation-row'>Conversation</div>
+  </WorkspaceCollapse>
+);
 
 const BACK_KEY = 'common.back';
 
 describe('Layout sider brand Home button', () => {
   beforeEach(() => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1280 });
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: (query: string) => ({
@@ -185,6 +225,50 @@ describe('Layout sider brand Home button', () => {
 
     act(() => shortcutMocks.params?.toggleSider());
     expect(sider).not.toHaveClass('collapsed');
+  });
+
+  it('keeps mobile project contents and sidebar width stable while the overlay is closed', () => {
+    window.innerWidth = 390;
+    const { container } = renderLayout(<ProjectHistory />);
+    const sider = container.querySelector<HTMLElement>('.layout-sider')!;
+    const row = screen.getByTestId('conversation-row');
+
+    act(() => shortcutMocks.params?.toggleSider());
+    const openWidth = sider.style.width;
+    act(() => shortcutMocks.params?.toggleSider());
+
+    expect(sider).toHaveStyle({ width: openWidth, visibility: 'hidden' });
+    expect(screen.getByText('Project history')).toBeInTheDocument();
+
+    act(() => shortcutMocks.params?.toggleSider());
+    expect(screen.getByTestId('conversation-row')).toBe(row);
+  });
+
+  it('preserves mobile layout for a touch tablet wider than the phone breakpoint', () => {
+    window.innerWidth = 900;
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    const { container } = renderLayout(<ProjectHistory />);
+
+    expect(container.querySelector('.layout-sider')).not.toHaveStyle({ width: '0px' });
+    expect(screen.getByText('Project history')).toBeInTheDocument();
+  });
+
+  it('still applies the desktop collapsed layout when the sidebar is closed', () => {
+    const { container } = renderLayout(<ProjectHistory />);
+
+    act(() => shortcutMocks.params?.toggleSider());
+
+    expect(container.querySelector('.layout-sider')).toHaveStyle({ width: '0px' });
+    expect(screen.queryByText('Project history')).not.toBeInTheDocument();
   });
 
   it('keeps the common shortcut owner mounted on team routes', () => {

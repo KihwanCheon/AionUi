@@ -6,9 +6,18 @@ import { tmpdir } from 'node:os';
 
 const projectRoot = resolve(__dirname, '../..');
 const itWithBash = spawnSync('bash', ['--version'], { encoding: 'utf8' }).status === 0 ? it : it.skip;
+const bashKernel = spawnSync('bash', ['-lc', 'uname -s'], { encoding: 'utf8' }).stdout.trim();
 
 function readProjectFile(path: string): string {
   return readFileSync(resolve(projectRoot, path), 'utf8');
+}
+
+function toBashPath(path: string): string {
+  const normalized = path.replaceAll('\\', '/');
+  const drivePath = normalized.match(/^([a-zA-Z]):\/(.*)$/);
+  if (!drivePath) return normalized;
+  const [, drive, rest] = drivePath;
+  return bashKernel === 'Linux' ? `/mnt/${drive.toLowerCase()}/${rest}` : `/${drive.toLowerCase()}/${rest}`;
 }
 
 function yamlBlock(content: string, key: string): string {
@@ -51,32 +60,42 @@ describe('release packaging configuration', () => {
     expect(script).toMatch(/--mac\s+dmg\s+zip\s+--\$\{targetArch\}\s+--prepackaged/);
   });
 
-  itWithBash('fails release asset preparation when a mac zip is missing', () => {
-    const tempDir = mkdtempSync(resolve(tmpdir(), 'aionui-release-assets-'));
-    const artifactsDir = resolve(tempDir, 'build-artifacts');
-    const outputDir = resolve(tempDir, 'release-assets');
+  itWithBash(
+    'fails release asset preparation when a mac zip is missing',
+    () => {
+      const tempDir = mkdtempSync(resolve(tmpdir(), 'aionui-release-assets-'));
+      const artifactsDir = resolve(tempDir, 'build-artifacts');
+      const outputDir = resolve(tempDir, 'release-assets');
 
-    try {
-      const env = { ...process.env, MOCK_VERSION: '1.0.0' };
-      const createResult = spawnSync('bash', ['scripts/create-mock-release-artifacts.sh', artifactsDir], {
-        cwd: projectRoot,
-        env,
-        encoding: 'utf8',
-      });
-      expect(createResult.status).toBe(0);
+      try {
+        const env = { ...process.env, MOCK_VERSION: '1.0.0' };
+        const bashArtifactsDir = toBashPath(artifactsDir);
+        const bashOutputDir = toBashPath(outputDir);
+        const createResult = spawnSync('bash', ['scripts/create-mock-release-artifacts.sh', bashArtifactsDir], {
+          cwd: projectRoot,
+          env,
+          encoding: 'utf8',
+        });
+        expect(createResult.status).toBe(0);
 
-      rmSync(resolve(artifactsDir, 'macos-build-arm64', 'AionUi-1.0.0-mac-arm64.zip'), { force: true });
+        rmSync(resolve(artifactsDir, 'macos-build-arm64', 'AionUi-1.0.0-mac-arm64.zip'), { force: true });
 
-      const prepareResult = spawnSync('bash', ['scripts/prepare-release-assets.sh', artifactsDir, outputDir], {
-        cwd: projectRoot,
-        env,
-        encoding: 'utf8',
-      });
+        const prepareResult = spawnSync(
+          'bash',
+          ['scripts/prepare-release-assets.sh', bashArtifactsDir, bashOutputDir],
+          {
+            cwd: projectRoot,
+            env,
+            encoding: 'utf8',
+          }
+        );
 
-      expect(prepareResult.status).not.toBe(0);
-      expect(`${prepareResult.stdout}\n${prepareResult.stderr}`).toContain('Missing macOS zip artifact');
-    } finally {
-      rmSync(tempDir, { force: true, recursive: true });
-    }
-  });
+        expect(prepareResult.status).not.toBe(0);
+        expect(`${prepareResult.stdout}\n${prepareResult.stderr}`).toContain('Missing macOS zip artifact');
+      } finally {
+        rmSync(tempDir, { force: true, recursive: true });
+      }
+    },
+    60_000
+  );
 });

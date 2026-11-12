@@ -13,12 +13,17 @@ import type { GroupedHistoryResult, TimelineItem, TimelineSection } from '../typ
 import { getConversationSortOrder } from './sortOrderHelpers';
 
 export const isConversationPinned = (conversation: TChatConversation): boolean => {
+  const canonical = conversation as TChatConversation & { pinned?: boolean };
   const extra = conversation.extra as { pinned?: boolean } | undefined;
-  return Boolean(extra?.pinned);
+  return canonical.pinned === true || extra?.pinned === true;
 };
 
 export const getConversationPinnedAt = (conversation: TChatConversation): number => {
+  const canonical = conversation as TChatConversation & { pinned_at?: number };
   const extra = conversation.extra as { pinned_at?: number } | undefined;
+  if (typeof canonical.pinned_at === 'number') {
+    return canonical.pinned_at;
+  }
   if (typeof extra?.pinned_at === 'number') {
     return extra.pinned_at;
   }
@@ -94,12 +99,20 @@ const isTeamConversation = (conversation: TChatConversation): boolean => {
   return Boolean(extra?.team_id || extra?.teamId);
 };
 
+const isLegacyArchivedConversation = (conversation: TChatConversation): boolean => {
+  const extra = conversation.extra as { archived?: boolean } | undefined;
+  return extra?.archived === true;
+};
+
 export const buildGroupedHistory = (
   conversations: TChatConversation[],
   t: (key: string) => string
 ): GroupedHistoryResult => {
-  // Filter out team-owned conversations; they are only visible via the Teams panel
-  const visibleConversations = conversations.filter((conv) => !isTeamConversation(conv));
+  // The upstream active sidebar already excludes archived rows. Keep the legacy
+  // extra flag guard so stale fork-era rows cannot reappear in bookmarks.
+  const visibleConversations = conversations.filter(
+    (conversation) => !isTeamConversation(conversation) && !isLegacyArchivedConversation(conversation)
+  );
 
   const pinnedConversations = visibleConversations
     .filter((conversation) => isConversationPinned(conversation))
@@ -112,10 +125,8 @@ export const buildGroupedHistory = (
       return getConversationPinnedAt(b) - getConversationPinnedAt(a);
     });
 
-  const normalConversations = visibleConversations.filter((conversation) => !isConversationPinned(conversation));
-
   return {
     pinnedConversations,
-    timelineSections: groupConversationsByWorkspace(normalConversations, t),
+    timelineSections: groupConversationsByWorkspace(visibleConversations, t),
   };
 };

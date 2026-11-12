@@ -81,6 +81,8 @@ type GuidActionRowProps = {
 
   // Model selector node (rendered by parent for the desktop layout)
   modelSelectorNode: React.ReactNode;
+  /** Optional account picker sharing the desktop selection state. */
+  mobileAccountEntry?: MobileActionSheetEntry | null;
 
   // Flat model data for the mobile action sheet (desktop uses modelSelectorNode).
   isGeminiMode: boolean;
@@ -122,6 +124,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
   onFilesPicked,
   onFilesUploaded,
   modelSelectorNode,
+  mobileAccountEntry,
   isGeminiMode,
   modelList,
   current_model,
@@ -222,11 +225,12 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
       .catch((error) => console.error('Failed to open file dialog:', error));
   }, [onFilesPicked]);
 
-  // Build the mobile action sheet entries: model / thought level / permission
+  // Build the mobile action sheet entries: account / model / thought level / permission
   // (single-select), attach (action), skills / MCP (multi-select checkboxes).
   const sheetEntries = useMemo<MobileActionSheetEntry[]>(() => {
     if (!isMobile) return [];
     const entries: MobileActionSheetEntry[] = [];
+    if (mobileAccountEntry) entries.push(mobileAccountEntry);
 
     // Model — aionrs is provider-grouped, ACP is a flat cached list.
     let modelOptions: MobileActionSheetOption[] = [];
@@ -403,6 +407,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
     return entries;
   }, [
     isMobile,
+    mobileAccountEntry,
     isGeminiMode,
     modelList,
     current_model,

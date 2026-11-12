@@ -1,0 +1,81 @@
+package com.aionui.notifier.data
+
+import java.net.URI
+
+/** Versioned payload shared by the desktop sender and Android receiver. */
+data class PushNotice(
+    val sourceId: String,
+    val noticeId: String,
+    val title: String,
+    val body: String,
+    val createdAt: Long,
+    val conversationId: String = "",
+    val messageId: String = "",
+    val markerIndex: Int = 0,
+    val webUrl: String? = null,
+    val opened: Boolean = false,
+    val revision: Long = 0,
+    val updatedAt: Long = createdAt,
+    val silent: Boolean = false,
+    val origin: String = "aionui",
+    val kind: String = "choice",
+    val mapId: String = "",
+    val cardId: String = "",
+) {
+    val key: String
+        get() = if (origin == "mnp") "mnp:$sourceId:$noticeId" else "$sourceId:$noticeId"
+
+    companion object {
+        fun fromData(
+            data: Map<String, String>,
+            now: Long = System.currentTimeMillis(),
+        ): PushNotice? {
+            val legacy = data["v"] == "1" && data["type"] == "user_choice"
+            val mnp = data["v"] == "2" && data["type"] == "notice" && data["origin"] == "mnp"
+            if (!legacy && !mnp) return null
+            val kind = if (mnp) data["kind"] else "choice"
+            if (kind !in setOf("choice", "failure", "info")) return null
+            val sourceId = data["sourceId"]?.takeIf { it.length in 1..160 } ?: return null
+            if (!Regex("[A-Za-z0-9_-]+").matches(sourceId)) return null
+            val noticeId = data["noticeId"]?.takeIf { it.length in 1..512 } ?: return null
+            val timestamp =
+                data["createdAt"]?.toLongOrNull()?.takeIf { it in 1..now + 300_000 } ?: return null
+            val expiresAt = data["expiresAt"]?.toLongOrNull() ?: return null
+            if (expiresAt <= now || expiresAt < timestamp) return null
+            val markerIndex = data["markerIndex"]?.toIntOrNull() ?: 0
+            if (markerIndex < 0) return null
+            val revision = data["revision"]?.toLongOrNull() ?: 0
+            if (revision < 0) return null
+            return PushNotice(
+                sourceId,
+                noticeId,
+                data["title"].orEmpty().take(160),
+                data["body"].orEmpty().take(4096),
+                timestamp,
+                data["conversationId"].orEmpty().take(160),
+                data["messageId"].orEmpty().take(160),
+                markerIndex,
+                safeWebUrl(data["webUrl"]),
+                revision = revision,
+                updatedAt = data["updatedAt"]?.toLongOrNull() ?: timestamp,
+                silent = data["silent"] == "true",
+                origin = if (mnp) "mnp" else "aionui",
+                kind = kind!!,
+                mapId = data["mapId"].orEmpty().take(160),
+                cardId = data["cardId"].orEmpty().take(160),
+            )
+        }
+
+        fun safeWebUrl(value: String?): String? =
+            runCatching {
+                    val uri = URI(value ?: return null)
+                    value.takeIf {
+                        uri.scheme == "https" &&
+                            !uri.host.isNullOrBlank() &&
+                            uri.userInfo == null &&
+                            value.length <= 2048
+                    }
+                }
+                .getOrNull()
+    }
+}

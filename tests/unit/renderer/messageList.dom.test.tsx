@@ -5,7 +5,7 @@
  */
 
 import React, { type PropsWithChildren } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageAcpToolCall, IMessageText, IMessageToolGroup, TMessage } from '@/common/chat/chatLib';
 import type { MessageFileChangesProps } from '@/renderer/pages/conversation/Messages/MessageFileChanges';
@@ -16,6 +16,8 @@ import {
   useUpdateMessageList,
 } from '@/renderer/pages/conversation/Messages/hooks';
 import MessageList from '@/renderer/pages/conversation/Messages/MessageList';
+import { useFillMessageViewport } from '@/renderer/pages/conversation/hooks/useFillMessageViewport';
+import { markRecoveredMessageList } from '@/renderer/pages/conversation/runtime/messageRecovery';
 
 const { parseDiffMock, useTeamPermissionMock } = vi.hoisted(() => ({
   parseDiffMock: vi.fn(),
@@ -73,8 +75,20 @@ vi.mock('@/renderer/pages/conversation/Messages/useAutoScroll', () => ({
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/components/MessageText', () => ({
-  default: ({ message, showCopyRow }: { message: IMessageText; showCopyRow?: boolean }) => (
-    <div data-testid={`msgtext-${message.id}`} data-copy-row={String(showCopyRow ?? true)}>
+  default: ({
+    message,
+    showCopyRow,
+    isStreaming,
+  }: {
+    message: IMessageText;
+    showCopyRow?: boolean;
+    isStreaming?: boolean;
+  }) => (
+    <div
+      data-testid={`msgtext-${message.id}`}
+      data-copy-row={String(showCopyRow ?? true)}
+      data-streaming={String(isStreaming)}
+    >
       {message.content.content}
     </div>
   ),
@@ -264,6 +278,29 @@ describe('MessageList', () => {
     useTeamPermissionMock.mockReturnValue(null);
   });
 
+  it.each(['text', 'thinking', 'tool'] as const)(
+    'keeps the %s component mounted when recovery assigns a saved message id',
+    (kind) => {
+      const live: TMessage =
+        kind === 'tool'
+          ? createAcpToolCall()
+          : kind === 'thinking'
+            ? { ...createTextMessage(), type: 'thinking', content: { content: 'thought', status: 'done' } }
+            : createTextMessage();
+      const testId = kind === 'tool' ? 'tool-summary' : `message-${kind}-left`;
+      render(
+        <Wrapper messages={[live]}>
+          <MessageList />
+          <ReplaceMessagesButton messages={markRecoveredMessageList([{ ...live, id: 'saved-row' }])} />
+        </Wrapper>
+      );
+      const row = screen.getByTestId(testId);
+      fireEvent.click(screen.getByText('replace messages'));
+      expect(screen.getByTestId(testId)).toBe(row);
+      expect(document.getElementById('message-saved-row')).toBeInTheDocument();
+    }
+  );
+
   it('never renders a plan as a stream row (it belongs to ConversationPlanBar)', () => {
     // A plan is a replaceable snapshot pinned above the send box, not a message.
     // Filtered rather than rendered as null: a null row still occupies a slot.
@@ -412,6 +449,25 @@ describe('MessageList', () => {
     expect(screen.getByTestId('msgtext-text-a').getAttribute('data-copy-row')).toBe('true');
     // The in-progress final turn withholds its row until streaming ends.
     expect(screen.getByTestId('msgtext-text-b').getAttribute('data-copy-row')).toBe('false');
+  });
+
+  it('finalizes marker parsing for completed messages while only the current turn stays provisional', () => {
+    mockIsProcessing = true;
+    const messages: IMessageText[] = [
+      { ...createTextMessage(), id: 'old', created_at: 1 },
+      { ...createTextMessage(), id: 'user', position: 'right', created_at: 2 },
+      { ...createTextMessage(), id: 'finished', status: 'finish', created_at: 3 },
+      { ...createTextMessage(), id: 'live', created_at: 4 },
+    ];
+    const { rerender } = render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+    expect(
+      ['old', 'user', 'finished', 'live'].map((id) => screen.getByTestId(`msgtext-${id}`).dataset.streaming)
+    ).toEqual(['false', 'false', 'false', 'true']);
+    mockIsProcessing = false;
+    rerender(<MessageList />);
+    expect(screen.getByTestId('msgtext-live')).toHaveAttribute('data-streaming', 'false');
   });
 
   it('renders the empty slot when there are no messages', () => {
@@ -656,5 +712,167 @@ describe('MessageList', () => {
     expect(screen.getByTestId('tool-summary')).toHaveTextContent(message.id);
     expect(screen.queryByTestId('file-changes')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tool-group')).not.toBeInTheDocument();
+  });
+});
+
+const nextAnimationFrame = (): Promise<void> =>
+  new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+
+const createViewportElements = (contentHeight: number, viewportHeight: number) => {
+  const scroller = {
+    clientHeight: viewportHeight,
+    scrollHeight: contentHeight,
+    scrollTop: 0,
+  };
+  const content = { scrollHeight: contentHeight };
+  return {
+    scroller,
+    content,
+    scrollerRef: { current: scroller as unknown as HTMLElement },
+    contentRef: { current: content as unknown as HTMLElement },
+  };
+};
+
+describe('useFillMessageViewport', () => {
+  it('keeps loading older cursors until collapsed messages fill the viewport', async () => {
+    const elements = createViewportElements(300, 600);
+    const loadPreviousPage = vi.fn().mockResolvedValue(true);
+
+    const { rerender } = renderHook(
+      ({ oldestCursor, renderedItemCount }) =>
+        useFillMessageViewport({
+          conversationId: 'conversation-1',
+          ...elements,
+          oldestCursor,
+          hasMoreBefore: true,
+          isLoadingBefore: false,
+          renderedItemCount,
+          loadPreviousPage,
+        }),
+      { initialProps: { oldestCursor: 'cursor-1', renderedItemCount: 5 } }
+    );
+    await waitFor(() => expect(loadPreviousPage).toHaveBeenCalledTimes(1));
+
+    rerender({ oldestCursor: 'cursor-2', renderedItemCount: 10 });
+    await waitFor(() => expect(loadPreviousPage).toHaveBeenCalledTimes(2));
+
+    elements.scroller.scrollHeight = 900;
+    elements.content.scrollHeight = 900;
+    rerender({ oldestCursor: 'cursor-3', renderedItemCount: 20 });
+    await act(async () => {
+      await nextAnimationFrame();
+      await nextAnimationFrame();
+    });
+
+    expect(loadPreviousPage).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the current messages in place after prepending an automatic page', async () => {
+    const elements = createViewportElements(300, 600);
+    let resolveLoad: ((loaded: boolean) => void) | undefined;
+    const loadPreviousPage = vi.fn(() => new Promise<boolean>((resolve) => (resolveLoad = resolve)));
+
+    renderHook(() =>
+      useFillMessageViewport({
+        conversationId: 'conversation-1',
+        ...elements,
+        oldestCursor: 'cursor-1',
+        hasMoreBefore: true,
+        isLoadingBefore: false,
+        renderedItemCount: 5,
+        loadPreviousPage,
+      })
+    );
+    await waitFor(() => expect(loadPreviousPage).toHaveBeenCalledTimes(1));
+
+    elements.scroller.scrollHeight = 750;
+    elements.content.scrollHeight = 750;
+    await act(async () => {
+      resolveLoad?.(true);
+      await nextAnimationFrame();
+    });
+
+    expect(elements.scroller.scrollTop).toBe(450);
+  });
+
+  it('does not repeatedly request the same cursor after a failed automatic load', async () => {
+    const elements = createViewportElements(300, 600);
+    const loadPreviousPage = vi.fn().mockResolvedValue(false);
+    const { rerender } = renderHook(
+      ({ renderedItemCount }) =>
+        useFillMessageViewport({
+          conversationId: 'conversation-1',
+          ...elements,
+          oldestCursor: 'cursor-1',
+          hasMoreBefore: true,
+          isLoadingBefore: false,
+          renderedItemCount,
+          loadPreviousPage,
+        }),
+      { initialProps: { renderedItemCount: 5 } }
+    );
+    await waitFor(() => expect(loadPreviousPage).toHaveBeenCalledTimes(1));
+
+    rerender({ renderedItemCount: 6 });
+    await act(async () => {
+      await nextAnimationFrame();
+      await nextAnimationFrame();
+    });
+
+    expect(loadPreviousPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not apply a stale prepend correction after a notification takes over scrolling', async () => {
+    const elements = createViewportElements(300, 600);
+    let locked = false;
+    let resolveLoad: ((loaded: boolean) => void) | undefined;
+    const loadPreviousPage = vi.fn(() => new Promise<boolean>((resolve) => (resolveLoad = resolve)));
+    renderHook(() =>
+      useFillMessageViewport({
+        conversationId: 'conversation-1',
+        ...elements,
+        oldestCursor: 'cursor-1',
+        hasMoreBefore: true,
+        isLoadingBefore: false,
+        renderedItemCount: 5,
+        loadPreviousPage,
+        isScrollLocked: () => locked,
+      })
+    );
+    await waitFor(() => expect(loadPreviousPage).toHaveBeenCalledTimes(1));
+
+    locked = true;
+    elements.scroller.scrollTop = 120;
+    elements.content.scrollHeight = 750;
+    await act(async () => {
+      resolveLoad?.(true);
+      await nextAnimationFrame();
+    });
+    expect(elements.scroller.scrollTop).toBe(120);
+  });
+
+  it('does not load automatically when the message list is already scrollable', async () => {
+    const elements = createViewportElements(900, 600);
+    const loadPreviousPage = vi.fn().mockResolvedValue(true);
+
+    renderHook(() =>
+      useFillMessageViewport({
+        conversationId: 'conversation-1',
+        ...elements,
+        oldestCursor: 'cursor-1',
+        hasMoreBefore: true,
+        isLoadingBefore: false,
+        renderedItemCount: 20,
+        loadPreviousPage,
+      })
+    );
+    await act(async () => {
+      await nextAnimationFrame();
+      await nextAnimationFrame();
+    });
+
+    expect(loadPreviousPage).not.toHaveBeenCalled();
   });
 });

@@ -23,6 +23,10 @@ vi.mock('@/renderer/components/layout/WindowControls', () => ({
 vi.mock('@/renderer/hooks/context/LayoutContext', () => ({
   useLayoutContext: () => ({ isMobile: false }),
 }));
+vi.mock('@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync', () => ({
+  getSnapshotConversationName: () => undefined,
+  useUnreadConversationFailures: () => ({ failures: new Map(), acknowledge: vi.fn() }),
+}));
 vi.mock('@/renderer/hooks/context/NavigationHistoryContext', () => ({
   useNavigationHistory: () => null,
 }));

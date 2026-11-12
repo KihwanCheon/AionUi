@@ -7,6 +7,7 @@
 import { ipcBridge } from '@/common';
 import { addRecentWorkspace, getRecentWorkspaces } from '@/renderer/components/workspace';
 import { AionInlineSearchInput } from '@/renderer/components/base';
+import { getParentAndCurrentDir } from '@/renderer/utils/workspace/projectPathLabel';
 import { Tooltip } from '@arco-design/web-react';
 import { Close, Down } from '@icon-park/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -155,7 +156,7 @@ const GuidWorkspaceFootnote: React.FC<GuidWorkspaceFootnoteProps> = ({
           </div>
 
           {filteredRecent.map((path) => {
-            const name = path.split(/[\\/]/).pop() || path;
+            const name = getParentAndCurrentDir(path);
             const isActive = path === workspaceDir;
             return (
               <div

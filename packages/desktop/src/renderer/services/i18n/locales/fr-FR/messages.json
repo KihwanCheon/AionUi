@@ -1,4 +1,10 @@
 {
+  "userQuestion": {
+    "fallback": "Votre confirmation est nécessaire. Veuillez consulter le contenu ci-dessus.",
+    "prose": "Réponse demandée",
+    "choice": "Réponse demandée · Choix",
+    "freeText": "Réponse demandée · Texte libre"
+  },
   "fileChanges": "Modifications de fichiers",
   "fileChangesCount": "{{count}} modification(s) de fichiers",
   "fileChangesCount_one": "{{count}} modification de fichiers",
@@ -7,6 +13,20 @@
   "confirm": "Confirmer",
   "canceledExecution": "Exécution annulée",
   "openLinkFailed": "Échec de l'ouverture du lien",
+  "mindnprogress": {
+    "openLinkedCard": "Ouvrir la carte MindNProgress liée",
+    "selectionFailed": "Impossible de sélectionner la carte MindNProgress liée.",
+    "titleSyncTooltip": "Synchroniser avec le titre MindNProgress : {{title}}",
+    "titleSyncSuccess": "Le titre de la conversation a été synchronisé avec MindNProgress.",
+    "titleSyncFailed": "Impossible de synchroniser le titre de la conversation avec MindNProgress.",
+    "roleCoordinator": "Coordination du groupe",
+    "roleRoot": "Parent",
+    "roleAuxiliary": "Auxiliaire",
+    "rolePrimaryTooltip": "Conversation principale de cette carte",
+    "roleAuxiliaryTooltip": "Conversation auxiliaire de cette carte",
+    "roleNoPrimaryTooltip": "Conversation auxiliaire de cette carte · Aucune principale attribuée",
+    "roleUnknownTooltip": "Rôle principal/auxiliaire non confirmé"
+  },
   "imageGenerationModelDetected": "Modèle d'image détecté, l'outil image a été automatiquement activé. Modèle par défaut : {{platform}}:{{model}}",
   "auto_handling_permissions": "Gestion automatique de la demande de permission : {{request}}",
   "copy": "Copier",
@@ -92,6 +112,7 @@
   "askDecline": "Ne pas répondre",
   "askAnswered": "Répondu",
   "askDeclined": "Ignoré",
+  "askClosed": "Cette question n’attend plus de réponse.",
   "askOther": "Autre",
   "askOtherPlaceholder": "Saisissez votre réponse",
   "requestDetails": "Détails de la demande :",

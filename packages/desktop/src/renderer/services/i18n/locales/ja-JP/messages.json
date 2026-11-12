@@ -1,4 +1,10 @@
 {
+  "userQuestion": {
+    "fallback": "確認が必要です。上の内容をご確認ください。",
+    "prose": "回答リクエスト",
+    "choice": "回答リクエスト · 選択式",
+    "freeText": "回答リクエスト · 自由入力"
+  },
   "fileChanges": "ファイル変更",
   "fileChangesCount": "{{count}} 件のファイル変更",
   "fileChangesCount_one": "{{count}} 件のファイル変更",
@@ -7,6 +13,20 @@
   "confirm": "確認",
   "canceledExecution": "実行がキャンセルされました",
   "openLinkFailed": "リンクを開けませんでした",
+  "mindnprogress": {
+    "openLinkedCard": "リンクされたMindNProgressカードを開く",
+    "selectionFailed": "リンクされたMindNProgressカードを選択できませんでした。",
+    "titleSyncTooltip": "MindNProgress のタイトルに同期：{{title}}",
+    "titleSyncSuccess": "会話タイトルを MindNProgress と同期しました。",
+    "titleSyncFailed": "会話タイトルを MindNProgress と同期できませんでした。",
+    "roleCoordinator": "グループ統括",
+    "roleRoot": "上位",
+    "roleAuxiliary": "補助",
+    "rolePrimaryTooltip": "このカードの担当会話",
+    "roleAuxiliaryTooltip": "このカードの補助会話",
+    "roleNoPrimaryTooltip": "このカードの補助会話 · 担当会話なし",
+    "roleUnknownTooltip": "担当・補助の情報未確認"
+  },
   "imageGenerationModelDetected": "画像モデルが検出されました。画像ツールが自動的に有効になりました。デフォルトモデル：{{platform}}:{{model}}",
   "auto_handling_permissions": "自動ハンドリング許可要求：{{request}}",
   "copy": "コピー",
@@ -92,6 +112,7 @@
   "askDecline": "回答しない",
   "askAnswered": "回答済み",
   "askDeclined": "スキップ済み",
+  "askClosed": "この質問は回答待ちではありません。",
   "askOther": "その他",
   "askOtherPlaceholder": "回答を入力",
   "requestDetails": "リクエスト内容:",

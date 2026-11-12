@@ -154,9 +154,19 @@ export type HttpRequestOptions = {
   silentStatuses?: number[];
   /** Extra request headers merged on top of the default `Content-Type`. */
   headers?: Record<string, string>;
+  /** Covers the complete request, including refresh and response body reads. */
+  timeoutMs?: number;
 };
 
-const SENSITIVE_LOG_KEY_PATTERN = /api[_-]?key|authorization|auth[_-]?token|access[_-]?token|refresh[_-]?token|secret/i;
+export class HttpRequestTimeoutError extends Error {
+  constructor() {
+    super('Backend request timed out');
+    this.name = 'HttpRequestTimeoutError';
+  }
+}
+
+const SENSITIVE_LOG_KEY_PATTERN =
+  /api[_-]?key|authorization|auth[_-]?token|access[_-]?token|refresh[_-]?token|csrf[_-]?token|secret|launch[_-]?id/i;
 
 function redactForLog(value: unknown, depth = 0): unknown {
   if (depth > 8 || value === null || typeof value !== 'object') {
@@ -207,13 +217,15 @@ function sendHttpRequest(
   method: string,
   path: string,
   headers: Record<string, string>,
-  body?: unknown
+  body?: unknown,
+  signal?: AbortSignal
 ): Promise<Response> {
   const url = `${getBaseUrl()}${path}`;
   return fetch(url, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    ...(signal ? { signal } : {}),
   });
 }
 
@@ -222,6 +234,30 @@ export async function httpRequest<T>(
   path: string,
   body?: unknown,
   options?: HttpRequestOptions
+): Promise<T> {
+  if (options?.timeoutMs === undefined) return performHttpRequest<T>(method, path, body, options);
+
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new HttpRequestTimeoutError());
+      controller.abort();
+    }, options.timeoutMs);
+  });
+  try {
+    return await Promise.race([performHttpRequest<T>(method, path, body, options, controller.signal), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function performHttpRequest<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  options?: HttpRequestOptions,
+  signal?: AbortSignal
 ): Promise<T> {
   const headers: Record<string, string> = {};
 
@@ -238,7 +274,7 @@ export async function httpRequest<T>(
     body !== undefined ? JSON.stringify(redactForLog(body)).slice(0, 500) : '(no body)'
   );
 
-  let response = await sendHttpRequest(method, path, headers, body);
+  let response = await sendHttpRequest(method, path, headers, body, signal);
 
   // Expired access cookie → 401. Attempt one silent session refresh, then replay
   // the original request — the WebUI half of the #4124 fix. refreshSession() is a
@@ -249,7 +285,7 @@ export async function httpRequest<T>(
     const refreshed = await refreshSession();
     if (refreshed) {
       console.debug(`[httpBridge] session refreshed, replaying ${method} ${path}`);
-      response = await sendHttpRequest(method, path, headers, body);
+      response = await sendHttpRequest(method, path, headers, body, signal);
     }
   }
 
@@ -365,13 +401,26 @@ export function httpPatch<Data, Params = undefined>(
 }
 
 export function httpDelete<Data, Params = undefined>(
-  path: string | ((params: Params) => string)
+  path: string | ((params: Params) => string),
+  options?: HttpRequestOptions & { missingResourceResult?: Data }
 ): ProviderLike<Data, Params> {
   return {
     provider: () => {},
     invoke: (async (params?: Params) => {
       const resolvedPath = typeof path === 'function' ? path(params!) : path;
-      return httpRequest<Data>('DELETE', resolvedPath);
+      try {
+        return await httpRequest<Data>('DELETE', resolvedPath, undefined, options);
+      } catch (error) {
+        if (options && 'missingResourceResult' in options) {
+          // Reconcile a lost response with a bounded read, never another DELETE.
+          try {
+            await httpRequest('GET', resolvedPath, undefined, { timeoutMs: 5000, silentStatuses: [404] });
+          } catch (lookupError) {
+            if (isBackendHttpError(lookupError) && lookupError.status === 404) return options.missingResourceResult;
+          }
+        }
+        throw error;
+      }
     }) as ProviderLike<Data, Params>['invoke'],
   };
 }

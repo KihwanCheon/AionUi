@@ -186,6 +186,42 @@ describe('apiModelMapper', () => {
 
       expect('model' in body).toBe(false);
     });
+
+    it('excludes bundled auto-inject skills from new conversations by default', () => {
+      const body = buildCreateConversationBody({
+        name: 'hello',
+        assistant: { id: 'bare:claude' },
+        extra: {},
+      });
+
+      expect(body.extra).toEqual({
+        exclude_auto_inject_skills: ['officecli', 'skill-creator', 'aionui-config', 'cron'],
+      });
+    });
+
+    it('preserves caller exclusions without duplicating the default exclusions', () => {
+      const body = buildCreateConversationBody({
+        name: 'hello',
+        assistant: { id: 'bare:claude' },
+        extra: {
+          workspace: '/tmp/project',
+          exclude_auto_inject_skills: ['cron', 'custom-auto-skill'],
+          exclude_builtin_skills: ['legacy-auto-skill'],
+        },
+      });
+
+      expect(body.extra).toEqual({
+        workspace: '/tmp/project',
+        exclude_auto_inject_skills: [
+          'officecli',
+          'skill-creator',
+          'aionui-config',
+          'cron',
+          'custom-auto-skill',
+          'legacy-auto-skill',
+        ],
+      });
+    });
   });
 
   describe('fromApiModel', () => {

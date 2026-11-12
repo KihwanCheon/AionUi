@@ -11,6 +11,7 @@
  */
 
 export type NotificationPermissionState = 'default' | 'granted' | 'denied';
+import { getTerminalErrorMessage, isTerminalErrorStreamMessage } from '@/common/chat/chatLib';
 
 export type NotificationGate = {
   isElectron: boolean;
@@ -47,7 +48,7 @@ export const truncateConversationName = (name: string, maxLength: number = CONVE
   return `${trimmed.slice(0, maxLength)}…`;
 };
 
-export type NotificationKind = 'confirmation' | 'turnCompleted';
+export type NotificationKind = 'confirmation' | 'turnCompleted' | 'turnFailed';
 
 export type NotificationPayload = {
   body: string;
@@ -70,7 +71,7 @@ export type BrowserNotificationDeps = {
    * so the turn-completed body can name the originating conversation; the
    * confirmation body ignores it.
    */
-  bodyFor: (kind: NotificationKind, conversationId?: string) => string;
+  bodyFor: (kind: NotificationKind, conversationId?: string, reason?: string) => string;
 };
 
 /**
@@ -86,6 +87,9 @@ export type StreamMessage = {
   /** Stable per-message id, used to dedup repeated confirmation frames
    *  (e.g. a reconnect replay re-delivering the same permission request). */
   msg_id?: string;
+  data?: unknown;
+  status?: string;
+  replace?: boolean;
 };
 
 // Stream `type` values that represent the agent blocking on the user: a tool
@@ -97,7 +101,8 @@ const CONFIRMATION_TYPES = new Set(['acp_permission', 'permission', 'ask']);
 export const createBrowserNotificationController = (deps: BrowserNotificationDeps) => {
   // Track the last turn we actually notified for, so repeated finish events
   // for the same turn don't fire duplicate notifications.
-  let lastNotifiedTurnId: string | null = null;
+  const notifiedTerminalKeys = new Set<string>();
+  const activeTurnIds = new Map<string, string>();
   // Confirmation frames we have already notified for (keyed by
   // conversation_id + msg_id), so a reconnect replay of the same request does
   // not fire a duplicate. Best-effort per controller lifetime, mirroring the
@@ -106,6 +111,10 @@ export const createBrowserNotificationController = (deps: BrowserNotificationDep
 
   const onStreamMessage = (message: StreamMessage): void => {
     if (!message?.type) return;
+
+    if (message.type === 'start' && message.conversation_id && message.turn_id) {
+      activeTurnIds.set(message.conversation_id, message.turn_id);
+    }
 
     if (CONFIRMATION_TYPES.has(message.type)) {
       const dedupKey = message.msg_id ? `${message.conversation_id ?? ''}:${message.msg_id}` : null;
@@ -120,14 +129,21 @@ export const createBrowserNotificationController = (deps: BrowserNotificationDep
       return;
     }
 
-    if (message.type === 'finish') {
-      if (message.turn_id && message.turn_id === lastNotifiedTurnId) return;
+    if (message.type === 'finish' || isTerminalErrorStreamMessage(message)) {
+      const activeTurn = message.conversation_id ? activeTurnIds.get(message.conversation_id) : undefined;
+      if (activeTurn && message.turn_id && activeTurn !== message.turn_id) return;
+      const key = message.turn_id ? `${message.conversation_id ?? ''}:${message.turn_id}` : undefined;
+      if (key && notifiedTerminalKeys.has(key)) return;
       if (!deps.shouldShow()) return;
-      lastNotifiedTurnId = message.turn_id ?? null;
+      if (key) notifiedTerminalKeys.add(key);
+      const isError = isTerminalErrorStreamMessage(message);
+      const reason = getTerminalErrorMessage(message.data)?.slice(0, 160);
       deps.show({
-        body: deps.bodyFor('turnCompleted', message.conversation_id),
+        body: isError
+          ? deps.bodyFor('turnFailed', message.conversation_id, reason)
+          : deps.bodyFor('turnCompleted', message.conversation_id),
         conversationId: message.conversation_id,
-        kind: 'turnCompleted',
+        kind: isError ? 'turnFailed' : 'turnCompleted',
       });
     }
   };

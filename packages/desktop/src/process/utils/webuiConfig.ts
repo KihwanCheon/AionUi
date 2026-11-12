@@ -11,6 +11,7 @@ import { networkInterfaces } from 'os';
 import { getSystemDir } from './initStorage';
 import { httpRequest } from '@/common/adapter/httpBridge';
 import { startWebHost, type WebHostHandle } from '@aionui/web-host';
+import { handleMobilePushWebRequest } from '@process/startup/bootstrap/mobile-push';
 import { getDataPath } from './utils';
 
 const WEBUI_CONFIG_FILE = 'webui.config.json';
@@ -127,11 +128,11 @@ export const saveUserWebUIConfig = async (config: WebUIUserConfig): Promise<void
 };
 
 // Keep aligned with renderer's WEBUI_DEFAULT_PORT (common/config/constants.ts):
-//   production -> 25808, dev -> 25809, multi-instance dev -> 25810
+//   production -> 25808, dev -> 7777, multi-instance dev -> 25810
 const DEFAULT_WEBUI_PORT = (() => {
   if (process.env.NODE_ENV === 'production') return 25808;
   if (process.env.AIONUI_MULTI_INSTANCE === '1') return 25810;
-  return 25809;
+  return 7777;
 })();
 
 export const resolveWebUIPort = (
@@ -233,6 +234,7 @@ export async function startDesktopWebUI(opts: { port?: number; allowRemote?: boo
   }
 
   const handle = await startWebHost({
+    requestHandler: handleMobilePushWebRequest,
     app: {
       version: app.getVersion(),
       isPackaged: app.isPackaged,
@@ -245,6 +247,9 @@ export async function startDesktopWebUI(opts: { port?: number; allowRemote?: boo
     },
     // After bundling, this file is out/main/index.js — renderer assets live at ../renderer.
     staticDir: path.join(__dirname, '../renderer'),
+    // electron-vite serves the renderer from memory in development, so out/renderer
+    // may not exist. Proxy WebUI browser assets to the active Vite server instead.
+    frontendUrl: !app.isPackaged ? process.env['ELECTRON_RENDERER_URL'] : undefined,
     port: preferredPort,
     allowRemote,
     // Must align with the desktop IPC path's backend dataDir (src/index.ts), otherwise

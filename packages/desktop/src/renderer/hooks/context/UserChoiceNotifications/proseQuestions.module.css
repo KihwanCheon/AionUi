@@ -1,0 +1,101 @@
+.question {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--warning);
+  border-radius: 8px;
+  background: var(--color-warning-light-1);
+}
+
+.question > .label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.noticeHeader {
+  display: flex;
+  min-height: 26px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0 0 8px;
+  color: var(--primary);
+}
+
+.question > .noticeHeader {
+  color: var(--warning);
+}
+
+.noticeTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.noticeStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.noticeStatus svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Explicit button styling also applies inside the Markdown shadow root. */
+.dismiss:global(.arco-btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-inline-start: auto;
+  padding: 2px 8px;
+  min-height: 26px;
+  height: auto;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.dismiss:global(.arco-btn):hover {
+  background: var(--color-fill-2);
+}
+
+.dismiss:global(.arco-btn):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.question:has(> .noticeHeader[data-choice-notice-state='dismissed']),
+.structuredQuestion:has(> .noticeHeader[data-choice-notice-state='dismissed']) {
+  border-color: var(--color-border-2);
+  background: var(--color-fill-1);
+}
+
+.noticeHeader[data-choice-notice-state='dismissed'],
+.noticeHeader[data-choice-notice-state='checking'] {
+  color: var(--text-secondary);
+}
+
+.question > p:nth-child(2) {
+  margin-top: 0;
+}
+
+.question > :last-child {
+  margin-bottom: 0;
+}
+
+.question[data-notification-highlight='true'] {
+  outline: 4px solid var(--warning);
+  outline-offset: 4px;
+  box-shadow: 0 0 0 8px var(--color-warning-light-2);
+}

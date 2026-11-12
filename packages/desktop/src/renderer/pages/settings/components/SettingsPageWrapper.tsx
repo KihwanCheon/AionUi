@@ -71,6 +71,12 @@ export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): 
       icon: <Computer theme='outline' size='16' />,
       path: 'appearance',
     },
+    mindnprogress: {
+      id: 'mindnprogress',
+      label: t('settings.mindnprogressRunner.navLabel'),
+      icon: <Communication theme='outline' size='16' />,
+      path: 'mindnprogress',
+    },
     webui: {
       id: 'webui',
       label: t('settings.webui'),
@@ -79,6 +85,12 @@ export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): 
     },
     pet: { id: 'pet', label: t('pet.desktopPet'), icon: <Cat theme='outline' size='16' />, path: 'pet' },
     system: { id: 'system', label: t('settings.system'), icon: <System theme='outline' size='16' />, path: 'system' },
+    database: {
+      id: 'database',
+      label: t('settings.databaseMaintenance.title'),
+      icon: <Inbox theme='outline' size='16' />,
+      path: 'database',
+    },
     archived: {
       id: 'archived',
       label: t('settings.archived.navLabel'),
@@ -88,7 +100,9 @@ export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): 
     about: { id: 'about', label: t('settings.about'), icon: <Info theme='outline' size='16' />, path: 'about' },
   };
 
-  return BUILTIN_TAB_IDS.map((id) => builtinMap[id]);
+  return BUILTIN_TAB_IDS.filter((id) => isDesktop || (id !== 'pet' && id !== 'mindnprogress' && id !== 'database')).map(
+    (id) => builtinMap[id]
+  );
 }
 
 const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, className, contentClassName }) => {

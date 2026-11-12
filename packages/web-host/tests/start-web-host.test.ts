@@ -24,13 +24,14 @@ describe('startWebHost', () => {
     }));
 
     // Mock static-server
+    const startStaticServer = vi.fn().mockResolvedValue({
+      port: 33000,
+      url: 'http://127.0.0.1:33000',
+      localUrl: 'http://127.0.0.1:33000',
+      stop: vi.fn().mockResolvedValue(undefined),
+    });
     vi.doMock('../src/static-server.js', () => ({
-      startStaticServer: vi.fn().mockResolvedValue({
-        port: 33000,
-        url: 'http://127.0.0.1:33000',
-        localUrl: 'http://127.0.0.1:33000',
-        stop: vi.fn().mockResolvedValue(undefined),
-      }),
+      startStaticServer,
     }));
 
     const { startWebHost } = await import('../src/index.js');
@@ -43,6 +44,7 @@ describe('startWebHost', () => {
         userDataPath: '/tmp/test-data',
       },
       staticDir: '/tmp/static',
+      frontendUrl: 'http://127.0.0.1:5300',
       backend: {
         kind: 'ownBackend',
         resolveBackend: () => '/bin/backend',
@@ -54,6 +56,7 @@ describe('startWebHost', () => {
     expect('initialPassword' in handle).toBe(false);
     expect(handle.port).toBe(33000);
     expect(handle.backendPort).toBe(55555);
+    expect(startStaticServer).toHaveBeenCalledWith(expect.objectContaining({ frontendUrl: 'http://127.0.0.1:5300' }));
 
     await handle.stop();
 

@@ -144,6 +144,11 @@ export type TConversationRuntimeSummary = {
   is_processing: boolean;
   pending_confirmations: number;
   turn_id: string | null;
+  /** Stop targets also include continuations that leave message admission open. */
+  can_stop?: boolean;
+  cancel_turn_id?: string | null;
+  runtime_instance_id?: string;
+  runtime_revision?: number;
   /** Whether a message sent right now reaches the agent without waiting for
    * the current turn to end. The ONLY capability bit the frontend may gate
    * mid-turn UI on. Optional/undefined is treated as false for older
@@ -226,12 +231,31 @@ export interface TokenUsageCost {
   currency: string;
 }
 
+export type ContextUsageFreshness = {
+  status: 'pending' | 'current' | 'unavailable';
+  turn_id: string;
+  updated_at: number | null;
+  status_changed_at: number;
+  reason?: string | null;
+};
+
+export type ContextCompaction = {
+  count: number;
+  history_complete: boolean;
+  last_compacted_at: number | null;
+  updated_at: number;
+};
+
 export interface TokenUsageData {
   total_tokens: number;
   /** Per-turn token counters from the agent's end-of-turn usage report */
   breakdown?: TokenUsageBreakdown;
   /** Cumulative session cost as reported by the agent */
   cost?: TokenUsageCost;
+  /** Confirmation of the reading for the current conversation turn. */
+  freshness?: ContextUsageFreshness;
+  /** Completed compactions, independent of context occupancy/freshness. */
+  compaction?: ContextCompaction;
 }
 
 export type TChatConversation =

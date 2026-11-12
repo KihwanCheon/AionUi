@@ -176,5 +176,15 @@
     "conversationNotFound": "会話が見つかりません",
     "scheduledTimePassed": "予定時刻が過ぎました",
     "conversationBusy": "会話がビジーです。{{count}} 回の試行後にスキップしました"
+  },
+  "backup": {
+    "backup": "バックアップ",
+    "restore": "復元",
+    "backupEmpty": "バックアップするスケジュールタスクがありません",
+    "backupSuccess": "{{count}} 件のスケジュールタスクをバックアップしました",
+    "backupFailed": "スケジュールタスクのバックアップに失敗しました",
+    "restoreSuccess": "復元完了：新規 {{imported}} 件、上書き {{updated}} 件、失敗 {{skipped}} 件",
+    "restoreInvalid": "有効なスケジュールタスクのバックアップファイルではありません",
+    "restoreFailed": "スケジュールタスクの復元に失敗しました"
   }
 }

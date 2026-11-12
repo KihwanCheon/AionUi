@@ -1,4 +1,10 @@
 {
+  "userQuestion": {
+    "fallback": "Se necesita tu confirmación. Revisa el contenido anterior.",
+    "prose": "Respuesta solicitada",
+    "choice": "Respuesta solicitada · Opciones",
+    "freeText": "Respuesta solicitada · Texto libre"
+  },
   "fileChanges": "Cambios en archivos",
   "fileChangesCount": "{{count}} cambios en archivos",
   "fileChangesCount_one": "{{count}} cambio en archivos",
@@ -7,6 +13,20 @@
   "confirm": "Confirmar",
   "canceledExecution": "Ejecución cancelada",
   "openLinkFailed": "Error al abrir el enlace",
+  "mindnprogress": {
+    "openLinkedCard": "Abrir tarjeta vinculada de MindNProgress",
+    "selectionFailed": "No se pudo seleccionar la tarjeta vinculada de MindNProgress.",
+    "titleSyncTooltip": "Sincronizar con el título de MindNProgress: {{title}}",
+    "titleSyncSuccess": "El título de la conversación se sincronizó con MindNProgress.",
+    "titleSyncFailed": "No se pudo sincronizar el título de la conversación con MindNProgress.",
+    "roleCoordinator": "Coordinación de grupo",
+    "roleRoot": "Superior",
+    "roleAuxiliary": "Auxiliar",
+    "rolePrimaryTooltip": "Conversación principal de esta tarjeta",
+    "roleAuxiliaryTooltip": "Conversación auxiliar de esta tarjeta",
+    "roleNoPrimaryTooltip": "Conversación auxiliar de esta tarjeta · Sin principal asignada",
+    "roleUnknownTooltip": "Rol principal/auxiliar sin confirmar"
+  },
   "imageGenerationModelDetected": "Modelo de imagen detectado, la herramienta de imagen se activó automáticamente. Modelo predeterminado: {{platform}}:{{model}}",
   "auto_handling_permissions": "Gestionando automáticamente solicitud de permiso: {{request}}",
   "copy": "Copiar",
@@ -92,6 +112,7 @@
   "askDecline": "No responder",
   "askAnswered": "Respondido",
   "askDeclined": "Omitido",
+  "askClosed": "Esta pregunta ya no está pendiente de respuesta.",
   "askOther": "Otro",
   "askOtherPlaceholder": "Escribe tu respuesta",
   "requestDetails": "Detalles de la solicitud:",

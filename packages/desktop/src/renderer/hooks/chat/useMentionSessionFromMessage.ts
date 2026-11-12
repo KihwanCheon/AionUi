@@ -17,7 +17,7 @@ import { useCrossSessionMessageEnabled } from './useCrossSessionMessageEnabled';
  * Mention a conversation the user clicked on an earlier message.
  *
  * Exists because a target that was hard to find once should not have to be found
- * again. The chips and the delivery badge carry the conversation ID, which also
+ * again. The sender-side recipient chips carry the conversation ID, which also
  * side-steps the ambiguity the picker cannot resolve for a user who has twenty
  * conversations sharing a name.
  *

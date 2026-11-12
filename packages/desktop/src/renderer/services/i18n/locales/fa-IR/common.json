@@ -202,5 +202,17 @@
   },
   "selectedCount": "{{count}} انتخاب‌شده",
   "selectedSkills": "مهارت‌های انتخاب‌شده",
-  "aiAssistant": "دستیار هوش مصنوعی"
+  "aiAssistant": "دستیار هوش مصنوعی",
+  "claudeUsage": {
+    "refreshDelayed": "تأخیر در به‌روزرسانی",
+    "title": "مصرف Claude",
+    "codexTitle": "مصرف Codex",
+    "session": "محدودیت ۵ ساعته",
+    "weekly": "هفتگی (همه مدل‌ها)",
+    "resets": "بازنشانی در {{time}}",
+    "reached": "به سقف مصرف رسیدید",
+    "ok": "در حد مجاز",
+    "approaching": "نزدیک به سقف",
+    "noData": "هنوز داده‌ای از مصرف وجود ندارد"
+  }
 }

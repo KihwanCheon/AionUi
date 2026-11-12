@@ -10,6 +10,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MarkdownView from '@/renderer/components/Markdown';
 
 const copyTextMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const linkMocks = vi.hoisted(() => ({
+  openBrowserTab: vi.fn(),
+  openExternalUrl: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('@/renderer/components/Markdown/ShadowView', () => ({
   __esModule: true,
@@ -31,7 +35,11 @@ vi.mock('@/renderer/utils/chat/latexDelimiters', () => ({
 }));
 
 vi.mock('@/renderer/utils/platform', () => ({
-  openExternalUrl: vi.fn(),
+  openExternalUrl: linkMocks.openExternalUrl,
+}));
+
+vi.mock('@/renderer/pages/conversation/Preview/context/PreviewContext', () => ({
+  useOptionalPreviewContext: () => ({ openBrowserTab: linkMocks.openBrowserTab }),
 }));
 
 vi.mock('@/renderer/utils/ui/clipboard', () => ({
@@ -68,6 +76,8 @@ vi.mock('react-i18next', () => ({
 describe('MarkdownView local file links', () => {
   beforeEach(() => {
     copyTextMock.mockClear();
+    linkMocks.openBrowserTab.mockClear();
+    linkMocks.openExternalUrl.mockClear();
   });
 
   it('renders local file links as app controls instead of browser anchors', () => {
@@ -187,6 +197,24 @@ describe('MarkdownView local file links', () => {
 
     const link = screen.getByRole('link', { name: 'docs' });
     expect(link).toHaveAttribute('href', 'https://aionui.com/docs');
+  });
+
+  it('opens an http link in the in-app browser on an ordinary click', () => {
+    render(<MarkdownView>{'[docs](https://aionui.com/docs)'}</MarkdownView>);
+
+    fireEvent.click(screen.getByRole('link', { name: 'docs' }));
+
+    expect(linkMocks.openBrowserTab).toHaveBeenCalledWith('https://aionui.com/docs');
+    expect(linkMocks.openExternalUrl).not.toHaveBeenCalled();
+  });
+
+  it('opens an http link in the external browser on a control-click', () => {
+    render(<MarkdownView>{'[docs](https://aionui.com/docs)'}</MarkdownView>);
+
+    fireEvent.click(screen.getByRole('link', { name: 'docs' }), { ctrlKey: true });
+
+    expect(linkMocks.openExternalUrl).toHaveBeenCalledWith('https://aionui.com/docs');
+    expect(linkMocks.openBrowserTab).not.toHaveBeenCalled();
   });
 
   it('keeps http hash links as browser anchors', () => {

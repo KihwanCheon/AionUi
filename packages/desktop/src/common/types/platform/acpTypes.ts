@@ -226,6 +226,19 @@ export type EnsureConversationRuntimeResponse = {
   runtime: TConversationRuntimeSummary;
 };
 
+export type ConversationRuntimeConfigSource = 'runtime' | 'snapshot' | 'unavailable';
+
+export type ConversationRuntimeConfigValue = {
+  value: string | null;
+  source: ConversationRuntimeConfigSource;
+};
+
+export type ConversationRuntimeConfigResponse = {
+  model: ConversationRuntimeConfigValue;
+  thought_level: ConversationRuntimeConfigValue;
+  has_active_runtime: boolean;
+};
+
 export type GetConfigOptionsResponse = {
   config_options: AcpConfigOptionDto[];
 };

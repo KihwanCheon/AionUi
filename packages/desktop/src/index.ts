@@ -24,21 +24,25 @@ import { initMainAdapterWithWindow } from './common/adapter/main';
 import { ipcBridge } from './common';
 import { initializeProcess } from './process';
 import { startBackendOrExit } from './process/startup/backendStartup';
+import { publishBackendDiscovery } from './process/startup/backendDiscovery';
 import { assertStartupArchitectureCompatible } from './process/startup/architectureCompatibility';
 import { classifyBackendStartupFailure } from './process/startup/backendStartupFailure';
 import { installQuitCleanup } from './process/startup/quitCleanup';
 import { shouldRegisterBackendStartup } from './process/startup/singleInstanceGating';
+import type { AionUiBootstrapContext, BootstrapProtocolEvent } from './process/startup/bootstrap/protocol';
 import { ProcessConfig } from './process/utils/initStorage';
 import type { BackendStartupFailureInfo } from './common/types/platform/electron';
 import { registerWindowMaximizeListeners } from '@process/bridge';
 import { BackendLifecycleManager } from '@aionui/web-host';
 import { resolveBinaryPath } from '@process/backend';
+import { createDatabaseMaintenance } from '@process/services/database/maintenance';
 import './process/bridge/feedbackBridge';
-import { wasLaunchedAtLogin } from '@process/bridge/applicationBridge';
+import { registerDatabaseMaintenanceBridge, wasLaunchedAtLogin } from '@process/bridge/applicationBridge';
 import { onLanguageChanged } from './process/bridge/systemSettingsBridge';
 import { setInitialLanguage } from '@process/services/i18n';
 import { setupApplicationMenu } from './process/utils/appMenu';
 import { startWebHost } from '@aionui/web-host';
+import { handleMobilePushWebRequest } from './process/startup/bootstrap/mobile-push';
 import { initializeZoomFactor, setupZoomForWindow } from './process/utils/zoom';
 import { hydrateWindowsProcessPath } from './process/startup/windowsPath';
 import { registerWindowsAppUserModelId } from './process/startup/windowsAppUserModelId';
@@ -49,12 +53,7 @@ import {
   loadSavedWindowBounds,
   resolveInitialBounds,
 } from './process/utils/windowBounds';
-import {
-  clearPendingDeepLinkUrl,
-  getPendingDeepLinkUrl,
-  handleDeepLinkUrl,
-  PROTOCOL_SCHEME,
-} from './process/utils/deepLink';
+import { handleDeepLinkUrl, PROTOCOL_SCHEME, registerDeepLinkReadyProvider } from './process/utils/deepLink';
 import {
   bindMainWindowReferences,
   showAndFocusMainWindow,
@@ -76,47 +75,26 @@ import {
   setIsQuitting,
 } from './process/utils/tray';
 import { readCloseToTraySetting } from './process/utils/closeToTraySetting';
+import { mindNProgressRunnerManager } from './process/startup/bootstrap/mindnprogressRunner';
 // @ts-expect-error - electron-squirrel-startup doesn't have types
 import electronSquirrelStartup from 'electron-squirrel-startup';
 
-// ============ Single Instance Lock ============
-// Acquire lock early so the second instance quits before doing unnecessary work.
-// When a second instance starts (e.g. from protocol URL), it sends its data
-// to the first instance via second-instance event, then quits.
+type BootstrapGlobal = typeof globalThis & {
+  __aionuiBootstrapContext?: AionUiBootstrapContext;
+};
+
+// The normal entry acquires the lock before loading this full application.
+// Keep a direct-entry fallback for diagnostics and older generated launchers.
+const bootstrapContext = (globalThis as BootstrapGlobal).__aionuiBootstrapContext;
 const isE2ETestMode = process.env.AIONUI_E2E_TEST === '1';
 const skipSingleInstanceLock = isE2ETestMode || process.env.AIONUI_MULTI_INSTANCE === '1';
 const deepLinkFromArgv = process.argv.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`));
-const gotTheLock = skipSingleInstanceLock ? true : app.requestSingleInstanceLock({ deepLinkUrl: deepLinkFromArgv });
+const gotTheLock =
+  bootstrapContext?.ownsSingleInstanceLock ??
+  (skipSingleInstanceLock ? true : app.requestSingleInstanceLock({ deepLinkUrl: deepLinkFromArgv }));
 if (!gotTheLock) {
   console.warn('[AionUi] Another instance is already running; current process will exit.');
-  app.quit();
-} else {
-  app.on('second-instance', (_event, argv, _workingDirectory, additionalData) => {
-    // Prefer additionalData (reliable on all platforms), fallback to argv scan
-    const deepLinkUrl =
-      (additionalData as { deepLinkUrl?: string })?.deepLinkUrl ||
-      argv.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`));
-    if (deepLinkUrl) {
-      handleDeepLinkUrl(deepLinkUrl);
-    }
-    // Focus existing window or recreate one if needed.
-    if (isWebUIMode || isResetPasswordMode) {
-      return;
-    }
-
-    // Skip window creation if app hasn't finished initializing
-    if (!appReadyDone) return;
-
-    if (app.isReady()) {
-      showOrCreateMainWindow({
-        mainWindow,
-        createWindow: () => {
-          console.log('[AionUi] second-instance received with no active main window, recreating main window');
-          createWindow();
-        },
-      });
-    }
-  });
+  app.exit(0);
 }
 
 // Align GUI-launched PATH with what local CLIs expect on each desktop OS.
@@ -200,6 +178,8 @@ const isRemoteMode = hasSwitch('remote');
 const isResetPasswordMode = hasCommand('--resetpass');
 const isVersionMode = hasCommand('--version') || hasCommand('-v');
 
+registerDeepLinkReadyProvider();
+
 // Flag to distinguish intentional quit from unexpected exit in WebUI mode
 let isExplicitQuit = false;
 
@@ -208,6 +188,7 @@ let isExplicitQuit = false;
 // causing the renderer to load and compete with initStorage on the serial configFile queue,
 // which blocks startup for 100-265 seconds.
 let appReadyDone = false;
+let pendingExternalWindowActivation = false;
 
 let mainWindow: BrowserWindow;
 const backendManager = new BackendLifecycleManager(
@@ -219,6 +200,26 @@ const backendManager = new BackendLifecycleManager(
   },
   resolveBinaryPath
 );
+const databaseMaintenance = createDatabaseMaintenance({
+  binary: resolveBinaryPath,
+  port: () => backendManager.port,
+  running: () => backendManager.status === 'running',
+  stop: () => backendManager.stop(),
+  restart: async () => {
+    const { getDataPath } = await import('./process/utils/utils');
+    const { getSystemDir } = await import('./process/utils/initStorage');
+    const sysDir = getSystemDir();
+    const port = await backendManager.start(
+      getDataPath(),
+      sysDir.logDir,
+      { cacheDir: sysDir.cacheDir, workDir: sysDir.workDir, logDir: sysDir.logDir },
+      { allowPendingOnHealthTimeout: false },
+      backendManager.port
+    );
+    markBackendReady(port, 'databaseMaintenance');
+  },
+});
+registerDatabaseMaintenanceBridge(databaseMaintenance);
 let disposeCronResumeListener: (() => void) | null = null;
 
 // Flag tracking whether the backend subprocess started successfully. Read by
@@ -365,6 +366,11 @@ function exposeBackendPort(backendPort: number): void {
   // ipcBridge.* invoke from the main process — the renderer side reads
   // window.__backendPort via preload, but main has no `window`.
   (globalThis as typeof globalThis & { __backendPort?: number }).__backendPort = backendPort;
+  try {
+    publishBackendDiscovery(backendPort);
+  } catch (error) {
+    console.warn('[AionUi] Failed to publish backend discovery data:', error);
+  }
 }
 
 function ensureAdminUserOnce(backendPort: number): Promise<void> {
@@ -382,9 +388,9 @@ function ensureAdminUserOnce(backendPort: number): Promise<void> {
 }
 
 function markBackendReady(backendPort: number, source: string): void {
+  exposeBackendPort(backendPort);
   if (backendStartedOk) return;
   console.log(`[AionUi] ${source} ready (port=${backendPort})`);
-  exposeBackendPort(backendPort);
   registerCronResumeBridge(backendPort);
   backendStartedOk = true;
   backendStartupFailed = false;
@@ -885,6 +891,13 @@ const handleAppReady = async (): Promise<void> => {
     if (backendStartedOk && bootBackendPort) {
       await ensureAdminUserOnce(bootBackendPort);
     }
+
+    if (backendStartedOk && bootBackendPort && !isWebUIMode && !isResetPasswordMode) {
+      await mindNProgressRunnerManager.initialize(bootBackendPort).catch((error) => {
+        console.error('[MindNProgress Runner] Failed to initialize sidecar:', error);
+      });
+      mark('mindNProgressRunner');
+    }
   }
 
   // One-shot backend migrations are deferred until after the renderer finishes
@@ -937,6 +950,7 @@ const handleAppReady = async (): Promise<void> => {
       const sysDirWebUI = getSystemDir();
       // M6: Switch to @aionui/web-host
       const handle = await startWebHost({
+        requestHandler: handleMobilePushWebRequest,
         app: {
           version: app.getVersion(),
           isPackaged: app.isPackaged,
@@ -948,6 +962,7 @@ const handleAppReady = async (): Promise<void> => {
           userDataPath: getDataPath(),
         },
         staticDir: path.join(__dirname, '../renderer'),
+        frontendUrl: !app.isPackaged ? process.env['ELECTRON_RENDERER_URL'] : undefined,
         port: resolvedPort,
         allowRemote,
         dataDir: getDataPath(),
@@ -1007,7 +1022,8 @@ const handleAppReady = async (): Promise<void> => {
       }
     }
 
-    const showMainWindowOnReady = !(wasLaunchedAtLogin() && getCloseToTrayEnabled());
+    const showMainWindowOnReady = pendingExternalWindowActivation || !(wasLaunchedAtLogin() && getCloseToTrayEnabled());
+    pendingExternalWindowActivation = false;
 
     createWindow({ showOnReady: showMainWindowOnReady });
     appReadyDone = true;
@@ -1054,17 +1070,46 @@ const handleAppReady = async (): Promise<void> => {
         console.error('[WebUI] Failed to auto-restore:', error);
       });
     }
-
-    // Flush pending deep-link URL (received before window was ready)
-    const pendingUrl = getPendingDeepLinkUrl();
-    if (pendingUrl) {
-      clearPendingDeepLinkUrl();
-      mainWindow.webContents.once('did-finish-load', () => {
-        handleDeepLinkUrl(pendingUrl);
-      });
-    }
   }
 };
+
+const requestExternalWindowActivation = (): void => {
+  if (isWebUIMode || isResetPasswordMode) return;
+  if (!appReadyDone) {
+    pendingExternalWindowActivation = true;
+    return;
+  }
+  if (!app.isReady()) return;
+
+  showOrCreateMainWindow({
+    mainWindow,
+    createWindow: () => {
+      console.log('[AionUi] external launch received with no active main window, recreating main window');
+      createWindow();
+    },
+  });
+};
+
+const handleBootstrapProtocolEvent = (event: BootstrapProtocolEvent): void => {
+  if (isWebUIMode || isResetPasswordMode) return;
+  if (event.deepLinkUrl) handleDeepLinkUrl(event.deepLinkUrl);
+  requestExternalWindowActivation();
+};
+
+if (bootstrapContext) {
+  bootstrapContext.attachProtocolHandler(handleBootstrapProtocolEvent);
+} else if (gotTheLock && !skipSingleInstanceLock) {
+  app.on('second-instance', (_event, argv, _workingDirectory, additionalData) => {
+    const additionalDeepLink = (additionalData as { deepLinkUrl?: unknown })?.deepLinkUrl;
+    handleBootstrapProtocolEvent({
+      kind: 'second-instance',
+      deepLinkUrl:
+        typeof additionalDeepLink === 'string'
+          ? additionalDeepLink
+          : argv.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`)),
+    });
+  });
+}
 
 // ============ Protocol Registration ============
 // Register aionui:// as the default protocol client
@@ -1075,16 +1120,13 @@ if (process.defaultApp) {
   app.setAsDefaultProtocolClient(PROTOCOL_SCHEME);
 }
 
-// macOS: handle aionui:// URLs via the open-url event
-app.on('open-url', (event, url) => {
-  event.preventDefault();
-  handleDeepLinkUrl(url);
-  if (isWebUIMode || isResetPasswordMode || !app.isReady()) {
-    return;
-  }
-  // Focus existing window so user sees the result
-  showOrCreateMainWindow({ mainWindow, createWindow });
-});
+if (!bootstrapContext) {
+  // Direct-entry fallback; the normal bootstrap registers this before app.ready.
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    handleBootstrapProtocolEvent({ kind: 'open-url', deepLinkUrl: url });
+  });
+}
 
 // 监听 GPU 子进程崩溃，连续多次后下次启动自动关闭硬件加速（参见 ELECTRON-9A / ELECTRON-9D）。
 installGpuCrashHandler();
@@ -1139,7 +1181,15 @@ app.on('activate', () => {
 });
 
 installQuitCleanup({
-  onBeforeQuit: (handler) => app.on('before-quit', (event) => handler(event)),
+  onBeforeQuit: (handler) =>
+    app.on('before-quit', (event) => {
+      if (databaseMaintenance.getStatus().busy) {
+        event.preventDefault();
+        console.info('[DatabaseMaintenance] Waiting for maintenance before allowing exit');
+        return;
+      }
+      handler(event);
+    }),
   quitApp: () => app.quit(),
   setIsQuitting,
   markExplicitQuit: () => {
@@ -1150,6 +1200,7 @@ installQuitCleanup({
     disposeCronResumeListener?.();
     disposeCronResumeListener = null;
   },
+  stopSidecars: () => mindNProgressRunnerManager.shutdown(),
   // Stop aioncore subprocess — backend shutdown kills all agent children
   // transitively (no separate frontend workerTaskManager remains).
   stopBackend: () => backendManager.stop(),

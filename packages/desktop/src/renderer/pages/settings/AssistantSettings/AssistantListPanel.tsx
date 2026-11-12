@@ -13,6 +13,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { Button, Dropdown, Menu, Switch, Tag, Tooltip } from '@arco-design/web-react';
 import { Attention, Drag, MoreOne } from '@icon-park/react';
+import AssistantBackupActions from './home/AssistantBackupActions';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -363,7 +364,7 @@ const AssistantListPanel: React.FC<AssistantListPanelProps> = ({
                 })}
               </p>
             </div>
-            <div className={`${isMobile ? 'w-full' : 'flex-shrink-0'}`}>
+            <div className={`flex flex-col items-stretch gap-8px ${isMobile ? 'w-full' : 'flex-shrink-0'}`}>
               <TalkToButlerButton
                 className={isMobile ? '!w-full' : undefined}
                 label={t('settings.createAssistant', { defaultValue: 'Create Assistant' })}
@@ -375,6 +376,7 @@ const AssistantListPanel: React.FC<AssistantListPanelProps> = ({
                 })}
                 data-testid='btn-create-assistant'
               />
+              <AssistantBackupActions compact={isMobile} />
             </div>
           </div>
         </div>

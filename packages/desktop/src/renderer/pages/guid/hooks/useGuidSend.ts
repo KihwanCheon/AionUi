@@ -16,10 +16,13 @@ import { type TFunction } from 'i18next';
 import type { NavigateFunction } from 'react-router-dom';
 import { mutate as swrMutate } from 'swr';
 import { getConversationCreateErrorMessage } from '@/renderer/pages/conversation/utils/conversationCreateError';
+import { claudeAccountExtra } from '@/renderer/pages/conversation/platforms/acp/claudeAccounts/useClaudeAccounts';
 
 export type GuidSendDeps = {
   // Input state
   input: string;
+  conversationName?: string;
+  onConversationCreated?: (conversationId: string) => Promise<void> | void;
   setInput: React.Dispatch<React.SetStateAction<string>>;
   files: ChatFileRef[];
   setFiles: React.Dispatch<React.SetStateAction<ChatFileRef[]>>;
@@ -35,6 +38,8 @@ export type GuidSendDeps = {
   selectedAcpModel: string | null;
   selectedThoughtLevelValue?: string;
   current_model: TProviderWithModel | undefined;
+  /** Fork: non-default Claude account; `null`/absent keeps the single-account payload. */
+  claudeAccountId?: string | null;
 
   guidDisabledBuiltinSkills: string[] | undefined;
   guidEnabledSkills: string[] | undefined;
@@ -63,12 +68,43 @@ export type GuidSendResult = {
   isButtonDisabled: boolean;
 };
 
+async function notifyConversationCreated(
+  callback: GuidSendDeps['onConversationCreated'],
+  conversationId: string
+): Promise<void> {
+  if (!callback) return;
+  try {
+    await callback(conversationId);
+  } catch (error) {
+    console.warn('[GuidPage] Conversation-created callback failed', error);
+  }
+}
+
+async function protectExternalConversationTitle(
+  conversationId: string,
+  conversationName: string | undefined,
+  failureMessage: string
+): Promise<void> {
+  const title = conversationName?.trim();
+  if (!title) return;
+
+  const protectedTitle = await ipcBridge.conversation.update.invoke({
+    id: conversationId,
+    updates: { name: title, name_source: 'user' },
+  });
+  if (!protectedTitle) {
+    throw new Error(failureMessage);
+  }
+}
+
 /**
  * Hook that manages the send logic for ACP and Aion CLI conversations.
  */
 export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
   const {
     input,
+    conversationName,
+    onConversationCreated,
     setInput,
     files,
     setFiles,
@@ -82,6 +118,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     selectedAcpModel,
     selectedThoughtLevelValue,
     current_model,
+    claudeAccountId,
     guidDisabledBuiltinSkills,
     guidEnabledSkills,
     assistantDefaultSkillIds,
@@ -109,6 +146,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
 
     const assistantConversationId = selectedAssistantId;
     const assistantBackend = selectedAssistantBackend;
+    const resolvedConversationName = conversationName?.trim() || input;
     const enabled_skills_to_send = guidEnabledSkills ?? assistantDefaultSkillIds;
     const excludeBuiltinSkills = guidDisabledBuiltinSkills ?? assistantDefaultDisabledBuiltinSkillIds;
     const selectedAllMcpServerIds = selectedMcpServerIds ?? [];
@@ -177,7 +215,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       }
       try {
         const conversation = await ipcBridge.conversation.create.invoke({
-          name: input,
+          name: resolvedConversationName,
           model: current_model,
           assistant: {
             id: assistantConversationId,
@@ -197,6 +235,9 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
           Message.error(t('conversation.createFailed'));
           return;
         }
+
+        await protectExternalConversationTitle(conversation.id, conversationName, t('conversation.createFailed'));
+        await notifyConversationCreated(onConversationCreated, conversation.id);
 
         if (isCustomWorkspace) {
           updateWorkspaceTime(finalWorkspace);
@@ -232,7 +273,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
 
     try {
       const conversation = await ipcBridge.conversation.create.invoke({
-        name: input,
+        name: resolvedConversationName,
         assistant: {
           id: assistantConversationId,
           locale: localeKey,
@@ -245,12 +286,16 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
           selected_mcp_server_ids: selectedUserMcpServerIdsToSend,
           selected_session_mcp_servers:
             selectedMcpServerIds !== undefined ? selectedSessionMcpServers : selectedSessionMcpServersToSend,
+          ...claudeAccountExtra(claudeAccountId),
         },
       });
       if (!conversation || !conversation.id) {
         console.error('Failed to create ACP conversation - conversation object is null or missing id');
         return;
       }
+
+      await protectExternalConversationTitle(conversation.id, conversationName, t('conversation.createFailed'));
+      await notifyConversationCreated(onConversationCreated, conversation.id);
 
       if (isCustomWorkspace) {
         updateWorkspaceTime(finalWorkspace);
@@ -283,6 +328,8 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     }
   }, [
     input,
+    conversationName,
+    onConversationCreated,
     files,
     dir,
     selectedAssistantId,
@@ -291,6 +338,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     selectedAcpModel,
     selectedThoughtLevelValue,
     current_model,
+    claudeAccountId,
     guidDisabledBuiltinSkills,
     guidEnabledSkills,
     assistantDefaultSkillIds,

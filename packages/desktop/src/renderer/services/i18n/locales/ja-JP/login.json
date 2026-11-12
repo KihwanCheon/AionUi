@@ -1,7 +1,7 @@
 {
-  "pageTitle": "AionUi - ログイン",
-  "brand": "AionUi",
-  "subtitle": "おかえりなさい。アカウントにサインインしてください",
+  "pageTitle": "ロイヤルホールデム アドミン - ログイン",
+  "brand": "ロイヤルホールデム アドミン",
+  "subtitle": "ベッティングオッズを編集するにはログインしてください",
   "username": "ユーザー名",
   "usernamePlaceholder": "ユーザー名を入力してください",
   "password": "パスワード",
@@ -13,8 +13,8 @@
   "showPassword": "パスワードを表示",
   "hidePassword": "パスワードを隠す",
   "languageToggle": "言語を切り替える",
-  "footerPrimary": "コマンドラインAIをモダンに変革",
-  "footerSecondary": "効率的でエレガント",
+  "footerPrimary": "アカウントをリクエストしてください",
+  "footerSecondary": "(担当者：YongMin.Kim)",
   "errors": {
     "empty": "ユーザー名とパスワードを入力してください",
     "invalidCredentials": "ユーザー名またはパスワードが正しくありません",

@@ -1,4 +1,13 @@
 {
+  "externalLaunch": {
+    "loading": "Die angeforderte Unterhaltung wird vorbereitet...",
+    "errorTitle": "Die Unterhaltung kann nicht gestartet werden",
+    "notFoundOrExpired": "Diese Startanfrage ist ungültig, abgelaufen oder bereits abgeschlossen.",
+    "alreadyUsed": "Diese Startanfrage wurde bereits verwendet.",
+    "unavailableOptions": "Der angeforderte Agent, das Modell, die Skills oder MCP-Tools sind nicht verfügbar.",
+    "loadFailed": "Die Startanfrage konnte nicht geladen werden. Bitte versuchen Sie es erneut.",
+    "callbackPending": "Die Unterhaltung wurde erstellt, aber die verknüpfte App konnte nicht benachrichtigt werden. Möglicherweise ist ein erneuter Versuch nötig."
+  },
   "agentFallbackNotice": "{{original}} ist nicht verfügbar, stattdessen wird {{fallback}} verwendet.",
   "noAgentAvailable": "Kein Hauptagent verfügbar. Bitte bei Google anmelden oder Claude/Codex CLI installieren. Zu den Einstellungen?",
   "noAgentAvailableShort": "Kein Hauptagent verfügbar. Zum Konfigurieren klicken.",
@@ -31,5 +40,8 @@
     "statusTesting": "Latenz wird gemessen...",
     "statusUnreachable": "Nicht erreichbar",
     "statusAvailable": "Verfügbar"
+  },
+  "claudeAccount": {
+    "label": "Claude-Konto"
   }
 }

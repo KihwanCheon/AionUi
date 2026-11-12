@@ -4,6 +4,7 @@ import AppLoader from '@renderer/components/layout/AppLoader';
 import DocumentTitle from '@renderer/components/layout/DocumentTitle';
 import { useCrossSessionRateLimitNotice } from '@/renderer/hooks/system/useCrossSessionRateLimitNotice';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
+import { buildLoginPath, resolveLoginReturnTo } from '@renderer/utils/navigation';
 import { TEAM_MODE_ENABLED } from '@/common/config/constants';
 const Conversation = React.lazy(() => import('@renderer/pages/conversation'));
 const Guid = React.lazy(() => import('@renderer/pages/guid'));
@@ -16,7 +17,13 @@ const ToolsSettings = React.lazy(() => import('@renderer/pages/settings/ToolsSet
 const AppearanceSettings = React.lazy(() => import('@renderer/pages/settings/AppearanceSettings'));
 const ModeSettings = React.lazy(() => import('@renderer/pages/settings/ModeSettings'));
 const SystemSettings = React.lazy(() => import('@renderer/pages/settings/SystemSettings'));
-const WebuiSettings = React.lazy(() => import('@renderer/pages/settings/WebuiSettings'));
+const DatabaseMaintenance = React.lazy(
+  () => import('@renderer/pages/settings/IntegrationsSettings/DatabaseMaintenance')
+);
+const WebuiSettings = React.lazy(() => import('@renderer/pages/settings/IntegrationsSettings/WebuiSettings'));
+const MindNProgressRunnerSettings = React.lazy(
+  () => import('@renderer/pages/settings/IntegrationsSettings/MindNProgressRunnerSettings')
+);
 const PetSettings = React.lazy(() => import('@renderer/pages/settings/PetSettings'));
 const ArchivedSettings = React.lazy(() => import('@renderer/pages/settings/ArchivedSettings'));
 const ExtensionSettingsPage = React.lazy(() => import('@renderer/pages/settings/ExtensionSettingsPage'));
@@ -44,6 +51,7 @@ const CapabilitiesRedirect: React.FC = () => {
 
 const ProtectedLayout: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
   const { status, user } = useAuth();
+  const location = useLocation();
   // Mounted once for every authenticated route: the loop warning has to reach
   // the user even when they are looking at a THIRD conversation, which is the
   // whole reason it is a broadcast rather than an in-conversation banner.
@@ -54,10 +62,15 @@ const ProtectedLayout: React.FC<{ layout: React.ReactElement }> = ({ layout }) =
   }
 
   if (status !== 'authenticated') {
-    return <Navigate to='/login' replace />;
+    return <Navigate to={buildLoginPath(location.pathname, location.search)} replace />;
   }
 
   return React.cloneElement(layout);
+};
+
+const LoginRedirect: React.FC = () => {
+  const { search } = useLocation();
+  return <Navigate to={resolveLoginReturnTo(search)} replace />;
 };
 
 const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
@@ -67,10 +80,7 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
     <HashRouter>
       <DocumentTitle />
       <Routes>
-        <Route
-          path='/login'
-          element={status === 'authenticated' ? <Navigate to='/guid' replace /> : withRouteFallback(LoginPage)}
-        />
+        <Route path='/login' element={status === 'authenticated' ? <LoginRedirect /> : withRouteFallback(LoginPage)} />
         <Route element={<ProtectedLayout layout={layout} />}>
           <Route index element={<Navigate to='/guid' replace />} />
           <Route path='/guid' element={withRouteFallback(Guid)} />
@@ -101,9 +111,11 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/settings/appearance' element={withRouteFallback(AppearanceSettings)} />
           <Route path='/settings/display' element={<Navigate to='/settings/appearance' replace />} />
           <Route path='/settings/webui' element={withRouteFallback(WebuiSettings)} />
+          <Route path='/settings/mindnprogress' element={withRouteFallback(MindNProgressRunnerSettings)} />
           <Route path='/settings/pet' element={withRouteFallback(PetSettings)} />
           <Route path='/settings/archived' element={withRouteFallback(ArchivedSettings)} />
           <Route path='/settings/system' element={withRouteFallback(SystemSettings)} />
+          <Route path='/settings/database' element={withRouteFallback(DatabaseMaintenance)} />
           <Route path='/settings/about' element={withRouteFallback(SystemSettings)} />
           <Route path='/settings/ext/:tabId' element={withRouteFallback(ExtensionSettingsPage)} />
           <Route path='/settings' element={<Navigate to='/settings/agent' replace />} />

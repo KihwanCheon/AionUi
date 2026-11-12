@@ -24,6 +24,8 @@ interface FileAttachButtonProps {
   onLocalFilesAdded?: (files: FileMetadata[]) => void;
   loadedSkills?: string[];
   loadedMcpStatuses?: IConversationMcpStatus[];
+  mcpPanelContent?: React.ReactNode;
+  mcpServerCount?: number;
 }
 
 const MenuItem: React.FC<{
@@ -77,6 +79,8 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
   onLocalFilesAdded,
   loadedSkills,
   loadedMcpStatuses,
+  mcpPanelContent,
+  mcpServerCount,
 }) => {
   const conversationContext = useConversationContextSafe();
   const { t } = useTranslation();
@@ -129,7 +133,7 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
 
   const isDesktop = isElectronDesktop();
   const hasSkills = skillNames.length > 0;
-  const hasMcpServers = mcpStatuses.length > 0;
+  const hasMcpServers = mcpStatuses.length > 0 || mcpPanelContent !== undefined;
   const plusIcon = <Plus theme='outline' size='14' strokeWidth={2} fill={iconColors.primary} />;
 
   if (isDesktop && !hasSkills && !hasMcpServers) {
@@ -168,7 +172,7 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
     </div>
   );
 
-  const mcpPanel = (
+  const defaultMcpPanel = (
     <div
       style={{
         ...cardStyle,
@@ -220,6 +224,7 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
       </div>
     </div>
   );
+  const mcpPanel = mcpPanelContent ?? defaultMcpPanel;
 
   const menu = (
     <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
@@ -240,7 +245,7 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
                 <div>
                   <MenuItem
                     icon={<Shield theme='outline' size={15} strokeWidth={2.5} />}
-                    label={`${t('conversation.mcp.selected', { defaultValue: 'Selected MCP' })} · ${mcpStatuses.length}`}
+                    label={`${t('conversation.mcp.selected', { defaultValue: 'Selected MCP' })} · ${mcpServerCount ?? mcpStatuses.length}`}
                     suffix={
                       <Right theme='outline' size={12} strokeWidth={3} style={{ color: 'var(--text-disabled)' }} />
                     }

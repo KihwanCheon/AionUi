@@ -1,4 +1,12 @@
 // Core types for @aionui/web-host (M3 interface contract, locked for M4-M8)
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+/** Optional native-host extension; the host remains responsible for its own authorization. */
+export type WebHostRequestHandler = (
+  request: IncomingMessage,
+  response: ServerResponse,
+  context: { backendPort: number; clientAddress: string | null }
+) => Promise<boolean>;
 
 /**
  * App metadata injected by host environment (Electron or Node)
@@ -31,8 +39,11 @@ export type BackendSystemDirs = {
  * Options for starting WebHost
  */
 export type WebHostOptions = {
+  requestHandler?: WebHostRequestHandler;
   app: AppMetadata;
   staticDir: string;
+  /** Development renderer URL. When set, browser assets are proxied here instead of read from staticDir. */
+  frontendUrl?: string;
   port?: number;
   allowRemote?: boolean;
   dataDir?: string;

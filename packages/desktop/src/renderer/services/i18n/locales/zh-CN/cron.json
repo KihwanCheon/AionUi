@@ -164,5 +164,15 @@
     "conversationNotFound": "未找到会话",
     "scheduledTimePassed": "定时时间已过",
     "conversationBusy": "会话繁忙，在 {{count}} 次尝试后跳过"
+  },
+  "backup": {
+    "backup": "备份",
+    "restore": "恢复",
+    "backupEmpty": "没有可备份的定时任务",
+    "backupSuccess": "已备份 {{count}} 个定时任务",
+    "backupFailed": "定时任务备份失败",
+    "restoreSuccess": "恢复完成：新增 {{imported}} 个，覆盖 {{updated}} 个，失败 {{skipped}} 个",
+    "restoreInvalid": "不是有效的定时任务备份文件",
+    "restoreFailed": "定时任务恢复失败"
   }
 }

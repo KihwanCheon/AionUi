@@ -7,7 +7,14 @@
 import type { IConversationArtifact } from '@/common/adapter/ipcBridge';
 import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup, TMessage } from '@/common/chat/chatLib';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
+import { useFillMessageViewport } from '@/renderer/pages/conversation/hooks/useFillMessageViewport';
+import {
+  consumeMessageTargetNavigation,
+  useMessageTargetScroll,
+} from '@/renderer/pages/conversation/hooks/useMessageTargetScroll';
 import { useConversationRuntimeView } from '@/renderer/pages/conversation/runtime/useConversationRuntimeView';
+import { MessageRecoveryBoundary } from '@/renderer/pages/conversation/runtime/MessageRecoveryBoundary';
+import { getMessageRenderKey } from '@/renderer/pages/conversation/runtime/messageRecovery';
 import { getChatSurfaceWidthClass } from '@/renderer/pages/conversation/utils/chatSurfaceWidth';
 import { iconColors } from '@/renderer/styles/colors';
 import { CHAT_MESSAGE_JUMP_EVENT, type ChatMessageJumpDetail } from '@/renderer/utils/chat/chatMinimapEvents';
@@ -52,10 +59,18 @@ import SelectionReplyButton from './components/SelectionReplyButton';
 
 type IMessageVO =
   | TMessage
-  | { type: 'file_summary'; id: string; diffs: FileChangeInfo[]; sourceMessageIds: string[]; created_at: number }
+  | {
+      type: 'file_summary';
+      id: string;
+      renderKey: string;
+      diffs: FileChangeInfo[];
+      sourceMessageIds: string[];
+      created_at: number;
+    }
   | {
       type: 'tool_summary';
       id: string;
+      renderKey: string;
       messages: Array<IMessageToolGroup | IMessageAcpToolCall | IMessageToolCall>;
       sourceMessageIds: string[];
       created_at: number;
@@ -107,6 +122,7 @@ const isWriteFileResult = (value: unknown): value is WriteFileResult =>
 
 type ConversationLocationState = {
   targetMessageId?: string;
+  targetMarkerIndex?: number;
   fromConversationSearch?: boolean;
 };
 
@@ -119,6 +135,10 @@ const getProcessedItemSourceMessageIds = (item: IProcessedItem): string[] => {
   }
   if ('type' in item && item.type === 'file_summary') {
     return item.sourceMessageIds;
+  }
+  // Live text rows have a renderer id; notices retain their persisted stream id.
+  if ('type' in item && (item.type === 'ask' || item.type === 'text') && item.msg_id) {
+    return [item.id, item.msg_id];
   }
   return 'id' in item ? [item.id] : [];
 };
@@ -133,6 +153,12 @@ const matchesTargetMessage = (item: IProcessedItem, targetMessageId?: string): b
 const getProcessedItemAnchorId = (item: IProcessedItem): string => {
   const sourceIds = getProcessedItemSourceMessageIds(item);
   return sourceIds[0] || ('id' in item ? item.id : uuid());
+};
+
+const getProcessedItemRenderKey = (item: IProcessedItem): string => {
+  if ('renderKey' in item) return item.renderKey;
+  if (item.type === 'artifact') return `artifact:${item.id}`;
+  return getMessageRenderKey(item);
 };
 
 const getProcessedItemCreatedAt = (item: IProcessedItem): number => {
@@ -225,6 +251,7 @@ const MessageItem: React.FC<{
   rowWidthClass: string;
   showCopyRow?: boolean;
   isLastMessage?: boolean;
+  isStreaming?: boolean;
   hasForkAnchor?: boolean;
   turnTexts?: string[];
 }> = React.memo(
@@ -240,6 +267,7 @@ const MessageItem: React.FC<{
         data-testid={`message-${message.type}-${message.position}`}
         data-message-type={message.type}
         data-message-position={message.position}
+        data-message-render-key={getMessageRenderKey(message)}
         className={classNames(
           `${rowWidthClass} min-w-0 flex items-start message-item [&>div]:max-w-full px-8px m-t-10px`,
           message.type,
@@ -259,6 +287,7 @@ const MessageItem: React.FC<{
       message,
       showCopyRow,
       isLastMessage,
+      isStreaming,
       hasForkAnchor,
       turnTexts,
     }: {
@@ -267,6 +296,7 @@ const MessageItem: React.FC<{
       rowWidthClass: string;
       showCopyRow?: boolean;
       isLastMessage?: boolean;
+      isStreaming?: boolean;
       hasForkAnchor?: boolean;
       turnTexts?: string[];
     }) => {
@@ -278,6 +308,7 @@ const MessageItem: React.FC<{
               message={message}
               showCopyRow={showCopyRow}
               isLastMessage={isLastMessage}
+              isStreaming={isStreaming}
               hasForkAnchor={hasForkAnchor}
               turnTexts={turnTexts}
             ></MessageText>
@@ -323,6 +354,7 @@ const MessageItem: React.FC<{
     prev.rowWidthClass === next.rowWidthClass &&
     prev.showCopyRow === next.showCopyRow &&
     prev.isLastMessage === next.isLastMessage &&
+    prev.isStreaming === next.isStreaming &&
     prev.hasForkAnchor === next.hasForkAnchor &&
     // Compare by content: the map is rebuilt per render, so reference equality
     // would defeat the memo for the one row that carries the copy button.
@@ -344,15 +376,35 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
   // moving down, so we defer its copy/timestamp row until the turn finishes to
   // avoid the row flashing in and the layout reflowing mid-stream.
   const { isProcessing } = useConversationRuntimeView(conversationContext?.conversation_id ?? '');
+  const streamingTextIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!isProcessing) return ids;
+    for (let index = list.length - 1; index >= 0; index--) {
+      const message = list[index];
+      if (message.position === 'right') break;
+      if (message.type === 'text' && message.status !== 'finish' && message.status !== 'error') ids.add(message.id);
+    }
+    return ids;
+  }, [list, isProcessing]);
   const { t } = useTranslation();
   const location = useLocation();
   const locationState = (location.state || {}) as ConversationLocationState;
   const targetMessageId = locationState.targetMessageId;
+  const targetMarkerIndex = locationState.targetMarkerIndex;
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | undefined>();
   const handledTargetKeyRef = useRef<string>('');
-  const loadingTargetKeyRef = useRef<string>('');
+  const requestedTargetKeyRef = useRef<string>('');
   const scrollerElementRef = useRef<HTMLDivElement | null>(null);
   const contentElementRef = useRef<HTMLDivElement | null>(null);
+  const {
+    start: scrollToTarget,
+    cancel: cancelTargetScroll,
+    isActive: isScrollLocked,
+  } = useMessageTargetScroll({
+    scrollerRef: scrollerElementRef,
+    contentRef: contentElementRef,
+    navigationKey: location.key,
+  });
 
   // Pre-process message list to group tool outputs into summary cards
   const processedList = useMemo(() => {
@@ -362,19 +414,20 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     let toolList: Array<IMessageToolGroup | IMessageAcpToolCall | IMessageToolCall> = [];
     let toolSourceMessageIds: string[] = [];
 
-    const pushFileDiffChanges = (changes: FileChangeInfo, sourceMessageId: string, created_at: number) => {
+    const pushFileDiffChanges = (changes: FileChangeInfo, source: TMessage) => {
       if (!diffsChanges.length) {
         diffsSourceMessageIds = [];
         result.push({
           type: 'file_summary',
-          id: `summary-${sourceMessageId}`,
+          id: `summary-${source.id}`,
+          renderKey: `file-summary:${getMessageRenderKey(source)}`,
           diffs: diffsChanges,
           sourceMessageIds: diffsSourceMessageIds,
-          created_at,
+          created_at: source.created_at ?? 0,
         });
       }
       diffsChanges.push(changes);
-      diffsSourceMessageIds.push(sourceMessageId);
+      diffsSourceMessageIds.push(source.id);
       toolList = [];
       toolSourceMessageIds = [];
     };
@@ -384,6 +437,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         result.push({
           type: 'tool_summary',
           id: `tool-summary-${message.id}`,
+          renderKey: `tool-summary:${getMessageRenderKey(message)}`,
           messages: toolList,
           sourceMessageIds: toolSourceMessageIds,
           created_at: message.created_at ?? 0,
@@ -416,11 +470,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         );
         if (writeFileResults.length > 0 && writeFileResults.length === message.content.length) {
           writeFileResults.forEach((writeFileResult) => {
-            pushFileDiffChanges(
-              parseDiff(writeFileResult.file_diff, writeFileResult.file_name),
-              message.id,
-              message.created_at ?? 0
-            );
+            pushFileDiffChanges(parseDiff(writeFileResult.file_diff, writeFileResult.file_name), message);
           });
           continue;
         }
@@ -525,6 +575,8 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
   } = useAutoScroll({
     messages: list,
     itemCount: processedList.length,
+    isScrollLocked,
+    onAutoFollowResumed: cancelTargetScroll,
   });
 
   const setScrollerRef = useCallback(
@@ -543,11 +595,23 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     [handleContentRef]
   );
 
+  useFillMessageViewport({
+    conversationId: conversationContext?.conversation_id,
+    scrollerRef: scrollerElementRef,
+    contentRef: contentElementRef,
+    oldestCursor: pagination.oldestCursor,
+    hasMoreBefore: pagination.hasMoreBefore,
+    isLoadingBefore: pagination.isLoadingBefore,
+    renderedItemCount: processedList.length,
+    loadPreviousPage: loadPreviousMessagePage,
+    isScrollLocked,
+  });
+
   const handleMessageListScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
       handleScroll(event);
       const scroller = event.currentTarget;
-      if (!pagination.hasMoreBefore || pagination.isLoadingBefore || scroller.scrollTop > 160) {
+      if (isScrollLocked() || !pagination.hasMoreBefore || pagination.isLoadingBefore || scroller.scrollTop > 160) {
         return;
       }
 
@@ -555,16 +619,17 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       void loadPreviousMessagePage().then((loaded) => {
         if (!loaded) return;
         requestAnimationFrame(() => {
+          if (isScrollLocked()) return;
           const nextHeight = contentElementRef.current?.scrollHeight ?? previousHeight;
           scroller.scrollTop += nextHeight - previousHeight;
         });
       });
     },
-    [handleScroll, loadPreviousMessagePage, pagination.hasMoreBefore, pagination.isLoadingBefore]
+    [handleScroll, isScrollLocked, loadPreviousMessagePage, pagination.hasMoreBefore, pagination.isLoadingBefore]
   );
 
   useEffect(() => {
-    if (!targetMessageId || processedList.length === 0) {
+    if (!targetMessageId || isMessageListLoading || pagination.isLoadingAnchor || pagination.isLoadingBefore) {
       return;
     }
 
@@ -573,38 +638,48 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       return;
     }
 
-    const targetIndex = processedList.findIndex((item) => matchesTargetMessage(item, targetMessageId));
-    if (targetIndex === -1) {
-      if (loadingTargetKeyRef.current !== targetKey) {
-        loadingTargetKeyRef.current = targetKey;
-        void loadAnchorMessageWindow(targetMessageId).then((loaded) => {
-          if (!loaded) {
-            loadingTargetKeyRef.current = '';
-          }
-        });
+    const frame = requestAnimationFrame(() => {
+      const targetIndex = processedList.findIndex((item) => matchesTargetMessage(item, targetMessageId));
+      if (targetIndex === -1) {
+        if (requestedTargetKeyRef.current !== targetKey) {
+          // One request per navigation; a failed/missing anchor can be retried by clicking again.
+          requestedTargetKeyRef.current = targetKey;
+          void loadAnchorMessageWindow(targetMessageId);
+        }
+        return;
       }
-      return;
-    }
 
-    handledTargetKeyRef.current = targetKey;
-    loadingTargetKeyRef.current = '';
-    setHighlightedMessageId(targetMessageId);
-    hideScrollButton();
-
-    requestAnimationFrame(() => {
       const targetElement = document.getElementById(`message-${getProcessedItemAnchorId(processedList[targetIndex])}`);
-      scrollElementIntoView(targetElement, {
-        behavior: 'smooth',
-        block: 'center',
-      });
+      if (!targetElement || !scrollerElementRef.current?.contains(targetElement)) return;
+
+      if (!scrollToTarget(targetElement, targetMarkerIndex)) return;
+      // Consume the navigation only after the loaded message has a mounted scroll target.
+      handledTargetKeyRef.current = targetKey;
+      consumeMessageTargetNavigation(location.key, targetMessageId, targetMarkerIndex);
+      setHighlightedMessageId(targetMessageId);
     });
 
+    return () => cancelAnimationFrame(frame);
+  }, [
+    isMessageListLoading,
+    loadAnchorMessageWindow,
+    location.key,
+    pagination.isLoadingAnchor,
+    pagination.isLoadingBefore,
+    processedList,
+    scrollToTarget,
+    targetMessageId,
+    targetMarkerIndex,
+  ]);
+
+  useEffect(() => {
+    if (!highlightedMessageId) return;
     const timer = window.setTimeout(() => {
-      setHighlightedMessageId((current) => (current === targetMessageId ? undefined : current));
+      setHighlightedMessageId(undefined);
     }, 2400);
 
     return () => window.clearTimeout(timer);
-  }, [hideScrollButton, loadAnchorMessageWindow, location.key, processedList, scrollElementIntoView, targetMessageId]);
+  }, [highlightedMessageId, location.key]);
 
   useEffect(() => {
     const handleMessageJump = (event: Event) => {
@@ -680,8 +755,9 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     if ('type' in item && item.type === 'artifact') {
       return (
         <div
-          key={item.id}
+          key={getProcessedItemRenderKey(item)}
           id={`message-${getProcessedItemAnchorId(item)}`}
+          data-message-render-key={getProcessedItemRenderKey(item)}
           data-conversation-artifact-kind={item.artifact.kind}
           data-testid={`conversation-artifact-${item.artifact.kind}`}
           className={`${rowWidthClass} min-w-0 message-item px-8px m-t-10px`}
@@ -698,8 +774,9 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     if ('type' in item && ['file_summary', 'tool_summary'].includes(item.type)) {
       return (
         <div
-          key={item.id}
+          key={getProcessedItemRenderKey(item)}
           id={`message-${getProcessedItemAnchorId(item)}`}
+          data-message-render-key={getProcessedItemRenderKey(item)}
           className={`${rowWidthClass} min-w-0 message-item px-8px m-t-10px ${item.type}`}
           style={highlighted ? highlightStyle : undefined}
         >
@@ -714,11 +791,12 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     return (
       <MessageItem
         message={message}
-        key={message.id}
+        key={getMessageRenderKey(message)}
         highlighted={highlighted}
         rowWidthClass={rowWidthClass}
         showCopyRow={showCopyRow}
         isLastMessage={message.id === lastMessageId}
+        isStreaming={streamingTextIds.has(message.id)}
         hasForkAnchor={forkAnchoredIds.has(message.id)}
         turnTexts={aiTurnTextsById.get(message.id)}
       ></MessageItem>
@@ -759,9 +837,11 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
               }}
             >
               <div className='h-10px' />
-              {processedList.map((item, index) => (
-                <React.Fragment key={getProcessedItemAnchorId(item) || index}>{renderItem(index, item)}</React.Fragment>
-              ))}
+              <MessageRecoveryBoundary messages={list} scrollerRef={scrollerElementRef} isScrollLocked={isScrollLocked}>
+                {processedList.map((item, index) => (
+                  <React.Fragment key={getProcessedItemRenderKey(item)}>{renderItem(index, item)}</React.Fragment>
+                ))}
+              </MessageRecoveryBoundary>
               <div className='h-20px' />
             </div>
           </div>

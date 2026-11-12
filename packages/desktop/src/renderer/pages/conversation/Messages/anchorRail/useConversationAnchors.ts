@@ -5,9 +5,9 @@
  */
 
 import type { TMessage } from '@/common/chat/chatLib';
-import { loadAllConversationMessagesPaged } from '@/renderer/utils/chat/messagePagination';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildMessageAnchors, type MessageAnchorItem } from './anchors';
+import { loadConversationHistoryOnce } from './conversationHistoryRead';
 
 /**
  * Anchors for a conversation's *whole* history, not just the pages currently held
@@ -46,7 +46,7 @@ export const useConversationAnchors = (
 
     // `compact` is enough: ticks only need the preview text, not whole message
     // bodies, and a long history would otherwise pull a lot of unused content.
-    loadAllConversationMessagesPaged(conversationId, { contentMode: 'compact' })
+    loadConversationHistoryOnce(conversationId)
       .then((messages) => {
         if (cancelled || requestedIdRef.current !== conversationId) return;
         setHistoryAnchors(buildMessageAnchors(messages));

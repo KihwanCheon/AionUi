@@ -45,10 +45,12 @@ export type ConversationRowProps = {
   conversation: TChatConversation;
   isGenerating: boolean;
   /** The agent is blocked awaiting the user (tool permission or a question).
-   *  Takes display precedence over `isGenerating` — a distinct "needs you" icon
-   *  replaces the generating spinner. */
+   *  Takes display precedence over `isGenerating` — the "needs you" icon
+   *  replaces the adjacent spinner without hiding conversation identity. */
   isWaitingConfirmation: boolean;
   hasUnread: boolean;
+  hasFailureUnread?: boolean;
+  failureMessage?: string;
   /** Whether the user manually marked this conversation as unread (persisted). */
   isManualUnread: boolean;
   collapsed: boolean;
@@ -64,7 +66,10 @@ export type ConversationRowProps = {
   onEditStart: (conversation: TChatConversation) => void;
   onCreateCronTask: (conversation: TChatConversation) => void;
   onArchive: (conversation: TChatConversation) => void;
+  onPermanentDelete?: (conversation: TChatConversation) => void;
   onExport?: (conversation: TChatConversation) => void;
+  onCopy?: (conversation: TChatConversation) => void;
+  onCopyAll?: (conversation: TChatConversation) => void;
   onTogglePin: (conversation: TChatConversation) => void;
   onToggleManualUnread: (conversation: TChatConversation) => void;
   getJobStatus: (conversation_id: string) => 'none' | 'active' | 'paused' | 'error' | 'unread';

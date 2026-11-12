@@ -1,4 +1,10 @@
 {
+  "userQuestion": {
+    "fallback": "需要您的確認。請查看上方內容。",
+    "prose": "回答請求",
+    "choice": "回答請求 · 選項",
+    "freeText": "回答請求 · 自由輸入"
+  },
   "fileChanges": "檔案變更",
   "fileChangesCount": "{{count}} 個檔案變更",
   "fileChangesCount_one": "{{count}} 個檔案變更",
@@ -7,6 +13,20 @@
   "confirm": "確認",
   "canceledExecution": "已取消執行",
   "openLinkFailed": "無法開啟連結",
+  "mindnprogress": {
+    "openLinkedCard": "開啟已連結的 MindNProgress 卡片",
+    "selectionFailed": "無法選取已連結的 MindNProgress 卡片。",
+    "titleSyncTooltip": "同步為 MindNProgress 標題：{{title}}",
+    "titleSyncSuccess": "對話標題已與 MindNProgress 同步。",
+    "titleSyncFailed": "無法將對話標題與 MindNProgress 同步。",
+    "roleCoordinator": "群組統籌",
+    "roleRoot": "上層",
+    "roleAuxiliary": "輔助",
+    "rolePrimaryTooltip": "此卡片的主要對話",
+    "roleAuxiliaryTooltip": "此卡片的輔助對話",
+    "roleNoPrimaryTooltip": "此卡片的輔助對話 · 尚未指定主要對話",
+    "roleUnknownTooltip": "主要/輔助角色尚未確認"
+  },
   "imageGenerationModelDetected": "檢測到圖片模型，已自動開啟圖片工具，設置為默認模型：{{platform}}:{{model}}",
   "auto_handling_permissions": "自動處理權限請求：{{request}}",
   "copy": "複製",
@@ -92,6 +112,7 @@
   "askDecline": "不回答",
   "askAnswered": "已回答",
   "askDeclined": "已跳過",
+  "askClosed": "此問題已不再等待回答。",
   "askOther": "其它",
   "askOtherPlaceholder": "輸入你的回答",
   "requestDetails": "請求內容：",

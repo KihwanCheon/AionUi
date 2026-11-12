@@ -26,6 +26,8 @@ export interface MobileActionSheetSubMenu {
    * user can toggle several in a row (used for Skills / MCP on the home page).
    */
   multiSelect?: boolean;
+  /** Optional content rendered below the submenu options. */
+  footer?: ReactNode;
 }
 
 export interface MobileActionSheetEntry {

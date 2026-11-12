@@ -2,6 +2,7 @@ import type { FileMetadata } from '@/renderer/services/FileService';
 import type { UploadSource } from '@/renderer/hooks/file/useUploadState';
 import type { ImageCounter } from '@/renderer/services/PasteService';
 import { PasteService } from '@/renderer/services/PasteService';
+import { registerFilePathPaste, tryUndoableTextPaste } from '@/renderer/utils/ui/input/pasteInput';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Message } from '@arco-design/web-react';
@@ -48,6 +49,8 @@ export const usePasteService = ({
       if (files && files.length > 0) {
         event.preventDefault();
         event.stopPropagation();
+      } else if (tryUndoableTextPaste(event, onTextPaste)) {
+        return true;
       }
 
       try {
@@ -78,6 +81,18 @@ export const usePasteService = ({
   const handleFocus = useCallback(() => {
     PasteService.setLastFocusedComponent(componentId);
   }, [componentId]);
+
+  const onTextPasteRef = useRef(onTextPaste);
+  onTextPasteRef.current = onTextPaste;
+  useEffect(
+    () =>
+      registerFilePathPaste({
+        componentId,
+        enabled: source === 'sendbox',
+        getTextPasteHandler: () => onTextPasteRef.current,
+      }),
+    [source, componentId]
+  );
 
   // 注册粘贴处理器
   useEffect(() => {

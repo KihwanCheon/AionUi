@@ -12,7 +12,7 @@ type BeforeQuitEvent = {
 };
 
 const flushMicrotasks = async () => {
-  for (let i = 0; i < 6; i += 1) {
+  for (let i = 0; i < 8; i += 1) {
     await Promise.resolve();
   }
 };
@@ -41,6 +41,9 @@ describe('installQuitCleanup', () => {
       markExplicitQuit: () => calls.push('mark-explicit-quit'),
       destroyTray: () => calls.push('destroy-tray'),
       disposeCronResumeListener: () => calls.push('dispose-cron'),
+      stopSidecars: async () => {
+        calls.push('stop-sidecars');
+      },
       stopBackend,
       destroyPetWindow: () => calls.push('destroy-pet'),
       logInfo: vi.fn(),
@@ -59,6 +62,7 @@ describe('installQuitCleanup', () => {
       'mark-explicit-quit',
       'destroy-tray',
       'dispose-cron',
+      'stop-sidecars',
       'stop-backend-start',
     ]);
 
@@ -71,6 +75,7 @@ describe('installQuitCleanup', () => {
       'mark-explicit-quit',
       'destroy-tray',
       'dispose-cron',
+      'stop-sidecars',
       'stop-backend-start',
       'destroy-pet',
       'quit-app',
@@ -89,6 +94,7 @@ describe('installQuitCleanup', () => {
       markExplicitQuit: vi.fn(),
       destroyTray: vi.fn(),
       disposeCronResumeListener: vi.fn(),
+      stopSidecars: async () => {},
       stopBackend: async () => {},
       destroyPetWindow: vi.fn(),
       logInfo: vi.fn(),
