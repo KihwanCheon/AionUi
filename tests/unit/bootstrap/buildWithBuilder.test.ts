@@ -67,11 +67,15 @@ childProcess.execSync = function mockedExecSync(command) {
     );
 
     let movedExistingOut = false;
+    // Only clean up an out/ this test created. On Windows the rename fails while a packaged
+    // app under out/ is running, and removing out/ then would delete the real build output.
+    let ownsOutDir = false;
     try {
       if (existsSync(outDir)) {
         renameSync(outDir, backupOutDir);
         movedExistingOut = true;
       }
+      ownsOutDir = true;
       mkdirSync(resolve(outDir, 'main'), { recursive: true });
       mkdirSync(resolve(outDir, 'renderer'), { recursive: true });
       writeFileSync(resolve(outDir, 'main/index.js'), 'console.log("main placeholder");\n', 'utf8');
@@ -97,7 +101,9 @@ childProcess.execSync = function mockedExecSync(command) {
       expect(result.status).not.toBe(0);
       expect(result.stderr + result.stdout).toContain('Renderer build output is incomplete');
     } finally {
-      rmSync(outDir, { recursive: true, force: true });
+      if (ownsOutDir) {
+        rmSync(outDir, { recursive: true, force: true });
+      }
       if (movedExistingOut) {
         renameSync(backupOutDir, outDir);
       }
@@ -339,11 +345,14 @@ childProcess.execSync = function mockedExecSync(command) {
     );
 
     let movedExistingOut = false;
+    // See the skip-vite test: never remove an out/ that could not be moved aside first.
+    let ownsOutDir = false;
     try {
       if (existsSync(outDir)) {
         renameSync(outDir, backupOutDir);
         movedExistingOut = true;
       }
+      ownsOutDir = true;
 
       const result = spawnSync(process.execPath, ['scripts/build-with-builder.js', ...args], {
         cwd: repoRoot,
@@ -370,7 +379,9 @@ childProcess.execSync = function mockedExecSync(command) {
       const calls = JSON.parse(readFileSync(callsPath, 'utf8')) as Array<{ arch?: string } | null>;
       expect(calls).toContainEqual(expect.objectContaining({ arch: expectedArch }));
     } finally {
-      rmSync(outDir, { recursive: true, force: true });
+      if (ownsOutDir) {
+        rmSync(outDir, { recursive: true, force: true });
+      }
       if (movedExistingOut) {
         renameSync(backupOutDir, outDir);
       }
