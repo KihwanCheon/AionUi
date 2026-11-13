@@ -209,6 +209,8 @@ asarUnpack:
   - 'out/main/team-mcp-stdio.js'
   # MindNProgress Runner is launched as an Electron utility process.
   - 'out/main/mindnprogress-runner.js'
+  # Unpacked entries resolve shared chunks (e.g. ./chunks/relay-*.js) next to themselves, outside app.asar.
+  - 'out/main/chunks/**/*'
 
 # Compression level: normal for faster builds, maximum for smallest size
 # Note: electron-builder doesn't support YAML template syntax for env vars

@@ -47,6 +47,15 @@ describe('release packaging configuration', () => {
     expect(winBlock).not.toContain('    - zip');
   });
 
+  it('unpacks shared main chunks next to the unpacked MindNProgress Runner', () => {
+    const config = readProjectFile('packages/desktop/electron-builder.yml');
+    const asarUnpackBlock = yamlBlock(config, 'asarUnpack');
+
+    // The Runner runs from app.asar.unpacked and requires shared chunks such as ./chunks/relay-*.js.
+    expect(asarUnpackBlock).toContain("  - 'out/main/mindnprogress-runner.js'");
+    expect(asarUnpackBlock).toContain("  - 'out/main/chunks/**/*'");
+  });
+
   it('uploads mac zip artifacts without a stale Windows zip glob', () => {
     const workflow = readProjectFile('.github/workflows/_build-reusable.yml');
 
