@@ -104,13 +104,22 @@ export function useExternalConversationLaunch({
       return;
     }
 
+    // Resolve the provider before applying so an unloaded model list retries on a later render.
+    const matchedProvider =
+      agentSelection.selectedAssistantBackend === 'aionrs' && launch.modelId
+        ? modelSelection.modelList.find(
+            (provider) =>
+              (!launch.providerId || provider.id === launch.providerId) && provider.models.includes(launch.modelId!)
+          )
+        : undefined;
+    if (agentSelection.selectedAssistantBackend === 'aionrs' && launch.modelId && !matchedProvider) return;
+
+    // Claim the ticket before the first await: setCurrentModel re-renders with a new
+    // modelSelection object, which re-runs this effect before the await resumes.
+    appliedTokenRef.current = session.token;
+
     const applyLaunchOptions = async () => {
-      if (agentSelection.selectedAssistantBackend === 'aionrs' && launch.modelId) {
-        const matchedProvider = modelSelection.modelList.find(
-          (provider) =>
-            (!launch.providerId || provider.id === launch.providerId) && provider.models.includes(launch.modelId!)
-        );
-        if (!matchedProvider) return;
+      if (matchedProvider && launch.modelId) {
         await modelSelection.setCurrentModel(
           {
             ...matchedProvider,
@@ -132,7 +141,6 @@ export function useExternalConversationLaunch({
       if (launch.disabledBuiltinSkillIds) setDisabledBuiltinSkills(launch.disabledBuiltinSkillIds);
       if (launch.mcpIds) setSelectedMcpServerIds(launch.mcpIds);
 
-      appliedTokenRef.current = session.token;
       setReadyToken(session.token);
     };
 

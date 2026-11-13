@@ -11,6 +11,7 @@ import { useExternalConversationLaunch } from '@/renderer/pages/guid/hooks/useEx
 import type { GuidAssistantSelectionResult } from '@/renderer/pages/guid/hooks/useGuidAssistantSelection';
 import type { GuidModelSelectionResult } from '@/renderer/pages/guid/hooks/useGuidModelSelection';
 import { useGuidSend, type GuidSendDeps } from '@/renderer/pages/guid/hooks/useGuidSend';
+import { useCallback, useMemo, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { createConversationInvokeMock, updateConversationInvokeMock, swrMutateMock } = vi.hoisted(() => ({
@@ -358,6 +359,123 @@ describe('useExternalConversationLaunch', () => {
 
     expect(onUnavailable).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
+  });
+});
+
+describe('useExternalConversationLaunch with an Aion CLI launch', () => {
+  const nemotronProvider = {
+    id: 'provider-local',
+    name: 'Local',
+    platform: 'custom',
+    base_url: 'http://localhost:1235/v1',
+    api_key: 'local',
+    models: ['nemotron'],
+  } as never;
+
+  function createAionrsAgentSelection(): GuidAssistantSelectionResult {
+    return {
+      ...createAgentSelection(),
+      currentAcpCachedModelInfo: null,
+      selectedAssistantBackend: 'aionrs',
+      selectedAssistantId: 'bare:agent-aionrs',
+    };
+  }
+
+  function createAionrsSession(): ExternalConversationLaunchSession {
+    return {
+      launch: {
+        agentId: 'agent-aionrs',
+        autoSend: true,
+        modelId: 'nemotron',
+        prompt: 'Review this card',
+        providerId: 'provider-local',
+      },
+      onConversationCreated: vi.fn(async () => {}),
+      token: 'launch-aionrs',
+    };
+  }
+
+  it('applies the provider model once when selecting it re-renders with a new model selection', async () => {
+    const agentSelection = createAionrsAgentSelection();
+    const session = createAionrsSession();
+    const sendMessage = vi.fn();
+    const setCurrentModelMock = vi.fn();
+
+    renderHook(() => {
+      const [currentModel, setModel] = useState<GuidModelSelectionResult['current_model']>(undefined);
+      const setCurrentModel = useCallback(async (...args: unknown[]) => {
+        setCurrentModelMock(...args);
+        // Selecting a model re-renders the page before the promise settles.
+        setModel(args[0] as GuidModelSelectionResult['current_model']);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }, []);
+      const modelSelection = useMemo<GuidModelSelectionResult>(
+        () => ({
+          ...createModelSelection(),
+          current_model: currentModel,
+          modelList: [nemotronProvider],
+          setCurrentModel,
+        }),
+        [currentModel, setCurrentModel]
+      );
+      useExternalConversationLaunch({
+        agentSelection,
+        allSkills: [],
+        availableMcpServers: [],
+        input: 'Review this card',
+        modelSelection,
+        sendMessage,
+        session,
+        setDisabledBuiltinSkills: vi.fn(),
+        setEnabledSkills: vi.fn(),
+        setSelectedMcpServerIds: vi.fn(),
+      });
+    });
+
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    expect(setCurrentModelMock).toHaveBeenCalledTimes(1);
+    expect(setCurrentModelMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'provider-local', use_model: 'nemotron' }),
+      { persistPreference: false }
+    );
+  });
+
+  it('waits for the provider list to load before applying the launch model', async () => {
+    const agentSelection = createAionrsAgentSelection();
+    const session = createAionrsSession();
+    const sendMessage = vi.fn();
+    const modelSelection = createModelSelection();
+    const options = {
+      agentSelection,
+      allSkills: [],
+      availableMcpServers: [],
+      input: 'Review this card',
+      modelSelection,
+      sendMessage,
+      session,
+      setDisabledBuiltinSkills: vi.fn(),
+      setEnabledSkills: vi.fn(),
+      setSelectedMcpServerIds: vi.fn(),
+    };
+
+    const { rerender } = renderHook((props) => useExternalConversationLaunch(props), { initialProps: options });
+    await act(async () => {});
+    expect(modelSelection.setCurrentModel).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
+
+    const loadedModelSelection = { ...modelSelection, modelList: [nemotronProvider] };
+    rerender({ ...options, modelSelection: loadedModelSelection });
+
+    await waitFor(() => expect(modelSelection.setCurrentModel).toHaveBeenCalledTimes(1));
+    expect(sendMessage).not.toHaveBeenCalled();
+
+    // The page reflects the applied model on the next render; only then may the launch send.
+    rerender({
+      ...options,
+      modelSelection: { ...loadedModelSelection, current_model: { ...nemotronProvider, use_model: 'nemotron' } },
+    });
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    expect(modelSelection.setCurrentModel).toHaveBeenCalledTimes(1);
   });
 });
 

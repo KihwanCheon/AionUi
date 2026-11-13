@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   configSet: vi.fn(),
   sent: [] as Array<{ selectedAssistantId: string | null; input: string; dir: string }>,
   sentOptions: [] as GuidSendDeps[],
+  sentModels: [] as Array<string | undefined>,
+  modelList: [] as unknown[],
   latestSend: null as GuidSendDeps | null,
   runtimeCatalog: [] as Array<AgentRuntimeCatalog & { id: string }>,
   runtimeListeners: new Set<() => void>(),
@@ -64,15 +66,16 @@ vi.mock('@/renderer/hooks/mcp/catalog', () => ({
 vi.mock('@/renderer/hooks/chat/useInputFocusRing', () => ({
   useInputFocusRing: () => ({ activeBorderColor: '', inactiveBorderColor: '', activeShadow: '' }),
 }));
-vi.mock('@/renderer/pages/guid/hooks/useGuidModelSelection', () => {
-  const selection = {
-    modelList: [],
-    isGoogleAuth: false,
-    current_model: undefined,
-    setCurrentModel: vi.fn(),
-    resetCurrentModel: vi.fn(),
+vi.mock('@/renderer/pages/guid/hooks/useGuidModelSelection', async () => {
+  const { useCallback, useState } = await import('react');
+  return {
+    useGuidModelSelection: () => {
+      const [current_model, setModel] = useState<{ use_model?: string } | undefined>(undefined);
+      const setCurrentModel = useCallback(async (model: { use_model?: string }) => setModel(model), []);
+      const resetCurrentModel = useCallback(async () => setModel(undefined), []);
+      return { modelList: mocks.modelList, isGoogleAuth: false, current_model, setCurrentModel, resetCurrentModel };
+    },
   };
-  return { useGuidModelSelection: () => selection };
 });
 vi.mock('@/renderer/pages/guid/hooks/useGuidSend', () => {
   const send = {
@@ -82,6 +85,7 @@ vi.mock('@/renderer/pages/guid/hooks/useGuidSend', () => {
       const latest = mocks.latestSend!;
       mocks.sent.push({ selectedAssistantId: latest.selectedAssistantId, input: latest.input, dir: latest.dir });
       mocks.sentOptions.push(latest);
+      mocks.sentModels.push(latest.current_model?.use_model);
     },
   };
   return {
@@ -255,6 +259,8 @@ describe('GuidPage external launch assistant selection', () => {
     vi.useFakeTimers();
     mocks.sent.length = 0;
     mocks.sentOptions.length = 0;
+    mocks.sentModels.length = 0;
+    mocks.modelList = [];
     mocks.latestSend = null;
     mocks.runtimeCatalog = [];
     mocks.request.mockReset();
@@ -437,6 +443,46 @@ describe('GuidPage external launch assistant selection', () => {
     expect(screen.getByTestId('selected-assistant')).toHaveTextContent(requestedAssistant.id);
     expect(screen.getByTestId('navigation-state')).toHaveTextContent('null');
     expect(mocks.sent).toEqual([]);
+  });
+
+  it('sends with the launch model instead of the assistant last-used model', async () => {
+    mocks.modelList = [{ id: 'provider-local', name: 'Local', platform: 'custom', models: ['nemotron', 'gemma'] }];
+    mocks.listAssistants.mockResolvedValue([defaultAssistant, requestedAssistant]);
+    mocks.getAssistant.mockResolvedValue({
+      id: defaultAssistant.id,
+      prompts: { recommended: [], recommended_i18n: {} },
+      defaults: {
+        model: { mode: 'auto' },
+        permission: { mode: 'auto' },
+        thought_level: { mode: 'auto' },
+        skills: { mode: 'auto' },
+        mcps: { mode: 'auto' },
+      },
+      capabilities: { default_skill_ids: [], custom_skill_names: [], default_disabled_builtin_skill_ids: [] },
+      preferences: {
+        last_model_id: 'gemma',
+        last_skill_ids: [],
+        last_disabled_builtin_skill_ids: [],
+        last_mcp_ids: [],
+      },
+    });
+    mocks.request.mockResolvedValue({
+      ...launchResponse,
+      launch: { ...launchResponse.launch, agentId: 'default-agent', modelId: 'nemotron', providerId: 'provider-local' },
+    });
+
+    renderGuid();
+    // Claim, catalog, assistant detail, and both option effects each settle on a separate render.
+    await act(async () => {});
+    await act(async () => {});
+    await act(async () => {});
+    await act(async () => {});
+    await act(async () => {});
+
+    expect(mocks.sent).toEqual([
+      { selectedAssistantId: defaultAssistant.id, input: launchPrompt, dir: launchWorkspace },
+    ]);
+    expect(mocks.sentModels).toEqual(['nemotron']);
   });
 
   it('clears a preselection that already matches the selected default assistant', async () => {
